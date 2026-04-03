@@ -1,12 +1,19 @@
 import type {
   AuditLogRecord,
   CounterpartyRecord,
+  DealVersionFileRecord,
+  DealVersionMilestoneRecord,
+  DealVersionPartyRecord,
+  DealVersionRecord,
+  DraftDealPartyRecord,
+  DraftDealRecord,
   FileRecord,
   OrganizationInviteRecord,
   OrganizationMemberRecord,
   OrganizationRecord,
   Release1Repositories,
   SessionRecord,
+  TemplateRecord,
   UserRecord,
   WalletNonceRecord,
   WalletRecord
@@ -19,11 +26,18 @@ function compareIsoTimestamps(a: string, b: string): number {
 export class InMemoryRelease1Repositories implements Release1Repositories {
   readonly auditLogRecords: AuditLogRecord[] = [];
   readonly counterpartyRecords: CounterpartyRecord[] = [];
+  readonly dealVersionFileRecords: DealVersionFileRecord[] = [];
+  readonly dealVersionMilestoneRecords: DealVersionMilestoneRecord[] = [];
+  readonly dealVersionPartyRecords: DealVersionPartyRecord[] = [];
+  readonly dealVersionRecords: DealVersionRecord[] = [];
+  readonly draftDealPartyRecords: DraftDealPartyRecord[] = [];
+  readonly draftDealRecords: DraftDealRecord[] = [];
   readonly fileRecords: FileRecord[] = [];
   readonly organizationInviteRecords: OrganizationInviteRecord[] = [];
   readonly organizationMemberRecords: OrganizationMemberRecord[] = [];
   readonly organizationRecords: OrganizationRecord[] = [];
   readonly sessionRecords: SessionRecord[] = [];
+  readonly templateRecords: TemplateRecord[] = [];
   readonly userRecords: UserRecord[] = [];
   readonly walletNonceRecords: WalletNonceRecord[] = [];
   readonly walletRecords: WalletRecord[] = [];
@@ -71,6 +85,98 @@ export class InMemoryRelease1Repositories implements Release1Repositories {
         .sort((left, right) => compareIsoTimestamps(left.createdAt, right.createdAt))
   };
 
+  readonly draftDeals = {
+    create: async (record: DraftDealRecord): Promise<DraftDealRecord> => {
+      this.draftDealRecords.push(record);
+      return record;
+    },
+    findById: async (id: string): Promise<DraftDealRecord | null> =>
+      this.draftDealRecords.find((record) => record.id === id) ?? null,
+    listByOrganizationId: async (
+      organizationId: string
+    ): Promise<DraftDealRecord[]> =>
+      this.draftDealRecords
+        .filter((record) => record.organizationId === organizationId)
+        .sort((left, right) => compareIsoTimestamps(left.createdAt, right.createdAt))
+  };
+
+  readonly draftDealParties = {
+    add: async (record: DraftDealPartyRecord): Promise<DraftDealPartyRecord> => {
+      this.draftDealPartyRecords.push(record);
+      return record;
+    },
+    listByDraftDealId: async (
+      draftDealId: string
+    ): Promise<DraftDealPartyRecord[]> =>
+      this.draftDealPartyRecords
+        .filter((record) => record.draftDealId === draftDealId)
+        .sort((left, right) => compareIsoTimestamps(left.createdAt, right.createdAt))
+  };
+
+  readonly dealVersions = {
+    create: async (record: DealVersionRecord): Promise<DealVersionRecord> => {
+      this.dealVersionRecords.push(record);
+      return record;
+    },
+    findById: async (id: string): Promise<DealVersionRecord | null> =>
+      this.dealVersionRecords.find((record) => record.id === id) ?? null,
+    findLatestByDraftDealId: async (
+      draftDealId: string
+    ): Promise<DealVersionRecord | null> =>
+      this.dealVersionRecords
+        .filter((record) => record.draftDealId === draftDealId)
+        .sort((left, right) => right.versionNumber - left.versionNumber)[0] ?? null,
+    listByDraftDealId: async (
+      draftDealId: string
+    ): Promise<DealVersionRecord[]> =>
+      this.dealVersionRecords
+        .filter((record) => record.draftDealId === draftDealId)
+        .sort((left, right) => left.versionNumber - right.versionNumber)
+  };
+
+  readonly dealVersionParties = {
+    add: async (
+      record: DealVersionPartyRecord
+    ): Promise<DealVersionPartyRecord> => {
+      this.dealVersionPartyRecords.push(record);
+      return record;
+    },
+    listByDealVersionId: async (
+      dealVersionId: string
+    ): Promise<DealVersionPartyRecord[]> =>
+      this.dealVersionPartyRecords
+        .filter((record) => record.dealVersionId === dealVersionId)
+        .sort((left, right) => compareIsoTimestamps(left.createdAt, right.createdAt))
+  };
+
+  readonly dealVersionMilestones = {
+    add: async (
+      record: DealVersionMilestoneRecord
+    ): Promise<DealVersionMilestoneRecord> => {
+      this.dealVersionMilestoneRecords.push(record);
+      return record;
+    },
+    listByDealVersionId: async (
+      dealVersionId: string
+    ): Promise<DealVersionMilestoneRecord[]> =>
+      this.dealVersionMilestoneRecords
+        .filter((record) => record.dealVersionId === dealVersionId)
+        .sort((left, right) => left.position - right.position)
+  };
+
+  readonly dealVersionFiles = {
+    add: async (record: DealVersionFileRecord): Promise<DealVersionFileRecord> => {
+      this.dealVersionFileRecords.push(record);
+      return record;
+    },
+    listByDealVersionId: async (
+      dealVersionId: string
+    ): Promise<DealVersionFileRecord[]> =>
+      this.dealVersionFileRecords
+        .filter((record) => record.dealVersionId === dealVersionId)
+        .sort((left, right) => compareIsoTimestamps(left.createdAt, right.createdAt))
+  };
+
   readonly files = {
     create: async (record: FileRecord): Promise<FileRecord> => {
       this.fileRecords.push(record);
@@ -89,6 +195,30 @@ export class InMemoryRelease1Repositories implements Release1Repositories {
       ) ?? null,
     listByOrganizationId: async (organizationId: string): Promise<FileRecord[]> =>
       this.fileRecords
+        .filter((record) => record.organizationId === organizationId)
+        .sort((left, right) => compareIsoTimestamps(left.createdAt, right.createdAt))
+  };
+
+  readonly templates = {
+    create: async (record: TemplateRecord): Promise<TemplateRecord> => {
+      this.templateRecords.push(record);
+      return record;
+    },
+    findById: async (id: string): Promise<TemplateRecord | null> =>
+      this.templateRecords.find((record) => record.id === id) ?? null,
+    findByOrganizationIdAndNormalizedName: async (
+      organizationId: string,
+      normalizedName: string
+    ): Promise<TemplateRecord | null> =>
+      this.templateRecords.find(
+        (record) =>
+          record.organizationId === organizationId &&
+          record.normalizedName === normalizedName
+      ) ?? null,
+    listByOrganizationId: async (
+      organizationId: string
+    ): Promise<TemplateRecord[]> =>
+      this.templateRecords
         .filter((record) => record.organizationId === organizationId)
         .sort((left, right) => compareIsoTimestamps(left.createdAt, right.createdAt))
   };

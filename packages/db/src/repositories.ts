@@ -3,11 +3,18 @@ import type { ChainId, EntityId, WalletAddress } from "@blockchain-escrow/shared
 import type {
   AuditLogRecord,
   CounterpartyRecord,
+  DealVersionFileRecord,
+  DealVersionMilestoneRecord,
+  DealVersionPartyRecord,
+  DealVersionRecord,
+  DraftDealPartyRecord,
+  DraftDealRecord,
   FileRecord,
   OrganizationInviteRecord,
   OrganizationMemberRecord,
   OrganizationRecord,
   SessionRecord,
+  TemplateRecord,
   UserRecord,
   WalletNonceRecord,
   WalletRecord
@@ -113,14 +120,68 @@ export interface FileRepository {
   listByOrganizationId(organizationId: EntityId): Promise<FileRecord[]>;
 }
 
+export interface TemplateRepository {
+  create(record: TemplateRecord): Promise<TemplateRecord>;
+  findById(id: EntityId): Promise<TemplateRecord | null>;
+  findByOrganizationIdAndNormalizedName(
+    organizationId: EntityId,
+    normalizedName: string
+  ): Promise<TemplateRecord | null>;
+  listByOrganizationId(organizationId: EntityId): Promise<TemplateRecord[]>;
+}
+
+export interface DraftDealRepository {
+  create(record: DraftDealRecord): Promise<DraftDealRecord>;
+  findById(id: EntityId): Promise<DraftDealRecord | null>;
+  listByOrganizationId(organizationId: EntityId): Promise<DraftDealRecord[]>;
+}
+
+export interface DraftDealPartyRepository {
+  add(record: DraftDealPartyRecord): Promise<DraftDealPartyRecord>;
+  listByDraftDealId(draftDealId: EntityId): Promise<DraftDealPartyRecord[]>;
+}
+
+export interface DealVersionRepository {
+  create(record: DealVersionRecord): Promise<DealVersionRecord>;
+  findById(id: EntityId): Promise<DealVersionRecord | null>;
+  findLatestByDraftDealId(
+    draftDealId: EntityId
+  ): Promise<DealVersionRecord | null>;
+  listByDraftDealId(draftDealId: EntityId): Promise<DealVersionRecord[]>;
+}
+
+export interface DealVersionPartyRepository {
+  add(record: DealVersionPartyRecord): Promise<DealVersionPartyRecord>;
+  listByDealVersionId(dealVersionId: EntityId): Promise<DealVersionPartyRecord[]>;
+}
+
+export interface DealVersionMilestoneRepository {
+  add(record: DealVersionMilestoneRecord): Promise<DealVersionMilestoneRecord>;
+  listByDealVersionId(
+    dealVersionId: EntityId
+  ): Promise<DealVersionMilestoneRecord[]>;
+}
+
+export interface DealVersionFileRepository {
+  add(record: DealVersionFileRecord): Promise<DealVersionFileRecord>;
+  listByDealVersionId(dealVersionId: EntityId): Promise<DealVersionFileRecord[]>;
+}
+
 export interface Release1Repositories {
   auditLogs: AuditLogRepository;
   counterparties: CounterpartyRepository;
+  dealVersionFiles: DealVersionFileRepository;
+  dealVersionMilestones: DealVersionMilestoneRepository;
+  dealVersionParties: DealVersionPartyRepository;
+  dealVersions: DealVersionRepository;
+  draftDealParties: DraftDealPartyRepository;
+  draftDeals: DraftDealRepository;
   files: FileRepository;
   organizationInvites: OrganizationInviteRepository;
   organizationMembers: OrganizationMemberRepository;
   organizations: OrganizationRepository;
   sessions: SessionRepository;
+  templates: TemplateRepository;
   users: UserRepository;
   walletNonces: WalletNonceRepository;
   wallets: WalletRepository;

@@ -14,7 +14,14 @@ export type Release1TableName =
 
 export const release2TableNames = {
   counterparties: "counterparties",
-  files: "files"
+  dealVersionFiles: "deal_version_files",
+  dealVersionMilestones: "deal_version_milestones",
+  dealVersionParties: "deal_version_parties",
+  dealVersions: "deal_versions",
+  draftDealParties: "draft_deal_parties",
+  draftDeals: "draft_deals",
+  files: "files",
+  templates: "templates"
 } as const;
 
 export type Release2TableName =

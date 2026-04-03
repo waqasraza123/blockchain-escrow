@@ -4,8 +4,10 @@ import { HealthController } from "./health.controller";
 import { AuditModule } from "./modules/audit/audit.module";
 import { AuthModule } from "./modules/auth/auth.module";
 import { CounterpartiesModule } from "./modules/counterparties/counterparties.module";
+import { DraftsModule } from "./modules/drafts/drafts.module";
 import { FilesModule } from "./modules/files/files.module";
 import { OrganizationsModule } from "./modules/organizations/organizations.module";
+import { TemplatesModule } from "./modules/templates/templates.module";
 import { UsersModule } from "./modules/users/users.module";
 import { WalletsModule } from "./modules/wallets/wallets.module";
 
@@ -15,8 +17,10 @@ import { WalletsModule } from "./modules/wallets/wallets.module";
     UsersModule,
     WalletsModule,
     CounterpartiesModule,
+    DraftsModule,
     FilesModule,
     OrganizationsModule,
+    TemplatesModule,
     AuditModule
   ],
   controllers: [HealthController]

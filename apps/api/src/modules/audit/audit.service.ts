@@ -1,12 +1,15 @@
 import type {
   AuditLogRecord,
   CounterpartyRecord,
+  DealVersionRecord,
+  DraftDealRecord,
   FileRecord,
   OrganizationInviteRecord,
   OrganizationMemberRecord,
   OrganizationRecord,
   Release1Repositories,
   SessionRecord,
+  TemplateRecord,
   WalletRecord
 } from "@blockchain-escrow/db";
 import {
@@ -117,9 +120,27 @@ export class AuditService {
           counterparty.id
         );
       }
+      case "DRAFT_DEAL": {
+        const draftDeal = await this.requireDraftDealAccess(actor, params.entityId);
+        return this.repositories.auditLogs.listByEntity("DRAFT_DEAL", draftDeal.id);
+      }
+      case "DEAL_VERSION": {
+        const dealVersion = await this.requireDealVersionAccess(
+          actor,
+          params.entityId
+        );
+        return this.repositories.auditLogs.listByEntity(
+          "DEAL_VERSION",
+          dealVersion.id
+        );
+      }
       case "FILE": {
         const file = await this.requireFileAccess(actor, params.entityId);
         return this.repositories.auditLogs.listByEntity("FILE", file.id);
+      }
+      case "TEMPLATE": {
+        const template = await this.requireTemplateAccess(actor, params.entityId);
+        return this.repositories.auditLogs.listByEntity("TEMPLATE", template.id);
       }
       case "ORGANIZATION_MEMBER": {
         const member = await this.requireOrganizationMemberAccess(
@@ -255,6 +276,34 @@ export class AuditService {
     return counterparty;
   }
 
+  private async requireDraftDealAccess(
+    actor: AuthenticatedSessionContext,
+    draftDealId: string
+  ): Promise<DraftDealRecord> {
+    const draftDeal = await this.repositories.draftDeals.findById(draftDealId);
+
+    if (!draftDeal) {
+      throw new NotFoundException("draft deal not found");
+    }
+
+    await this.requireOrganizationAccess(actor, draftDeal.organizationId);
+    return draftDeal;
+  }
+
+  private async requireDealVersionAccess(
+    actor: AuthenticatedSessionContext,
+    dealVersionId: string
+  ): Promise<DealVersionRecord> {
+    const dealVersion = await this.repositories.dealVersions.findById(dealVersionId);
+
+    if (!dealVersion) {
+      throw new NotFoundException("deal version not found");
+    }
+
+    await this.requireOrganizationAccess(actor, dealVersion.organizationId);
+    return dealVersion;
+  }
+
   private async requireFileAccess(
     actor: AuthenticatedSessionContext,
     fileId: string
@@ -267,6 +316,20 @@ export class AuditService {
 
     await this.requireOrganizationAccess(actor, file.organizationId);
     return file;
+  }
+
+  private async requireTemplateAccess(
+    actor: AuthenticatedSessionContext,
+    templateId: string
+  ): Promise<TemplateRecord> {
+    const template = await this.repositories.templates.findById(templateId);
+
+    if (!template) {
+      throw new NotFoundException("template not found");
+    }
+
+    await this.requireOrganizationAccess(actor, template.organizationId);
+    return template;
   }
 
   private async requireOrganizationInviteAccess(

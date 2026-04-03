@@ -1,7 +1,11 @@
 import {
   Prisma,
   PrismaClient,
+  DealPartyRole as PrismaDealPartyRole,
+  DealPartySubjectType as PrismaDealPartySubjectType,
+  DealState as PrismaDealState,
   FileCategory as PrismaFileCategory,
+  SettlementCurrency as PrismaSettlementCurrency,
   SessionStatus as PrismaSessionStatus,
   OrganizationInviteStatus as PrismaOrganizationInviteStatus,
   OrganizationRole as PrismaOrganizationRole,
@@ -12,11 +16,18 @@ import {
 import type {
   AuditLogRecord,
   CounterpartyRecord,
+  DealVersionFileRecord,
+  DealVersionMilestoneRecord,
+  DealVersionPartyRecord,
+  DealVersionRecord,
+  DraftDealPartyRecord,
+  DraftDealRecord,
   FileRecord,
   OrganizationInviteRecord,
   OrganizationMemberRecord,
   OrganizationRecord,
   SessionRecord,
+  TemplateRecord,
   UserRecord,
   WalletNonceRecord,
   WalletRecord
@@ -24,12 +35,19 @@ import type {
 import type {
   AuditLogRepository,
   CounterpartyRepository,
+  DealVersionFileRepository,
+  DealVersionMilestoneRepository,
+  DealVersionPartyRepository,
+  DealVersionRepository,
+  DraftDealPartyRepository,
+  DraftDealRepository,
   FileRepository,
   OrganizationInviteRepository,
   OrganizationMemberRepository,
   OrganizationRepository,
   Release1Repositories,
   SessionRepository,
+  TemplateRepository,
   UserRepository,
   WalletNonceRepository,
   WalletRepository
@@ -196,6 +214,166 @@ function mapFileRecord(record: {
     sha256Hex: record.sha256Hex,
     storageKey: record.storageKey,
     updatedAt: toRequiredIsoTimestamp(record.updatedAt)
+  };
+}
+
+function mapTemplateRecord(record: {
+  bodyMarkdown: string;
+  createdAt: Date;
+  createdByUserId: string;
+  defaultCounterpartyId: string | null;
+  description: string | null;
+  id: string;
+  name: string;
+  normalizedName: string;
+  organizationId: string;
+  updatedAt: Date;
+}): TemplateRecord {
+  return {
+    bodyMarkdown: record.bodyMarkdown,
+    createdAt: toRequiredIsoTimestamp(record.createdAt),
+    createdByUserId: record.createdByUserId,
+    defaultCounterpartyId: record.defaultCounterpartyId,
+    description: record.description,
+    id: record.id,
+    name: record.name,
+    normalizedName: record.normalizedName,
+    organizationId: record.organizationId,
+    updatedAt: toRequiredIsoTimestamp(record.updatedAt)
+  };
+}
+
+function mapDraftDealRecord(record: {
+  createdAt: Date;
+  createdByUserId: string;
+  id: string;
+  organizationId: string;
+  settlementCurrency: PrismaSettlementCurrency;
+  state: PrismaDealState;
+  summary: string | null;
+  templateId: string | null;
+  title: string;
+  updatedAt: Date;
+}): DraftDealRecord {
+  return {
+    createdAt: toRequiredIsoTimestamp(record.createdAt),
+    createdByUserId: record.createdByUserId,
+    id: record.id,
+    organizationId: record.organizationId,
+    settlementCurrency: record.settlementCurrency,
+    state: record.state,
+    summary: record.summary,
+    templateId: record.templateId,
+    title: record.title,
+    updatedAt: toRequiredIsoTimestamp(record.updatedAt)
+  };
+}
+
+function mapDraftDealPartyRecord(record: {
+  counterpartyId: string | null;
+  createdAt: Date;
+  draftDealId: string;
+  id: string;
+  organizationId: string | null;
+  role: PrismaDealPartyRole;
+  subjectType: PrismaDealPartySubjectType;
+  updatedAt: Date;
+}): DraftDealPartyRecord {
+  return {
+    counterpartyId: record.counterpartyId,
+    createdAt: toRequiredIsoTimestamp(record.createdAt),
+    draftDealId: record.draftDealId,
+    id: record.id,
+    organizationId: record.organizationId,
+    role: record.role,
+    subjectType: record.subjectType,
+    updatedAt: toRequiredIsoTimestamp(record.updatedAt)
+  };
+}
+
+function mapDealVersionRecord(record: {
+  bodyMarkdown: string;
+  createdAt: Date;
+  createdByUserId: string;
+  draftDealId: string;
+  id: string;
+  organizationId: string;
+  settlementCurrency: PrismaSettlementCurrency;
+  summary: string | null;
+  templateId: string | null;
+  title: string;
+  versionNumber: number;
+}): DealVersionRecord {
+  return {
+    bodyMarkdown: record.bodyMarkdown,
+    createdAt: toRequiredIsoTimestamp(record.createdAt),
+    createdByUserId: record.createdByUserId,
+    draftDealId: record.draftDealId,
+    id: record.id,
+    organizationId: record.organizationId,
+    settlementCurrency: record.settlementCurrency,
+    summary: record.summary,
+    templateId: record.templateId,
+    title: record.title,
+    versionNumber: record.versionNumber
+  };
+}
+
+function mapDealVersionPartyRecord(record: {
+  counterpartyId: string | null;
+  createdAt: Date;
+  dealVersionId: string;
+  displayName: string;
+  id: string;
+  organizationId: string | null;
+  role: PrismaDealPartyRole;
+  subjectType: PrismaDealPartySubjectType;
+}): DealVersionPartyRecord {
+  return {
+    counterpartyId: record.counterpartyId,
+    createdAt: toRequiredIsoTimestamp(record.createdAt),
+    dealVersionId: record.dealVersionId,
+    displayName: record.displayName,
+    id: record.id,
+    organizationId: record.organizationId,
+    role: record.role,
+    subjectType: record.subjectType
+  };
+}
+
+function mapDealVersionMilestoneRecord(record: {
+  amountMinor: string;
+  createdAt: Date;
+  dealVersionId: string;
+  description: string | null;
+  dueAt: Date | null;
+  id: string;
+  position: number;
+  title: string;
+}): DealVersionMilestoneRecord {
+  return {
+    amountMinor: record.amountMinor,
+    createdAt: toRequiredIsoTimestamp(record.createdAt),
+    dealVersionId: record.dealVersionId,
+    description: record.description,
+    dueAt: toIsoTimestamp(record.dueAt),
+    id: record.id,
+    position: record.position,
+    title: record.title
+  };
+}
+
+function mapDealVersionFileRecord(record: {
+  createdAt: Date;
+  dealVersionId: string;
+  fileId: string;
+  id: string;
+}): DealVersionFileRecord {
+  return {
+    createdAt: toRequiredIsoTimestamp(record.createdAt),
+    dealVersionId: record.dealVersionId,
+    fileId: record.fileId,
+    id: record.id
   };
 }
 
@@ -614,6 +792,273 @@ export class PrismaFileRepository implements FileRepository {
   }
 }
 
+export class PrismaTemplateRepository implements TemplateRepository {
+  constructor(private readonly prisma: PrismaClient) {}
+
+  async create(record: TemplateRecord): Promise<TemplateRecord> {
+    const created = await this.prisma.template.create({
+      data: {
+        bodyMarkdown: record.bodyMarkdown,
+        createdAt: toDate(record.createdAt),
+        createdByUserId: record.createdByUserId,
+        defaultCounterpartyId: record.defaultCounterpartyId,
+        description: record.description,
+        id: record.id,
+        name: record.name,
+        normalizedName: record.normalizedName,
+        organizationId: record.organizationId,
+        updatedAt: toDate(record.updatedAt)
+      }
+    });
+
+    return mapTemplateRecord(created);
+  }
+
+  async findById(id: string): Promise<TemplateRecord | null> {
+    const record = await this.prisma.template.findUnique({ where: { id } });
+    return record ? mapTemplateRecord(record) : null;
+  }
+
+  async findByOrganizationIdAndNormalizedName(
+    organizationId: string,
+    normalizedName: string
+  ): Promise<TemplateRecord | null> {
+    const record = await this.prisma.template.findUnique({
+      where: {
+        organizationId_normalizedName: {
+          normalizedName,
+          organizationId
+        }
+      }
+    });
+
+    return record ? mapTemplateRecord(record) : null;
+  }
+
+  async listByOrganizationId(organizationId: string): Promise<TemplateRecord[]> {
+    const records = await this.prisma.template.findMany({
+      where: { organizationId },
+      orderBy: { createdAt: "asc" }
+    });
+
+    return records.map(mapTemplateRecord);
+  }
+}
+
+export class PrismaDraftDealRepository implements DraftDealRepository {
+  constructor(private readonly prisma: PrismaClient) {}
+
+  async create(record: DraftDealRecord): Promise<DraftDealRecord> {
+    const created = await this.prisma.draftDeal.create({
+      data: {
+        createdAt: toDate(record.createdAt),
+        createdByUserId: record.createdByUserId,
+        id: record.id,
+        organizationId: record.organizationId,
+        settlementCurrency: record.settlementCurrency,
+        state: record.state,
+        summary: record.summary,
+        templateId: record.templateId,
+        title: record.title,
+        updatedAt: toDate(record.updatedAt)
+      }
+    });
+
+    return mapDraftDealRecord(created);
+  }
+
+  async findById(id: string): Promise<DraftDealRecord | null> {
+    const record = await this.prisma.draftDeal.findUnique({ where: { id } });
+    return record ? mapDraftDealRecord(record) : null;
+  }
+
+  async listByOrganizationId(organizationId: string): Promise<DraftDealRecord[]> {
+    const records = await this.prisma.draftDeal.findMany({
+      where: { organizationId },
+      orderBy: { createdAt: "asc" }
+    });
+
+    return records.map(mapDraftDealRecord);
+  }
+}
+
+export class PrismaDraftDealPartyRepository implements DraftDealPartyRepository {
+  constructor(private readonly prisma: PrismaClient) {}
+
+  async add(record: DraftDealPartyRecord): Promise<DraftDealPartyRecord> {
+    const created = await this.prisma.draftDealParty.create({
+      data: {
+        counterpartyId: record.counterpartyId,
+        createdAt: toDate(record.createdAt),
+        draftDealId: record.draftDealId,
+        id: record.id,
+        organizationId: record.organizationId,
+        role: record.role,
+        subjectType: record.subjectType,
+        updatedAt: toDate(record.updatedAt)
+      }
+    });
+
+    return mapDraftDealPartyRecord(created);
+  }
+
+  async listByDraftDealId(draftDealId: string): Promise<DraftDealPartyRecord[]> {
+    const records = await this.prisma.draftDealParty.findMany({
+      where: { draftDealId },
+      orderBy: { createdAt: "asc" }
+    });
+
+    return records.map(mapDraftDealPartyRecord);
+  }
+}
+
+export class PrismaDealVersionRepository implements DealVersionRepository {
+  constructor(private readonly prisma: PrismaClient) {}
+
+  async create(record: DealVersionRecord): Promise<DealVersionRecord> {
+    const created = await this.prisma.dealVersion.create({
+      data: {
+        bodyMarkdown: record.bodyMarkdown,
+        createdAt: toDate(record.createdAt),
+        createdByUserId: record.createdByUserId,
+        draftDealId: record.draftDealId,
+        id: record.id,
+        organizationId: record.organizationId,
+        settlementCurrency: record.settlementCurrency,
+        summary: record.summary,
+        templateId: record.templateId,
+        title: record.title,
+        versionNumber: record.versionNumber
+      }
+    });
+
+    return mapDealVersionRecord(created);
+  }
+
+  async findById(id: string): Promise<DealVersionRecord | null> {
+    const record = await this.prisma.dealVersion.findUnique({ where: { id } });
+    return record ? mapDealVersionRecord(record) : null;
+  }
+
+  async findLatestByDraftDealId(
+    draftDealId: string
+  ): Promise<DealVersionRecord | null> {
+    const record = await this.prisma.dealVersion.findFirst({
+      where: { draftDealId },
+      orderBy: { versionNumber: "desc" }
+    });
+
+    return record ? mapDealVersionRecord(record) : null;
+  }
+
+  async listByDraftDealId(draftDealId: string): Promise<DealVersionRecord[]> {
+    const records = await this.prisma.dealVersion.findMany({
+      where: { draftDealId },
+      orderBy: { versionNumber: "asc" }
+    });
+
+    return records.map(mapDealVersionRecord);
+  }
+}
+
+export class PrismaDealVersionPartyRepository
+  implements DealVersionPartyRepository
+{
+  constructor(private readonly prisma: PrismaClient) {}
+
+  async add(record: DealVersionPartyRecord): Promise<DealVersionPartyRecord> {
+    const created = await this.prisma.dealVersionParty.create({
+      data: {
+        counterpartyId: record.counterpartyId,
+        createdAt: toDate(record.createdAt),
+        dealVersionId: record.dealVersionId,
+        displayName: record.displayName,
+        id: record.id,
+        organizationId: record.organizationId,
+        role: record.role,
+        subjectType: record.subjectType
+      }
+    });
+
+    return mapDealVersionPartyRecord(created);
+  }
+
+  async listByDealVersionId(
+    dealVersionId: string
+  ): Promise<DealVersionPartyRecord[]> {
+    const records = await this.prisma.dealVersionParty.findMany({
+      where: { dealVersionId },
+      orderBy: { createdAt: "asc" }
+    });
+
+    return records.map(mapDealVersionPartyRecord);
+  }
+}
+
+export class PrismaDealVersionMilestoneRepository
+  implements DealVersionMilestoneRepository
+{
+  constructor(private readonly prisma: PrismaClient) {}
+
+  async add(
+    record: DealVersionMilestoneRecord
+  ): Promise<DealVersionMilestoneRecord> {
+    const created = await this.prisma.dealVersionMilestone.create({
+      data: {
+        amountMinor: record.amountMinor,
+        createdAt: toDate(record.createdAt),
+        dealVersionId: record.dealVersionId,
+        description: record.description,
+        dueAt: record.dueAt ? toDate(record.dueAt) : null,
+        id: record.id,
+        position: record.position,
+        title: record.title
+      }
+    });
+
+    return mapDealVersionMilestoneRecord(created);
+  }
+
+  async listByDealVersionId(
+    dealVersionId: string
+  ): Promise<DealVersionMilestoneRecord[]> {
+    const records = await this.prisma.dealVersionMilestone.findMany({
+      where: { dealVersionId },
+      orderBy: { position: "asc" }
+    });
+
+    return records.map(mapDealVersionMilestoneRecord);
+  }
+}
+
+export class PrismaDealVersionFileRepository implements DealVersionFileRepository {
+  constructor(private readonly prisma: PrismaClient) {}
+
+  async add(record: DealVersionFileRecord): Promise<DealVersionFileRecord> {
+    const created = await this.prisma.dealVersionFile.create({
+      data: {
+        createdAt: toDate(record.createdAt),
+        dealVersionId: record.dealVersionId,
+        fileId: record.fileId,
+        id: record.id
+      }
+    });
+
+    return mapDealVersionFileRecord(created);
+  }
+
+  async listByDealVersionId(
+    dealVersionId: string
+  ): Promise<DealVersionFileRecord[]> {
+    const records = await this.prisma.dealVersionFile.findMany({
+      where: { dealVersionId },
+      orderBy: { createdAt: "asc" }
+    });
+
+    return records.map(mapDealVersionFileRecord);
+  }
+}
+
 export class PrismaOrganizationMemberRepository
   implements OrganizationMemberRepository
 {
@@ -874,11 +1319,18 @@ export class PrismaAuditLogRepository implements AuditLogRepository {
 export class PrismaRelease1Repositories implements Release1Repositories {
   readonly auditLogs: AuditLogRepository;
   readonly counterparties: CounterpartyRepository;
+  readonly dealVersionFiles: DealVersionFileRepository;
+  readonly dealVersionMilestones: DealVersionMilestoneRepository;
+  readonly dealVersionParties: DealVersionPartyRepository;
+  readonly dealVersions: DealVersionRepository;
+  readonly draftDealParties: DraftDealPartyRepository;
+  readonly draftDeals: DraftDealRepository;
   readonly files: FileRepository;
   readonly organizationInvites: OrganizationInviteRepository;
   readonly organizationMembers: OrganizationMemberRepository;
   readonly organizations: OrganizationRepository;
   readonly sessions: SessionRepository;
+  readonly templates: TemplateRepository;
   readonly users: UserRepository;
   readonly walletNonces: WalletNonceRepository;
   readonly wallets: WalletRepository;
@@ -886,11 +1338,18 @@ export class PrismaRelease1Repositories implements Release1Repositories {
   constructor(private readonly prisma: PrismaClient) {
     this.auditLogs = new PrismaAuditLogRepository(prisma);
     this.counterparties = new PrismaCounterpartyRepository(prisma);
+    this.dealVersionFiles = new PrismaDealVersionFileRepository(prisma);
+    this.dealVersionMilestones = new PrismaDealVersionMilestoneRepository(prisma);
+    this.dealVersionParties = new PrismaDealVersionPartyRepository(prisma);
+    this.dealVersions = new PrismaDealVersionRepository(prisma);
+    this.draftDealParties = new PrismaDraftDealPartyRepository(prisma);
+    this.draftDeals = new PrismaDraftDealRepository(prisma);
     this.files = new PrismaFileRepository(prisma);
     this.organizationInvites = new PrismaOrganizationInviteRepository(prisma);
     this.organizationMembers = new PrismaOrganizationMemberRepository(prisma);
     this.organizations = new PrismaOrganizationRepository(prisma);
     this.sessions = new PrismaSessionRepository(prisma);
+    this.templates = new PrismaTemplateRepository(prisma);
     this.users = new PrismaUserRepository(prisma);
     this.walletNonces = new PrismaWalletNonceRepository(prisma);
     this.wallets = new PrismaWalletRepository(prisma);

@@ -9,8 +9,8 @@
 - Monorepo with `pnpm` workspaces and `turbo`.
 - Runtime apps: `apps/web` and `apps/admin` are Next.js shells, `apps/api` is a NestJS control-plane API, `apps/worker` and `apps/indexer` are TypeScript Node services.
 - Reusable packages: `packages/contracts`, `packages/contracts-sdk`, `packages/db`, `packages/shared`, `packages/security`.
-- `packages/db` owns Prisma schema, migrations, generated client usage, and repository-backed persistence for Release 1 entities.
-- `packages/shared` owns cross-app types and validation schemas for auth, organizations, audit, and primitives.
+- `packages/db` owns Prisma schema, migrations, generated client usage, and repository-backed persistence for Release 1 and active Release 2 entities.
+- `packages/shared` owns cross-app types and validation schemas for Release 1 surfaces, active Release 2 business contracts, and shared primitives.
 - `packages/security` owns auth/session/RBAC interfaces and helpers.
 - `apps/api` now has Release 1 auth infrastructure wired with Prisma-backed persistence and nonce, verify, me, and logout endpoints.
 
@@ -30,7 +30,7 @@
 
 - Release 0 foundation is complete enough to support implementation work.
 - Release 1 is complete: identity, wallet auth, sessions, users, organizations, org roles, invites, and audit logs.
-- Release 2 is in progress: counterparties and files metadata are implemented; templates, drafting, deals, immutable deal versions, milestone snapshots, and accepted typed-signature capture remain.
+- Release 2 is in progress: counterparties, files metadata, templates, draft deals, and immutable deal versions are implemented; accepted typed-signature capture remains the main unimplemented Release 2 slice.
 - Later releases for deals, funding, milestones, disputes, operator tooling, partner APIs, and production maturity are defined in `docs/product/RELEASE_ROADMAP.md` but are not current implementation targets.
 
 ## Completed Major Slices
@@ -47,6 +47,8 @@
 - Release 1 audit API slice in `apps/api` with authenticated entity audit-log reads across user, wallet, session, and organization-scoped entities.
 - Release 2 counterparty foundation in `packages/shared`, `packages/db`, and `apps/api` with organization-scoped create/list/detail flows, normalized-name uniqueness, and counterparty audit logging.
 - Release 2 files foundation in `packages/shared`, `packages/db`, and `apps/api` with organization-scoped file metadata create/list/detail flows, unique storage keys per organization, and file audit logging.
+- Release 2 template foundation in `packages/shared`, `packages/db`, and `apps/api` with organization-scoped create/list/detail flows, unique normalized names per organization, optional default counterparties, and template audit logging.
+- Release 2 drafting foundation in `packages/shared`, `packages/db`, and `apps/api` with organization-scoped draft creation, current draft parties, immutable deal version snapshots, milestone snapshots, linked file metadata, template references, and audit logging for draft and version creation.
 - Behavioral API tests for auth lifecycle, organization workflows, users, wallets, audit access, and SIWE domain/URI policy checks.
 
 ## Important Decisions
@@ -60,16 +62,16 @@
 
 ## Deferred / Not Yet Implemented
 
-- Release 2+ business modules such as templates, drafting, deals, milestone versioning, funding, disputes, approvals, partner APIs, and reporting are not implemented.
+- Release 2+ business modules such as accepted typed-signature capture, funding, disputes, approvals, partner APIs, and reporting are not implemented.
 - Indexer projections, worker side effects, and production contract logic are not implemented.
 - Repo-level automated tests still exist mainly in `apps/api` and contracts; many other packages have no test task yet.
 
 ## Risks / Watchouts
 
-- There are active uncommitted Release 1 API changes in the working tree; inspect `git status` before continuing.
 - Release 1 coverage is currently service-level in `apps/api`; there are still no end-to-end HTTP tests for the controllers.
 - Invite creation currently returns a raw invite token because no worker/email delivery flow exists yet. Treat that as a temporary Release 1 API convenience and be careful not to leak it into durable docs or logs.
 - The SIWE verifier now enforces allowed domain and URI origin policy; keep those env values aligned with the frontend surfaces that are allowed to initiate sign-in.
+- Release 2 drafting currently stops at immutable version snapshots; accepted typed-signature capture remains the next workflow dependency before funded deal flows.
 - Keep local session continuity in `docs/_local/current-session.md`; do not recreate ad hoc session docs elsewhere.
 
 ## Standard Verification
@@ -77,6 +79,7 @@
 - Targeted first:
 - `pnpm --filter @blockchain-escrow/api lint`
 - `pnpm --filter @blockchain-escrow/api typecheck`
+- `pnpm --filter @blockchain-escrow/api test`
 - `pnpm --filter @blockchain-escrow/db lint`
 - `pnpm --filter @blockchain-escrow/db typecheck`
 - Broader repo checks:

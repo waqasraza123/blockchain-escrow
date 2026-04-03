@@ -31,6 +31,8 @@ enum AuditAction {
   AUTH_NONCE_ISSUED
   AUTH_SESSION_VERIFIED
   COUNTERPARTY_CREATED
+  DEAL_VERSION_CREATED
+  DRAFT_DEAL_CREATED
   FILE_CREATED
   ORGANIZATION_CREATED
   ORGANIZATION_INVITE_REVOKED
@@ -38,15 +40,19 @@ enum AuditAction {
   ORGANIZATION_INVITE_CREATED
   ORGANIZATION_MEMBER_REMOVED
   ORGANIZATION_MEMBER_ROLE_UPDATED
+  TEMPLATE_CREATED
 }
 
 enum AuditEntityType {
   COUNTERPARTY
+  DEAL_VERSION
+  DRAFT_DEAL
   FILE
   ORGANIZATION
   ORGANIZATION_INVITE
   ORGANIZATION_MEMBER
   SESSION
+  TEMPLATE
   USER
   WALLET
 }
@@ -58,6 +64,34 @@ enum FileCategory {
   SIGNED_DOCUMENT
 }
 
+enum DealState {
+  DRAFT
+  AWAITING_SELLER_ACCEPTANCE
+  AWAITING_FUNDING
+  ACTIVE
+  UNDER_REVIEW
+  DISPUTED
+  PARTIALLY_RELEASED
+  COMPLETED
+  REFUNDED
+  CANCELLED
+  EXPIRED
+}
+
+enum DealPartyRole {
+  BUYER
+  SELLER
+}
+
+enum DealPartySubjectType {
+  ORGANIZATION
+  COUNTERPARTY
+}
+
+enum SettlementCurrency {
+  USDC
+}
+
 model User {
   id                 String               @id @db.Text
   createdAt          DateTime             @db.Timestamptz(3)
@@ -66,7 +100,10 @@ model User {
   wallets            Wallet[]
   organizationsOwned Organization[]
   counterpartiesCreated Counterparty[]    @relation("CounterpartyCreatedByUser")
+  draftDealsCreated    DraftDeal[]        @relation("DraftDealCreatedByUser")
+  dealVersionsCreated  DealVersion[]      @relation("DealVersionCreatedByUser")
   filesCreated       StoredFile[]         @relation("StoredFileCreatedByUser")
+  templatesCreated   Template[]           @relation("TemplateCreatedByUser")
   organizationRoles  OrganizationMember[]
   invitesSent        OrganizationInvite[] @relation("OrganizationInviteInvitedByUser")
   auditLogs          AuditLog[]           @relation("AuditActorUser")
@@ -131,7 +168,12 @@ model Organization {
   updatedAt       DateTime             @db.Timestamptz(3)
   createdByUser   User                 @relation(fields: [createdByUserId], references: [id], onDelete: Restrict)
   counterparties  Counterparty[]
+  dealVersionParties DealVersionParty[] @relation("DealVersionPartyOrganization")
+  dealVersions    DealVersion[]
+  draftDealParties DraftDealParty[]     @relation("DraftDealPartyOrganization")
+  draftDeals      DraftDeal[]
   files           StoredFile[]
+  templates       Template[]
   members         OrganizationMember[]
   invites         OrganizationInvite[]
   auditLogs       AuditLog[]
@@ -152,6 +194,9 @@ model Counterparty {
   updatedAt       DateTime     @db.Timestamptz(3)
   organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   createdByUser   User         @relation("CounterpartyCreatedByUser", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  dealVersionParties DealVersionParty[] @relation("DealVersionPartyCounterparty")
+  draftDealParties DraftDealParty[]     @relation("DraftDealPartyCounterparty")
+  templatesAsDefault Template[] @relation("TemplateDefaultCounterparty")
 
   @@unique([organizationId, normalizedName], map: "counterparties_organization_id_normalized_name_key")
   @@index([organizationId], map: "counterparties_organization_id_idx")
@@ -172,6 +217,7 @@ model StoredFile {
   category         FileCategory
   createdAt        DateTime     @db.Timestamptz(3)
   updatedAt        DateTime     @db.Timestamptz(3)
+  dealVersionFiles DealVersionFile[]
   organization     Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   createdByUser    User         @relation("StoredFileCreatedByUser", fields: [createdByUserId], references: [id], onDelete: Restrict)
 
@@ -180,6 +226,154 @@ model StoredFile {
   @@index([createdByUserId], map: "files_created_by_user_id_idx")
   @@index([organizationId, createdAt], map: "files_organization_id_created_at_idx")
   @@map("files")
+}
+
+model Template {
+  id                  String       @id @db.Text
+  organizationId      String       @db.Text
+  createdByUserId     String       @db.Text
+  defaultCounterpartyId String?    @db.Text
+  name                String       @db.Text
+  normalizedName      String       @db.Text
+  description         String?      @db.Text
+  bodyMarkdown        String       @db.Text
+  createdAt           DateTime     @db.Timestamptz(3)
+  updatedAt           DateTime     @db.Timestamptz(3)
+  organization        Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdByUser       User         @relation("TemplateCreatedByUser", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  defaultCounterparty Counterparty? @relation("TemplateDefaultCounterparty", fields: [defaultCounterpartyId], references: [id], onDelete: SetNull)
+  dealVersions        DealVersion[]  @relation("DealVersionTemplate")
+  draftDeals          DraftDeal[]    @relation("DraftDealTemplate")
+
+  @@unique([organizationId, normalizedName], map: "templates_organization_id_normalized_name_key")
+  @@index([organizationId], map: "templates_organization_id_idx")
+  @@index([createdByUserId], map: "templates_created_by_user_id_idx")
+  @@index([defaultCounterpartyId], map: "templates_default_counterparty_id_idx")
+  @@index([organizationId, createdAt], map: "templates_organization_id_created_at_idx")
+  @@map("templates")
+}
+
+model DraftDeal {
+  id                 String             @id @db.Text
+  organizationId     String             @db.Text
+  createdByUserId    String             @db.Text
+  templateId         String?            @db.Text
+  title              String             @db.Text
+  summary            String?            @db.Text
+  settlementCurrency SettlementCurrency
+  state              DealState
+  createdAt          DateTime           @db.Timestamptz(3)
+  updatedAt          DateTime           @db.Timestamptz(3)
+  organization       Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdByUser      User               @relation("DraftDealCreatedByUser", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  template           Template?          @relation("DraftDealTemplate", fields: [templateId], references: [id], onDelete: SetNull)
+  parties            DraftDealParty[]
+  versions           DealVersion[]
+
+  @@index([organizationId], map: "draft_deals_organization_id_idx")
+  @@index([createdByUserId], map: "draft_deals_created_by_user_id_idx")
+  @@index([templateId], map: "draft_deals_template_id_idx")
+  @@index([organizationId, createdAt], map: "draft_deals_organization_id_created_at_idx")
+  @@map("draft_deals")
+}
+
+model DraftDealParty {
+  id             String              @id @db.Text
+  draftDealId    String              @db.Text
+  role           DealPartyRole
+  subjectType    DealPartySubjectType
+  organizationId String?             @db.Text
+  counterpartyId String?             @db.Text
+  createdAt      DateTime            @db.Timestamptz(3)
+  updatedAt      DateTime            @db.Timestamptz(3)
+  draftDeal      DraftDeal           @relation(fields: [draftDealId], references: [id], onDelete: Cascade)
+  organization   Organization?       @relation("DraftDealPartyOrganization", fields: [organizationId], references: [id], onDelete: SetNull)
+  counterparty   Counterparty?       @relation("DraftDealPartyCounterparty", fields: [counterpartyId], references: [id], onDelete: SetNull)
+
+  @@unique([draftDealId, role], map: "draft_deal_parties_draft_deal_id_role_key")
+  @@index([draftDealId], map: "draft_deal_parties_draft_deal_id_idx")
+  @@index([organizationId], map: "draft_deal_parties_organization_id_idx")
+  @@index([counterpartyId], map: "draft_deal_parties_counterparty_id_idx")
+  @@map("draft_deal_parties")
+}
+
+model DealVersion {
+  id                 String             @id @db.Text
+  draftDealId        String             @db.Text
+  organizationId     String             @db.Text
+  createdByUserId    String             @db.Text
+  templateId         String?            @db.Text
+  versionNumber      Int
+  title              String             @db.Text
+  summary            String?            @db.Text
+  settlementCurrency SettlementCurrency
+  bodyMarkdown       String             @db.Text
+  createdAt          DateTime           @db.Timestamptz(3)
+  draftDeal          DraftDeal          @relation(fields: [draftDealId], references: [id], onDelete: Cascade)
+  organization       Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdByUser      User               @relation("DealVersionCreatedByUser", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  template           Template?          @relation("DealVersionTemplate", fields: [templateId], references: [id], onDelete: SetNull)
+  parties            DealVersionParty[]
+  milestones         DealVersionMilestone[]
+  files              DealVersionFile[]
+
+  @@unique([draftDealId, versionNumber], map: "deal_versions_draft_deal_id_version_number_key")
+  @@index([draftDealId], map: "deal_versions_draft_deal_id_idx")
+  @@index([organizationId], map: "deal_versions_organization_id_idx")
+  @@index([createdByUserId], map: "deal_versions_created_by_user_id_idx")
+  @@index([templateId], map: "deal_versions_template_id_idx")
+  @@index([draftDealId, createdAt], map: "deal_versions_draft_deal_id_created_at_idx")
+  @@map("deal_versions")
+}
+
+model DealVersionParty {
+  id             String              @id @db.Text
+  dealVersionId  String              @db.Text
+  role           DealPartyRole
+  subjectType    DealPartySubjectType
+  organizationId String?             @db.Text
+  counterpartyId String?             @db.Text
+  displayName    String              @db.Text
+  createdAt      DateTime            @db.Timestamptz(3)
+  dealVersion    DealVersion         @relation(fields: [dealVersionId], references: [id], onDelete: Cascade)
+  organization   Organization?       @relation("DealVersionPartyOrganization", fields: [organizationId], references: [id], onDelete: SetNull)
+  counterparty   Counterparty?       @relation("DealVersionPartyCounterparty", fields: [counterpartyId], references: [id], onDelete: SetNull)
+
+  @@unique([dealVersionId, role], map: "deal_version_parties_deal_version_id_role_key")
+  @@index([dealVersionId], map: "deal_version_parties_deal_version_id_idx")
+  @@index([organizationId], map: "deal_version_parties_organization_id_idx")
+  @@index([counterpartyId], map: "deal_version_parties_counterparty_id_idx")
+  @@map("deal_version_parties")
+}
+
+model DealVersionMilestone {
+  id            String      @id @db.Text
+  dealVersionId String      @db.Text
+  position      Int
+  title         String      @db.Text
+  description   String?     @db.Text
+  amountMinor   String      @db.Text
+  dueAt         DateTime?   @db.Timestamptz(3)
+  createdAt     DateTime    @db.Timestamptz(3)
+  dealVersion   DealVersion @relation(fields: [dealVersionId], references: [id], onDelete: Cascade)
+
+  @@unique([dealVersionId, position], map: "deal_version_milestones_deal_version_id_position_key")
+  @@index([dealVersionId], map: "deal_version_milestones_deal_version_id_idx")
+  @@map("deal_version_milestones")
+}
+
+model DealVersionFile {
+  id            String      @id @db.Text
+  dealVersionId String      @db.Text
+  fileId        String      @db.Text
+  createdAt     DateTime    @db.Timestamptz(3)
+  dealVersion   DealVersion @relation(fields: [dealVersionId], references: [id], onDelete: Cascade)
+  file          StoredFile  @relation(fields: [fileId], references: [id], onDelete: Restrict)
+
+  @@unique([dealVersionId, fileId], map: "deal_version_files_deal_version_id_file_id_key")
+  @@index([dealVersionId], map: "deal_version_files_deal_version_id_idx")
+  @@index([fileId], map: "deal_version_files_file_id_idx")
+  @@map("deal_version_files")
 }
 
 model OrganizationMember {

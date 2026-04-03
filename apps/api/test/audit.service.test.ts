@@ -294,3 +294,208 @@ test("audit service lists file logs for organization members", async () => {
   assert.equal(response.auditLogs.length, 1);
   assert.equal(response.auditLogs[0]?.action, "FILE_CREATED");
 });
+
+test("audit service lists template logs for organization members", async () => {
+  const { auditService, repositories, sessionTokenService } = createAuditService();
+  const actor = await seedAuthenticatedActor(repositories, sessionTokenService);
+  const now = new Date().toISOString();
+
+  await repositories.organizations.create({
+    createdAt: now,
+    createdByUserId: actor.userId,
+    id: "org-1",
+    name: "Acme",
+    slug: "acme",
+    updatedAt: now
+  });
+  await repositories.organizationMembers.add({
+    createdAt: now,
+    id: "member-1",
+    organizationId: "org-1",
+    role: "OWNER",
+    updatedAt: now,
+    userId: actor.userId
+  });
+  await repositories.templates.create({
+    bodyMarkdown: "# Template",
+    createdAt: now,
+    createdByUserId: actor.userId,
+    defaultCounterpartyId: null,
+    description: "Template description",
+    id: "template-1",
+    name: "Master Template",
+    normalizedName: "master template",
+    organizationId: "org-1",
+    updatedAt: now
+  });
+  await repositories.auditLogs.append({
+    action: "TEMPLATE_CREATED",
+    actorUserId: actor.userId,
+    entityId: "template-1",
+    entityType: "TEMPLATE",
+    id: "audit-6",
+    ipAddress: "127.0.0.1",
+    metadata: {
+      name: "Master Template"
+    },
+    occurredAt: now,
+    organizationId: "org-1",
+    userAgent: "test-agent"
+  });
+
+  const response = await auditService.listByEntity(
+    {
+      entityId: "template-1",
+      entityType: "TEMPLATE"
+    },
+    {
+      cookieHeader: actor.cookieHeader,
+      ipAddress: "127.0.0.1",
+      userAgent: "test-agent"
+    }
+  );
+
+  assert.equal(response.auditLogs.length, 1);
+  assert.equal(response.auditLogs[0]?.action, "TEMPLATE_CREATED");
+});
+
+test("audit service lists draft deal logs for organization members", async () => {
+  const { auditService, repositories, sessionTokenService } = createAuditService();
+  const actor = await seedAuthenticatedActor(repositories, sessionTokenService);
+  const now = new Date().toISOString();
+
+  await repositories.organizations.create({
+    createdAt: now,
+    createdByUserId: actor.userId,
+    id: "org-1",
+    name: "Acme",
+    slug: "acme",
+    updatedAt: now
+  });
+  await repositories.organizationMembers.add({
+    createdAt: now,
+    id: "member-1",
+    organizationId: "org-1",
+    role: "OWNER",
+    updatedAt: now,
+    userId: actor.userId
+  });
+  await repositories.draftDeals.create({
+    createdAt: now,
+    createdByUserId: actor.userId,
+    id: "draft-1",
+    organizationId: "org-1",
+    settlementCurrency: "USDC",
+    state: "DRAFT",
+    summary: "Summary",
+    templateId: null,
+    title: "Website Rebuild",
+    updatedAt: now
+  });
+  await repositories.auditLogs.append({
+    action: "DRAFT_DEAL_CREATED",
+    actorUserId: actor.userId,
+    entityId: "draft-1",
+    entityType: "DRAFT_DEAL",
+    id: "audit-7",
+    ipAddress: "127.0.0.1",
+    metadata: {
+      title: "Website Rebuild"
+    },
+    occurredAt: now,
+    organizationId: "org-1",
+    userAgent: "test-agent"
+  });
+
+  const response = await auditService.listByEntity(
+    {
+      entityId: "draft-1",
+      entityType: "DRAFT_DEAL"
+    },
+    {
+      cookieHeader: actor.cookieHeader,
+      ipAddress: "127.0.0.1",
+      userAgent: "test-agent"
+    }
+  );
+
+  assert.equal(response.auditLogs.length, 1);
+  assert.equal(response.auditLogs[0]?.action, "DRAFT_DEAL_CREATED");
+});
+
+test("audit service lists deal version logs for organization members", async () => {
+  const { auditService, repositories, sessionTokenService } = createAuditService();
+  const actor = await seedAuthenticatedActor(repositories, sessionTokenService);
+  const now = new Date().toISOString();
+
+  await repositories.organizations.create({
+    createdAt: now,
+    createdByUserId: actor.userId,
+    id: "org-1",
+    name: "Acme",
+    slug: "acme",
+    updatedAt: now
+  });
+  await repositories.organizationMembers.add({
+    createdAt: now,
+    id: "member-1",
+    organizationId: "org-1",
+    role: "OWNER",
+    updatedAt: now,
+    userId: actor.userId
+  });
+  await repositories.draftDeals.create({
+    createdAt: now,
+    createdByUserId: actor.userId,
+    id: "draft-1",
+    organizationId: "org-1",
+    settlementCurrency: "USDC",
+    state: "DRAFT",
+    summary: null,
+    templateId: null,
+    title: "Website Rebuild",
+    updatedAt: now
+  });
+  await repositories.dealVersions.create({
+    bodyMarkdown: "# Terms",
+    createdAt: now,
+    createdByUserId: actor.userId,
+    draftDealId: "draft-1",
+    id: "deal-version-1",
+    organizationId: "org-1",
+    settlementCurrency: "USDC",
+    summary: null,
+    templateId: null,
+    title: "Website Rebuild v1",
+    versionNumber: 1
+  });
+  await repositories.auditLogs.append({
+    action: "DEAL_VERSION_CREATED",
+    actorUserId: actor.userId,
+    entityId: "deal-version-1",
+    entityType: "DEAL_VERSION",
+    id: "audit-8",
+    ipAddress: "127.0.0.1",
+    metadata: {
+      versionNumber: 1
+    },
+    occurredAt: now,
+    organizationId: "org-1",
+    userAgent: "test-agent"
+  });
+
+  const response = await auditService.listByEntity(
+    {
+      entityId: "deal-version-1",
+      entityType: "DEAL_VERSION"
+    },
+    {
+      cookieHeader: actor.cookieHeader,
+      ipAddress: "127.0.0.1",
+      userAgent: "test-agent"
+    }
+  );
+
+  assert.equal(response.auditLogs.length, 1);
+  assert.equal(response.auditLogs[0]?.action, "DEAL_VERSION_CREATED");
+});

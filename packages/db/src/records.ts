@@ -2,6 +2,9 @@ import type {
   AuditAction,
   AuditEntityType,
   ChainId,
+  DealPartyRole,
+  DealPartySubjectType,
+  DealState,
   EntityId,
   FileCategory,
   IsoTimestamp,
@@ -9,6 +12,8 @@ import type {
   OrganizationInviteStatus,
   OrganizationRole,
   SessionStatus,
+  SettlementCurrency,
+  TemplateSummary,
   WalletAddress
 } from "@blockchain-escrow/shared";
 
@@ -119,4 +124,84 @@ export interface FileRecord {
   sha256Hex: string;
   storageKey: string;
   updatedAt: IsoTimestamp;
+}
+
+export interface TemplateRecord {
+  bodyMarkdown: TemplateSummary["bodyMarkdown"];
+  createdAt: IsoTimestamp;
+  createdByUserId: EntityId;
+  defaultCounterpartyId: EntityId | null;
+  description: TemplateSummary["description"];
+  id: EntityId;
+  name: string;
+  normalizedName: string;
+  organizationId: EntityId;
+  updatedAt: IsoTimestamp;
+}
+
+export interface DraftDealRecord {
+  createdAt: IsoTimestamp;
+  createdByUserId: EntityId;
+  id: EntityId;
+  organizationId: EntityId;
+  settlementCurrency: SettlementCurrency;
+  state: DealState;
+  summary: string | null;
+  templateId: EntityId | null;
+  title: string;
+  updatedAt: IsoTimestamp;
+}
+
+export interface DraftDealPartyRecord {
+  counterpartyId: EntityId | null;
+  createdAt: IsoTimestamp;
+  draftDealId: EntityId;
+  id: EntityId;
+  organizationId: EntityId | null;
+  role: DealPartyRole;
+  subjectType: DealPartySubjectType;
+  updatedAt: IsoTimestamp;
+}
+
+export interface DealVersionRecord {
+  bodyMarkdown: string;
+  createdAt: IsoTimestamp;
+  createdByUserId: EntityId;
+  draftDealId: EntityId;
+  id: EntityId;
+  organizationId: EntityId;
+  settlementCurrency: SettlementCurrency;
+  summary: string | null;
+  templateId: EntityId | null;
+  title: string;
+  versionNumber: number;
+}
+
+export interface DealVersionPartyRecord {
+  counterpartyId: EntityId | null;
+  createdAt: IsoTimestamp;
+  dealVersionId: EntityId;
+  displayName: string;
+  id: EntityId;
+  organizationId: EntityId | null;
+  role: DealPartyRole;
+  subjectType: DealPartySubjectType;
+}
+
+export interface DealVersionMilestoneRecord {
+  amountMinor: string;
+  createdAt: IsoTimestamp;
+  dealVersionId: EntityId;
+  description: string | null;
+  dueAt: IsoTimestamp | null;
+  id: EntityId;
+  position: number;
+  title: string;
+}
+
+export interface DealVersionFileRecord {
+  createdAt: IsoTimestamp;
+  dealVersionId: EntityId;
+  fileId: EntityId;
+  id: EntityId;
 }
