@@ -67,6 +67,77 @@ function createDraftsService() {
   };
 }
 
+async function seedDraftVersionScenario(
+  draftsService: DraftsService,
+  repositories: InMemoryRelease1Repositories,
+  actor: {
+    cookieHeader: string;
+    userId: string;
+  }
+) {
+  const now = new Date().toISOString();
+
+  await seedOrganizationMembership(repositories, {
+    createdByUserId: actor.userId,
+    name: "Acme Procurement",
+    organizationId: "org-1",
+    role: "OWNER",
+    slug: "acme-procurement",
+    userId: actor.userId
+  });
+  await repositories.counterparties.create({
+    contactEmail: "vendor@example.com",
+    createdAt: now,
+    createdByUserId: actor.userId,
+    id: "counterparty-1",
+    legalName: null,
+    name: "Vendor One",
+    normalizedName: "vendor one",
+    organizationId: "org-1",
+    updatedAt: now
+  });
+
+  const draft = await draftsService.createDraft(
+    "org-1",
+    {
+      counterpartyId: "counterparty-1",
+      organizationRole: "BUYER",
+      settlementCurrency: "USDC",
+      title: "Website Rebuild"
+    },
+    {
+      cookieHeader: actor.cookieHeader,
+      ipAddress: "127.0.0.1",
+      userAgent: "test-agent"
+    }
+  );
+  const version = await draftsService.createVersionSnapshot(
+    {
+      draftDealId: draft.draft.id,
+      organizationId: "org-1"
+    },
+    {
+      bodyMarkdown: "# Final terms",
+      milestoneSnapshots: [
+        {
+          amountMinor: "1000000",
+          title: "Design phase"
+        }
+      ]
+    },
+    {
+      cookieHeader: actor.cookieHeader,
+      ipAddress: "127.0.0.1",
+      userAgent: "test-agent"
+    }
+  );
+
+  return {
+    draft,
+    version
+  };
+}
+
 test("drafts service creates a draft, links template/counterparty, and lists it", async () => {
   const { draftsService, repositories, sessionTokenService } = createDraftsService();
   const actor = await seedAuthenticatedActor(repositories, sessionTokenService);
@@ -372,5 +443,184 @@ test("drafts service enforces organization scoping for counterparties, templates
       }
     ),
     /organization role is insufficient/
+  );
+});
+
+test("drafts service creates and lists immutable typed acceptances for the organization-side party", async () => {
+  const { draftsService, repositories, sessionTokenService } = createDraftsService();
+  const actor = await seedAuthenticatedActor(repositories, sessionTokenService);
+  const seeded = await seedDraftVersionScenario(draftsService, repositories, actor);
+
+  const created = await draftsService.createVersionAcceptance(
+    {
+      dealVersionId: seeded.version.version.id,
+      draftDealId: seeded.draft.draft.id,
+      organizationId: "org-1"
+    },
+    {
+      scheme: "EIP712",
+      signature: "0xabcdef1234567890",
+      typedData: {
+        domain: {
+          chainId: 84532,
+          name: "Blockchain Escrow",
+          version: "1"
+        },
+        message: {
+          dealVersionId: seeded.version.version.id,
+          intent: "ACCEPT_DEAL_VERSION"
+        },
+        primaryType: "DealVersionAcceptance",
+        types: {
+          DealVersionAcceptance: [
+            { name: "dealVersionId", type: "string" },
+            { name: "intent", type: "string" }
+          ]
+        }
+      }
+    },
+    {
+      cookieHeader: actor.cookieHeader,
+      ipAddress: "127.0.0.1",
+      userAgent: "test-agent"
+    }
+  );
+
+  assert.equal(created.acceptance.party.subjectType, "ORGANIZATION");
+  assert.equal(created.acceptance.party.role, "BUYER");
+  assert.equal(created.acceptance.signerWalletId, actor.walletId);
+  assert.equal(
+    repositories.auditLogRecords[2]?.action,
+    "DEAL_VERSION_ACCEPTANCE_CREATED"
+  );
+
+  const listed = await draftsService.listVersionAcceptances(
+    {
+      dealVersionId: seeded.version.version.id,
+      draftDealId: seeded.draft.draft.id,
+      organizationId: "org-1"
+    },
+    {
+      cookieHeader: actor.cookieHeader,
+      ipAddress: "127.0.0.1",
+      userAgent: "test-agent"
+    }
+  );
+
+  assert.equal(listed.acceptances.length, 1);
+  assert.equal(listed.acceptances[0]?.id, created.acceptance.id);
+});
+
+test("drafts service prevents duplicate acceptances for the same organization-side party", async () => {
+  const { draftsService, repositories, sessionTokenService } = createDraftsService();
+  const actor = await seedAuthenticatedActor(repositories, sessionTokenService);
+  const secondActor = await seedAuthenticatedActor(
+    repositories,
+    sessionTokenService,
+    {
+      sessionId: "session-2",
+      userId: "user-2",
+      walletAddress: "0x9999999999999999999999999999999999999999",
+      walletId: "wallet-2"
+    }
+  );
+  const seeded = await seedDraftVersionScenario(draftsService, repositories, actor);
+
+  await seedOrganizationMembership(repositories, {
+    createdByUserId: actor.userId,
+    organizationId: "org-1",
+    role: "MEMBER",
+    userId: secondActor.userId
+  });
+
+  await draftsService.createVersionAcceptance(
+    {
+      dealVersionId: seeded.version.version.id,
+      draftDealId: seeded.draft.draft.id,
+      organizationId: "org-1"
+    },
+    {
+      scheme: "EIP712",
+      signature: "0x1111",
+      typedData: {
+        message: {
+          dealVersionId: seeded.version.version.id
+        }
+      }
+    },
+    {
+      cookieHeader: actor.cookieHeader,
+      ipAddress: "127.0.0.1",
+      userAgent: "test-agent"
+    }
+  );
+
+  await assert.rejects(
+    draftsService.createVersionAcceptance(
+      {
+        dealVersionId: seeded.version.version.id,
+        draftDealId: seeded.draft.draft.id,
+        organizationId: "org-1"
+      },
+      {
+        scheme: "EIP712",
+        signature: "0x2222",
+        typedData: {
+          message: {
+            dealVersionId: seeded.version.version.id
+          }
+        }
+      },
+      {
+        cookieHeader: secondActor.cookieHeader,
+        ipAddress: "127.0.0.1",
+        userAgent: "test-agent"
+      }
+    ),
+    /deal version acceptance already exists/
+  );
+});
+
+test("drafts service enforces organization scoping for version acceptances", async () => {
+  const { draftsService, repositories, sessionTokenService } = createDraftsService();
+  const actor = await seedAuthenticatedActor(repositories, sessionTokenService);
+  const outsider = await seedAuthenticatedActor(repositories, sessionTokenService, {
+    sessionId: "session-2",
+    userId: "user-2",
+    walletAddress: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    walletId: "wallet-2"
+  });
+  const seeded = await seedDraftVersionScenario(draftsService, repositories, actor);
+
+  await seedOrganizationMembership(repositories, {
+    createdByUserId: outsider.userId,
+    organizationId: "org-2",
+    role: "OWNER",
+    userId: outsider.userId
+  });
+
+  await assert.rejects(
+    draftsService.createVersionAcceptance(
+      {
+        dealVersionId: seeded.version.version.id,
+        draftDealId: seeded.draft.draft.id,
+        organizationId: "org-1"
+      },
+      {
+        scheme: "EIP712",
+        signature: "0x3333",
+        typedData: {
+          message: {
+            dealVersionId: seeded.version.version.id
+          }
+        }
+      },
+      {
+        cookieHeader: outsider.cookieHeader,
+        ipAddress: "127.0.0.1",
+        userAgent: "test-agent"
+      }
+    ),
+    /organization access is required/
   );
 });

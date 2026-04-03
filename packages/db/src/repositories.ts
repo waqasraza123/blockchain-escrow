@@ -3,6 +3,7 @@ import type { ChainId, EntityId, WalletAddress } from "@blockchain-escrow/shared
 import type {
   AuditLogRecord,
   CounterpartyRecord,
+  DealVersionAcceptanceRecord,
   DealVersionFileRecord,
   DealVersionMilestoneRecord,
   DealVersionPartyRecord,
@@ -167,9 +168,23 @@ export interface DealVersionFileRepository {
   listByDealVersionId(dealVersionId: EntityId): Promise<DealVersionFileRecord[]>;
 }
 
+export interface DealVersionAcceptanceRepository {
+  create(
+    record: DealVersionAcceptanceRecord
+  ): Promise<DealVersionAcceptanceRecord>;
+  findByDealVersionPartyId(
+    dealVersionPartyId: EntityId
+  ): Promise<DealVersionAcceptanceRecord | null>;
+  findById(id: EntityId): Promise<DealVersionAcceptanceRecord | null>;
+  listByDealVersionId(
+    dealVersionId: EntityId
+  ): Promise<DealVersionAcceptanceRecord[]>;
+}
+
 export interface Release1Repositories {
   auditLogs: AuditLogRepository;
   counterparties: CounterpartyRepository;
+  dealVersionAcceptances: DealVersionAcceptanceRepository;
   dealVersionFiles: DealVersionFileRepository;
   dealVersionMilestones: DealVersionMilestoneRepository;
   dealVersionParties: DealVersionPartyRepository;

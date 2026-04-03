@@ -1,8 +1,10 @@
 import { Body, Controller, Get, Param, Post, Req } from "@nestjs/common";
 import type {
+  CreateDealVersionAcceptanceResponse,
   CreateDealVersionResponse,
   CreateDraftDealResponse,
   DraftDealDetailResponse,
+  ListDealVersionAcceptancesResponse,
   ListDraftDealsResponse
 } from "@blockchain-escrow/shared";
 
@@ -58,6 +60,34 @@ export class DraftsController {
   ): Promise<CreateDealVersionResponse> {
     return this.draftsService.createVersionSnapshot(
       { draftDealId, organizationId },
+      body,
+      readRequestMetadata(request)
+    );
+  }
+
+  @Get(":draftDealId/versions/:dealVersionId/acceptances")
+  async listVersionAcceptances(
+    @Param("organizationId") organizationId: string,
+    @Param("draftDealId") draftDealId: string,
+    @Param("dealVersionId") dealVersionId: string,
+    @Req() request: HttpRequestLike
+  ): Promise<ListDealVersionAcceptancesResponse> {
+    return this.draftsService.listVersionAcceptances(
+      { dealVersionId, draftDealId, organizationId },
+      readRequestMetadata(request)
+    );
+  }
+
+  @Post(":draftDealId/versions/:dealVersionId/acceptances")
+  async createVersionAcceptance(
+    @Param("organizationId") organizationId: string,
+    @Param("draftDealId") draftDealId: string,
+    @Param("dealVersionId") dealVersionId: string,
+    @Body() body: unknown,
+    @Req() request: HttpRequestLike
+  ): Promise<CreateDealVersionAcceptanceResponse> {
+    return this.draftsService.createVersionAcceptance(
+      { dealVersionId, draftDealId, organizationId },
       body,
       readRequestMetadata(request)
     );

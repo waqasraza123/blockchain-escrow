@@ -14,6 +14,7 @@ import type {
   SessionStatus,
   SettlementCurrency,
   TemplateSummary,
+  TypedSignatureScheme,
   WalletAddress
 } from "@blockchain-escrow/shared";
 
@@ -204,4 +205,18 @@ export interface DealVersionFileRecord {
   dealVersionId: EntityId;
   fileId: EntityId;
   id: EntityId;
+}
+
+export interface DealVersionAcceptanceRecord {
+  acceptedAt: IsoTimestamp;
+  acceptedByUserId: EntityId;
+  dealVersionId: EntityId;
+  dealVersionPartyId: EntityId;
+  id: EntityId;
+  organizationId: EntityId;
+  scheme: TypedSignatureScheme;
+  signature: string;
+  signerWalletAddress: WalletAddress;
+  signerWalletId: EntityId;
+  typedData: JsonObject;
 }

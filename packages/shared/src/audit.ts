@@ -7,6 +7,7 @@ export const auditActionSchema = z.enum([
   "AUTH_NONCE_ISSUED",
   "AUTH_SESSION_VERIFIED",
   "COUNTERPARTY_CREATED",
+  "DEAL_VERSION_ACCEPTANCE_CREATED",
   "DEAL_VERSION_CREATED",
   "DRAFT_DEAL_CREATED",
   "FILE_CREATED",
@@ -22,6 +23,7 @@ export type AuditAction = z.infer<typeof auditActionSchema>;
 
 export const auditEntityTypeSchema = z.enum([
   "COUNTERPARTY",
+  "DEAL_VERSION_ACCEPTANCE",
   "DEAL_VERSION",
   "DRAFT_DEAL",
   "FILE",

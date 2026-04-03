@@ -31,6 +31,7 @@ enum AuditAction {
   AUTH_NONCE_ISSUED
   AUTH_SESSION_VERIFIED
   COUNTERPARTY_CREATED
+  DEAL_VERSION_ACCEPTANCE_CREATED
   DEAL_VERSION_CREATED
   DRAFT_DEAL_CREATED
   FILE_CREATED
@@ -45,6 +46,7 @@ enum AuditAction {
 
 enum AuditEntityType {
   COUNTERPARTY
+  DEAL_VERSION_ACCEPTANCE
   DEAL_VERSION
   DRAFT_DEAL
   FILE
@@ -92,35 +94,41 @@ enum SettlementCurrency {
   USDC
 }
 
+enum TypedSignatureScheme {
+  EIP712
+}
+
 model User {
-  id                 String               @id @db.Text
-  createdAt          DateTime             @db.Timestamptz(3)
-  updatedAt          DateTime             @db.Timestamptz(3)
-  sessions           Session[]
-  wallets            Wallet[]
-  organizationsOwned Organization[]
-  counterpartiesCreated Counterparty[]    @relation("CounterpartyCreatedByUser")
-  draftDealsCreated    DraftDeal[]        @relation("DraftDealCreatedByUser")
-  dealVersionsCreated  DealVersion[]      @relation("DealVersionCreatedByUser")
-  filesCreated       StoredFile[]         @relation("StoredFileCreatedByUser")
-  templatesCreated   Template[]           @relation("TemplateCreatedByUser")
-  organizationRoles  OrganizationMember[]
-  invitesSent        OrganizationInvite[] @relation("OrganizationInviteInvitedByUser")
-  auditLogs          AuditLog[]           @relation("AuditActorUser")
+  id                         String                 @id @db.Text
+  createdAt                  DateTime               @db.Timestamptz(3)
+  updatedAt                  DateTime               @db.Timestamptz(3)
+  sessions                   Session[]
+  wallets                    Wallet[]
+  organizationsOwned         Organization[]
+  counterpartiesCreated      Counterparty[]         @relation("CounterpartyCreatedByUser")
+  draftDealsCreated          DraftDeal[]            @relation("DraftDealCreatedByUser")
+  dealVersionAcceptancesMade DealVersionAcceptance[] @relation("DealVersionAcceptanceAcceptedByUser")
+  dealVersionsCreated        DealVersion[]          @relation("DealVersionCreatedByUser")
+  filesCreated               StoredFile[]           @relation("StoredFileCreatedByUser")
+  templatesCreated           Template[]             @relation("TemplateCreatedByUser")
+  organizationRoles          OrganizationMember[]
+  invitesSent                OrganizationInvite[]   @relation("OrganizationInviteInvitedByUser")
+  auditLogs                  AuditLog[]             @relation("AuditActorUser")
 
   @@map("users")
 }
 
 model Wallet {
-  id        String    @id @db.Text
-  userId    String    @db.Text
-  address   String    @unique @db.Text
-  chainId   Int?
-  isPrimary Boolean
-  createdAt DateTime  @db.Timestamptz(3)
-  updatedAt DateTime  @db.Timestamptz(3)
-  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  sessions  Session[]
+  id                    String                  @id @db.Text
+  userId                String                  @db.Text
+  address               String                  @unique @db.Text
+  chainId               Int?
+  isPrimary             Boolean
+  createdAt             DateTime                @db.Timestamptz(3)
+  updatedAt             DateTime                @db.Timestamptz(3)
+  user                  User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sessions              Session[]
+  dealVersionAcceptances DealVersionAcceptance[] @relation("DealVersionAcceptanceSignerWallet")
 
   @@index([userId], map: "wallets_user_id_idx")
   @@map("wallets")
@@ -160,23 +168,24 @@ model Session {
 }
 
 model Organization {
-  id              String               @id @db.Text
-  createdByUserId String               @db.Text
-  name            String               @db.Text
-  slug            String               @unique @db.Text
-  createdAt       DateTime             @db.Timestamptz(3)
-  updatedAt       DateTime             @db.Timestamptz(3)
-  createdByUser   User                 @relation(fields: [createdByUserId], references: [id], onDelete: Restrict)
-  counterparties  Counterparty[]
-  dealVersionParties DealVersionParty[] @relation("DealVersionPartyOrganization")
-  dealVersions    DealVersion[]
-  draftDealParties DraftDealParty[]     @relation("DraftDealPartyOrganization")
-  draftDeals      DraftDeal[]
-  files           StoredFile[]
-  templates       Template[]
-  members         OrganizationMember[]
-  invites         OrganizationInvite[]
-  auditLogs       AuditLog[]
+  id                     String                  @id @db.Text
+  createdByUserId        String                  @db.Text
+  name                   String                  @db.Text
+  slug                   String                  @unique @db.Text
+  createdAt              DateTime                @db.Timestamptz(3)
+  updatedAt              DateTime                @db.Timestamptz(3)
+  createdByUser          User                    @relation(fields: [createdByUserId], references: [id], onDelete: Restrict)
+  counterparties         Counterparty[]
+  dealVersionAcceptances DealVersionAcceptance[]
+  dealVersionParties     DealVersionParty[]      @relation("DealVersionPartyOrganization")
+  dealVersions           DealVersion[]
+  draftDealParties       DraftDealParty[]        @relation("DraftDealPartyOrganization")
+  draftDeals             DraftDeal[]
+  files                  StoredFile[]
+  templates              Template[]
+  members                OrganizationMember[]
+  invites                OrganizationInvite[]
+  auditLogs              AuditLog[]
 
   @@index([createdByUserId], map: "organizations_created_by_user_id_idx")
   @@map("organizations")
@@ -313,6 +322,7 @@ model DealVersion {
   organization       Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   createdByUser      User               @relation("DealVersionCreatedByUser", fields: [createdByUserId], references: [id], onDelete: Restrict)
   template           Template?          @relation("DealVersionTemplate", fields: [templateId], references: [id], onDelete: SetNull)
+  acceptances        DealVersionAcceptance[]
   parties            DealVersionParty[]
   milestones         DealVersionMilestone[]
   files              DealVersionFile[]
@@ -335,9 +345,10 @@ model DealVersionParty {
   counterpartyId String?             @db.Text
   displayName    String              @db.Text
   createdAt      DateTime            @db.Timestamptz(3)
-  dealVersion    DealVersion         @relation(fields: [dealVersionId], references: [id], onDelete: Cascade)
-  organization   Organization?       @relation("DealVersionPartyOrganization", fields: [organizationId], references: [id], onDelete: SetNull)
-  counterparty   Counterparty?       @relation("DealVersionPartyCounterparty", fields: [counterpartyId], references: [id], onDelete: SetNull)
+  dealVersion    DealVersion             @relation(fields: [dealVersionId], references: [id], onDelete: Cascade)
+  organization   Organization?           @relation("DealVersionPartyOrganization", fields: [organizationId], references: [id], onDelete: SetNull)
+  counterparty   Counterparty?           @relation("DealVersionPartyCounterparty", fields: [counterpartyId], references: [id], onDelete: SetNull)
+  acceptances    DealVersionAcceptance[]
 
   @@unique([dealVersionId, role], map: "deal_version_parties_deal_version_id_role_key")
   @@index([dealVersionId], map: "deal_version_parties_deal_version_id_idx")
@@ -374,6 +385,33 @@ model DealVersionFile {
   @@index([dealVersionId], map: "deal_version_files_deal_version_id_idx")
   @@index([fileId], map: "deal_version_files_file_id_idx")
   @@map("deal_version_files")
+}
+
+model DealVersionAcceptance {
+  id                String               @id @db.Text
+  dealVersionId     String               @db.Text
+  dealVersionPartyId String              @db.Text
+  organizationId    String               @db.Text
+  acceptedByUserId  String               @db.Text
+  signerWalletId    String               @db.Text
+  signerWalletAddress String             @db.Text
+  scheme            TypedSignatureScheme
+  signature         String               @db.Text
+  typedData         Json
+  acceptedAt        DateTime             @db.Timestamptz(3)
+  dealVersion       DealVersion          @relation(fields: [dealVersionId], references: [id], onDelete: Cascade)
+  dealVersionParty  DealVersionParty     @relation(fields: [dealVersionPartyId], references: [id], onDelete: Cascade)
+  organization      Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  acceptedByUser    User                 @relation("DealVersionAcceptanceAcceptedByUser", fields: [acceptedByUserId], references: [id], onDelete: Restrict)
+  signerWallet      Wallet               @relation("DealVersionAcceptanceSignerWallet", fields: [signerWalletId], references: [id], onDelete: Restrict)
+
+  @@unique([dealVersionPartyId], map: "deal_version_acceptances_deal_version_party_id_key")
+  @@index([dealVersionId], map: "deal_version_acceptances_deal_version_id_idx")
+  @@index([organizationId], map: "deal_version_acceptances_organization_id_idx")
+  @@index([acceptedByUserId], map: "deal_version_acceptances_accepted_by_user_id_idx")
+  @@index([signerWalletId], map: "deal_version_acceptances_signer_wallet_id_idx")
+  @@index([dealVersionId, acceptedAt], map: "deal_version_acceptances_deal_version_id_accepted_at_idx")
+  @@map("deal_version_acceptances")
 }
 
 model OrganizationMember {

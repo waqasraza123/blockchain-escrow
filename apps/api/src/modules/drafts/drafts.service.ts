@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 
 import type {
   CounterpartyRecord,
+  DealVersionAcceptanceRecord,
   DealVersionMilestoneRecord,
   DealVersionPartyRecord,
   DealVersionRecord,
@@ -15,12 +16,17 @@ import type {
 } from "@blockchain-escrow/db";
 import { hasMinimumOrganizationRole } from "@blockchain-escrow/security";
 import {
+  createDealVersionAcceptanceSchema,
   createDealVersionSchema,
   createDraftDealSchema,
+  dealVersionAcceptanceParamsSchema,
   draftDealParamsSchema,
   organizationDraftDealsParamsSchema,
+  type CreateDealVersionAcceptanceResponse,
   type CreateDealVersionResponse,
   type CreateDraftDealResponse,
+  type DealVersionAcceptanceSummary,
+  type DealVersionAcceptanceDetail,
   type DealVersionDetail,
   type DealVersionMilestoneSnapshot,
   type DealVersionPartySnapshot,
@@ -30,6 +36,7 @@ import {
   type DraftDealPartySummary,
   type DraftDealSummary,
   type FileSummary,
+  type ListDealVersionAcceptancesResponse,
   type ListDraftDealsResponse
 } from "@blockchain-escrow/shared";
 import {
@@ -95,6 +102,24 @@ function toFileSummary(file: FileRecord): FileSummary {
     sha256Hex: file.sha256Hex,
     storageKey: file.storageKey,
     updatedAt: file.updatedAt
+  };
+}
+
+function toDealVersionAcceptanceSummary(
+  acceptance: DealVersionAcceptanceRecord
+): DealVersionAcceptanceSummary {
+  return {
+    acceptedAt: acceptance.acceptedAt,
+    acceptedByUserId: acceptance.acceptedByUserId,
+    dealVersionId: acceptance.dealVersionId,
+    id: acceptance.id,
+    organizationId: acceptance.organizationId,
+    partyId: acceptance.dealVersionPartyId,
+    scheme: acceptance.scheme,
+    signature: acceptance.signature,
+    signerWalletAddress: acceptance.signerWalletAddress,
+    signerWalletId: acceptance.signerWalletId,
+    typedData: acceptance.typedData
   };
 }
 
@@ -352,6 +377,102 @@ export class DraftsService {
     };
   }
 
+  async listVersionAcceptances(
+    input: unknown,
+    requestMetadata: RequestMetadata
+  ): Promise<ListDealVersionAcceptancesResponse> {
+    const parsed = dealVersionAcceptanceParamsSchema.safeParse(input);
+
+    if (!parsed.success) {
+      throw new BadRequestException(parsed.error.flatten());
+    }
+
+    const { version } = await this.requireDealVersionAccess(
+      parsed.data.organizationId,
+      parsed.data.draftDealId,
+      parsed.data.dealVersionId,
+      requestMetadata
+    );
+
+    return {
+      acceptances: await this.buildAcceptanceDetails(version.id)
+    };
+  }
+
+  async createVersionAcceptance(
+    versionInput: unknown,
+    acceptanceInput: unknown,
+    requestMetadata: RequestMetadata
+  ): Promise<CreateDealVersionAcceptanceResponse> {
+    const parsedVersion = dealVersionAcceptanceParamsSchema.safeParse(versionInput);
+    const parsedAcceptance = createDealVersionAcceptanceSchema.safeParse(
+      acceptanceInput
+    );
+
+    if (!parsedVersion.success) {
+      throw new BadRequestException(parsedVersion.error.flatten());
+    }
+
+    if (!parsedAcceptance.success) {
+      throw new BadRequestException(parsedAcceptance.error.flatten());
+    }
+
+    const authorized = await this.requireDealVersionAccess(
+      parsedVersion.data.organizationId,
+      parsedVersion.data.draftDealId,
+      parsedVersion.data.dealVersionId,
+      requestMetadata
+    );
+    const organizationParty = await this.requireOrganizationVersionParty(
+      authorized.version.id,
+      authorized.organization.id
+    );
+    const existing = await this.repositories.dealVersionAcceptances.findByDealVersionPartyId(
+      organizationParty.id
+    );
+
+    if (existing) {
+      throw new ConflictException("deal version acceptance already exists");
+    }
+
+    const now = new Date().toISOString();
+    const acceptance = await this.repositories.dealVersionAcceptances.create({
+      acceptedAt: now,
+      acceptedByUserId: authorized.actor.user.id,
+      dealVersionId: authorized.version.id,
+      dealVersionPartyId: organizationParty.id,
+      id: randomUUID(),
+      organizationId: authorized.organization.id,
+      scheme: parsedAcceptance.data.scheme,
+      signature: parsedAcceptance.data.signature,
+      signerWalletAddress: authorized.actor.wallet.address,
+      signerWalletId: authorized.actor.wallet.id,
+      typedData: parsedAcceptance.data.typedData
+    });
+
+    await this.repositories.auditLogs.append({
+      action: "DEAL_VERSION_ACCEPTANCE_CREATED",
+      actorUserId: authorized.actor.user.id,
+      entityId: acceptance.id,
+      entityType: "DEAL_VERSION_ACCEPTANCE",
+      id: randomUUID(),
+      ipAddress: requestMetadata.ipAddress,
+      metadata: {
+        dealVersionId: acceptance.dealVersionId,
+        dealVersionPartyId: acceptance.dealVersionPartyId,
+        scheme: acceptance.scheme,
+        signerWalletId: acceptance.signerWalletId
+      },
+      occurredAt: now,
+      organizationId: authorized.organization.id,
+      userAgent: requestMetadata.userAgent
+    });
+
+    return {
+      acceptance: this.toAcceptanceDetail(acceptance, organizationParty)
+    };
+  }
+
   private async buildDraftListItem(draft: DraftDealRecord): Promise<DraftDealListItem> {
     const [parties, latestVersion] = await Promise.all([
       this.buildDraftPartySummaries(draft.id),
@@ -437,6 +558,26 @@ export class DraftsService {
     };
   }
 
+  private async buildAcceptanceDetails(
+    dealVersionId: string
+  ): Promise<DealVersionAcceptanceDetail[]> {
+    const [acceptances, parties] = await Promise.all([
+      this.repositories.dealVersionAcceptances.listByDealVersionId(dealVersionId),
+      this.repositories.dealVersionParties.listByDealVersionId(dealVersionId)
+    ]);
+    const partiesById = new Map(parties.map((party) => [party.id, party]));
+
+    return acceptances.map((acceptance) => {
+      const party = partiesById.get(acceptance.dealVersionPartyId);
+
+      if (!party) {
+        throw new NotFoundException("deal version party not found");
+      }
+
+      return this.toAcceptanceDetail(acceptance, party);
+    });
+  }
+
   private toVersionPartySnapshot(
     party: DealVersionPartyRecord
   ): DealVersionPartySnapshot {
@@ -448,6 +589,16 @@ export class DraftsService {
       organizationId: party.organizationId,
       role: party.role,
       subjectType: party.subjectType
+    };
+  }
+
+  private toAcceptanceDetail(
+    acceptance: DealVersionAcceptanceRecord,
+    party: DealVersionPartyRecord
+  ): DealVersionAcceptanceDetail {
+    return {
+      ...toDealVersionAcceptanceSummary(acceptance),
+      party: this.toVersionPartySnapshot(party)
     };
   }
 
@@ -569,6 +720,70 @@ export class DraftsService {
     }
 
     return draft;
+  }
+
+  private async requireDealVersionAccess(
+    organizationId: string,
+    draftDealId: string,
+    dealVersionId: string,
+    requestMetadata: RequestMetadata
+  ): Promise<{
+    actor: AuthenticatedSessionContext;
+    draft: DraftDealRecord;
+    membership: OrganizationMemberRecord;
+    organization: OrganizationRecord;
+    version: DealVersionRecord;
+  }> {
+    const authorized = await this.requireOrganizationAccess(
+      organizationId,
+      requestMetadata
+    );
+    const [draft, version] = await Promise.all([
+      this.repositories.draftDeals.findById(draftDealId),
+      this.repositories.dealVersions.findById(dealVersionId)
+    ]);
+
+    if (!draft || draft.organizationId !== organizationId) {
+      throw new NotFoundException("draft deal not found");
+    }
+
+    if (
+      !version ||
+      version.organizationId !== organizationId ||
+      version.draftDealId !== draft.id
+    ) {
+      throw new NotFoundException("deal version not found");
+    }
+
+    return {
+      actor: authorized.actor,
+      draft,
+      membership: authorized.membership,
+      organization: authorized.organization,
+      version
+    };
+  }
+
+  private async requireOrganizationVersionParty(
+    dealVersionId: string,
+    organizationId: string
+  ): Promise<DealVersionPartyRecord> {
+    const parties = await this.repositories.dealVersionParties.listByDealVersionId(
+      dealVersionId
+    );
+    const matchingParties = parties.filter(
+      (party) =>
+        party.subjectType === "ORGANIZATION" &&
+        party.organizationId === organizationId
+    );
+
+    if (matchingParties.length !== 1) {
+      throw new ConflictException(
+        "deal version must have exactly one organization-side party"
+      );
+    }
+
+    return matchingParties[0] as DealVersionPartyRecord;
   }
 
   private async requireOrganizationAccess(

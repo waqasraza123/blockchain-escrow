@@ -30,7 +30,8 @@
 
 - Release 0 foundation is complete enough to support implementation work.
 - Release 1 is complete: identity, wallet auth, sessions, users, organizations, org roles, invites, and audit logs.
-- Release 2 is in progress: counterparties, files metadata, templates, draft deals, and immutable deal versions are implemented; accepted typed-signature capture remains the main unimplemented Release 2 slice.
+- Release 2 is complete: counterparties, files metadata, templates, draft deals, immutable deal versions, milestone snapshots, and accepted typed-signature capture are implemented.
+- Release 3 contract implementation is the next active release boundary.
 - Later releases for deals, funding, milestones, disputes, operator tooling, partner APIs, and production maturity are defined in `docs/product/RELEASE_ROADMAP.md` but are not current implementation targets.
 
 ## Completed Major Slices
@@ -49,6 +50,7 @@
 - Release 2 files foundation in `packages/shared`, `packages/db`, and `apps/api` with organization-scoped file metadata create/list/detail flows, unique storage keys per organization, and file audit logging.
 - Release 2 template foundation in `packages/shared`, `packages/db`, and `apps/api` with organization-scoped create/list/detail flows, unique normalized names per organization, optional default counterparties, and template audit logging.
 - Release 2 drafting foundation in `packages/shared`, `packages/db`, and `apps/api` with organization-scoped draft creation, current draft parties, immutable deal version snapshots, milestone snapshots, linked file metadata, template references, and audit logging for draft and version creation.
+- Release 2 deal-version acceptance foundation in `packages/shared`, `packages/db`, and `apps/api` with organization-side typed-signature capture for immutable versions, signer wallet binding from the authenticated session, acceptance audit logging, and read endpoints per version.
 - Behavioral API tests for auth lifecycle, organization workflows, users, wallets, audit access, and SIWE domain/URI policy checks.
 
 ## Important Decisions
@@ -62,7 +64,7 @@
 
 ## Deferred / Not Yet Implemented
 
-- Release 2+ business modules such as accepted typed-signature capture, funding, disputes, approvals, partner APIs, and reporting are not implemented.
+- Release 3+ business modules such as funding, disputes, approvals, partner APIs, and reporting are not implemented.
 - Indexer projections, worker side effects, and production contract logic are not implemented.
 - Repo-level automated tests still exist mainly in `apps/api` and contracts; many other packages have no test task yet.
 
@@ -71,7 +73,7 @@
 - Release 1 coverage is currently service-level in `apps/api`; there are still no end-to-end HTTP tests for the controllers.
 - Invite creation currently returns a raw invite token because no worker/email delivery flow exists yet. Treat that as a temporary Release 1 API convenience and be careful not to leak it into durable docs or logs.
 - The SIWE verifier now enforces allowed domain and URI origin policy; keep those env values aligned with the frontend surfaces that are allowed to initiate sign-in.
-- Release 2 drafting currently stops at immutable version snapshots; accepted typed-signature capture remains the next workflow dependency before funded deal flows.
+- Release 2 workflow now stops at offchain accepted immutable versions; funded deals and custody transitions remain later-release work.
 - Keep local session continuity in `docs/_local/current-session.md`; do not recreate ad hoc session docs elsewhere.
 
 ## Standard Verification

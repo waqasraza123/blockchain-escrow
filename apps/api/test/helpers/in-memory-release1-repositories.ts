@@ -1,6 +1,7 @@
 import type {
   AuditLogRecord,
   CounterpartyRecord,
+  DealVersionAcceptanceRecord,
   DealVersionFileRecord,
   DealVersionMilestoneRecord,
   DealVersionPartyRecord,
@@ -26,6 +27,7 @@ function compareIsoTimestamps(a: string, b: string): number {
 export class InMemoryRelease1Repositories implements Release1Repositories {
   readonly auditLogRecords: AuditLogRecord[] = [];
   readonly counterpartyRecords: CounterpartyRecord[] = [];
+  readonly dealVersionAcceptanceRecords: DealVersionAcceptanceRecord[] = [];
   readonly dealVersionFileRecords: DealVersionFileRecord[] = [];
   readonly dealVersionMilestoneRecords: DealVersionMilestoneRecord[] = [];
   readonly dealVersionPartyRecords: DealVersionPartyRecord[] = [];
@@ -83,6 +85,31 @@ export class InMemoryRelease1Repositories implements Release1Repositories {
       this.counterpartyRecords
         .filter((record) => record.organizationId === organizationId)
         .sort((left, right) => compareIsoTimestamps(left.createdAt, right.createdAt))
+  };
+
+  readonly dealVersionAcceptances = {
+    create: async (
+      record: DealVersionAcceptanceRecord
+    ): Promise<DealVersionAcceptanceRecord> => {
+      this.dealVersionAcceptanceRecords.push(record);
+      return record;
+    },
+    findByDealVersionPartyId: async (
+      dealVersionPartyId: string
+    ): Promise<DealVersionAcceptanceRecord | null> =>
+      this.dealVersionAcceptanceRecords.find(
+        (record) => record.dealVersionPartyId === dealVersionPartyId
+      ) ?? null,
+    findById: async (
+      id: string
+    ): Promise<DealVersionAcceptanceRecord | null> =>
+      this.dealVersionAcceptanceRecords.find((record) => record.id === id) ?? null,
+    listByDealVersionId: async (
+      dealVersionId: string
+    ): Promise<DealVersionAcceptanceRecord[]> =>
+      this.dealVersionAcceptanceRecords
+        .filter((record) => record.dealVersionId === dealVersionId)
+        .sort((left, right) => compareIsoTimestamps(left.acceptedAt, right.acceptedAt))
   };
 
   readonly draftDeals = {

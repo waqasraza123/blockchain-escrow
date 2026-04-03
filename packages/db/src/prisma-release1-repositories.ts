@@ -4,6 +4,7 @@ import {
   DealPartyRole as PrismaDealPartyRole,
   DealPartySubjectType as PrismaDealPartySubjectType,
   DealState as PrismaDealState,
+  TypedSignatureScheme as PrismaTypedSignatureScheme,
   FileCategory as PrismaFileCategory,
   SettlementCurrency as PrismaSettlementCurrency,
   SessionStatus as PrismaSessionStatus,
@@ -16,6 +17,7 @@ import {
 import type {
   AuditLogRecord,
   CounterpartyRecord,
+  DealVersionAcceptanceRecord,
   DealVersionFileRecord,
   DealVersionMilestoneRecord,
   DealVersionPartyRecord,
@@ -35,6 +37,7 @@ import type {
 import type {
   AuditLogRepository,
   CounterpartyRepository,
+  DealVersionAcceptanceRepository,
   DealVersionFileRepository,
   DealVersionMilestoneRepository,
   DealVersionPartyRepository,
@@ -69,6 +72,12 @@ function toPrismaJsonInput(
   value: AuditLogRecord["metadata"]
 ): Prisma.InputJsonValue | typeof Prisma.JsonNull {
   return value === null ? Prisma.JsonNull : (value as Prisma.InputJsonValue);
+}
+
+function toPrismaJsonObject(
+  value: DealVersionAcceptanceRecord["typedData"]
+): Prisma.InputJsonValue {
+  return value as Prisma.InputJsonValue;
 }
 
 function mapUserRecord(record: {
@@ -374,6 +383,34 @@ function mapDealVersionFileRecord(record: {
     dealVersionId: record.dealVersionId,
     fileId: record.fileId,
     id: record.id
+  };
+}
+
+function mapDealVersionAcceptanceRecord(record: {
+  acceptedAt: Date;
+  acceptedByUserId: string;
+  dealVersionId: string;
+  dealVersionPartyId: string;
+  id: string;
+  organizationId: string;
+  scheme: PrismaTypedSignatureScheme;
+  signature: string;
+  signerWalletAddress: string;
+  signerWalletId: string;
+  typedData: unknown;
+}): DealVersionAcceptanceRecord {
+  return {
+    acceptedAt: toRequiredIsoTimestamp(record.acceptedAt),
+    acceptedByUserId: record.acceptedByUserId,
+    dealVersionId: record.dealVersionId,
+    dealVersionPartyId: record.dealVersionPartyId,
+    id: record.id,
+    organizationId: record.organizationId,
+    scheme: record.scheme,
+    signature: record.signature,
+    signerWalletAddress: record.signerWalletAddress as DealVersionAcceptanceRecord["signerWalletAddress"],
+    signerWalletId: record.signerWalletId,
+    typedData: record.typedData as DealVersionAcceptanceRecord["typedData"]
   };
 }
 
@@ -1059,6 +1096,63 @@ export class PrismaDealVersionFileRepository implements DealVersionFileRepositor
   }
 }
 
+export class PrismaDealVersionAcceptanceRepository
+  implements DealVersionAcceptanceRepository
+{
+  constructor(private readonly prisma: PrismaClient) {}
+
+  async create(
+    record: DealVersionAcceptanceRecord
+  ): Promise<DealVersionAcceptanceRecord> {
+    const created = await this.prisma.dealVersionAcceptance.create({
+      data: {
+        acceptedAt: toDate(record.acceptedAt),
+        acceptedByUserId: record.acceptedByUserId,
+        dealVersionId: record.dealVersionId,
+        dealVersionPartyId: record.dealVersionPartyId,
+        id: record.id,
+        organizationId: record.organizationId,
+        scheme: record.scheme,
+        signature: record.signature,
+        signerWalletAddress: record.signerWalletAddress,
+        signerWalletId: record.signerWalletId,
+        typedData: toPrismaJsonObject(record.typedData)
+      }
+    });
+
+    return mapDealVersionAcceptanceRecord(created);
+  }
+
+  async findByDealVersionPartyId(
+    dealVersionPartyId: string
+  ): Promise<DealVersionAcceptanceRecord | null> {
+    const record = await this.prisma.dealVersionAcceptance.findUnique({
+      where: { dealVersionPartyId }
+    });
+
+    return record ? mapDealVersionAcceptanceRecord(record) : null;
+  }
+
+  async findById(id: string): Promise<DealVersionAcceptanceRecord | null> {
+    const record = await this.prisma.dealVersionAcceptance.findUnique({
+      where: { id }
+    });
+
+    return record ? mapDealVersionAcceptanceRecord(record) : null;
+  }
+
+  async listByDealVersionId(
+    dealVersionId: string
+  ): Promise<DealVersionAcceptanceRecord[]> {
+    const records = await this.prisma.dealVersionAcceptance.findMany({
+      where: { dealVersionId },
+      orderBy: { acceptedAt: "asc" }
+    });
+
+    return records.map(mapDealVersionAcceptanceRecord);
+  }
+}
+
 export class PrismaOrganizationMemberRepository
   implements OrganizationMemberRepository
 {
@@ -1319,6 +1413,7 @@ export class PrismaAuditLogRepository implements AuditLogRepository {
 export class PrismaRelease1Repositories implements Release1Repositories {
   readonly auditLogs: AuditLogRepository;
   readonly counterparties: CounterpartyRepository;
+  readonly dealVersionAcceptances: DealVersionAcceptanceRepository;
   readonly dealVersionFiles: DealVersionFileRepository;
   readonly dealVersionMilestones: DealVersionMilestoneRepository;
   readonly dealVersionParties: DealVersionPartyRepository;
@@ -1338,6 +1433,7 @@ export class PrismaRelease1Repositories implements Release1Repositories {
   constructor(private readonly prisma: PrismaClient) {
     this.auditLogs = new PrismaAuditLogRepository(prisma);
     this.counterparties = new PrismaCounterpartyRepository(prisma);
+    this.dealVersionAcceptances = new PrismaDealVersionAcceptanceRepository(prisma);
     this.dealVersionFiles = new PrismaDealVersionFileRepository(prisma);
     this.dealVersionMilestones = new PrismaDealVersionMilestoneRepository(prisma);
     this.dealVersionParties = new PrismaDealVersionPartyRepository(prisma);
