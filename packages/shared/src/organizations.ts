@@ -29,6 +29,13 @@ export type CreateOrganizationInviteInput = z.infer<
   typeof createOrganizationInviteSchema
 >;
 
+export const acceptOrganizationInviteSchema = z.object({
+  inviteToken: z.string().min(1)
+});
+export type AcceptOrganizationInviteInput = z.infer<
+  typeof acceptOrganizationInviteSchema
+>;
+
 export const updateOrganizationMemberRoleSchema = z.object({
   role: organizationRoleSchema
 });
@@ -70,4 +77,41 @@ export interface OrganizationInviteSummary {
   organizationId: EntityId;
   role: OrganizationRole;
   status: OrganizationInviteStatus;
+}
+
+export interface OrganizationMembershipView {
+  membership: OrganizationMembershipSummary;
+  organization: OrganizationSummary;
+}
+
+export interface ListOrganizationMembershipsResponse {
+  organizations: OrganizationMembershipView[];
+}
+
+export interface OrganizationDetailResponse {
+  currentMembership: OrganizationMembershipSummary;
+  members: OrganizationMemberSummary[];
+  organization: OrganizationSummary;
+  pendingInvites: OrganizationInviteSummary[];
+}
+
+export type CreateOrganizationResponse = OrganizationDetailResponse;
+
+export interface CreateOrganizationInviteResponse {
+  invite: OrganizationInviteSummary;
+  inviteToken: string;
+}
+
+export interface UpdateOrganizationMemberRoleResponse {
+  member: OrganizationMemberSummary;
+}
+
+export interface RevokeOrganizationInviteResponse {
+  invite: OrganizationInviteSummary;
+}
+
+export type AcceptOrganizationInviteResponse = OrganizationDetailResponse;
+
+export interface RemoveOrganizationMemberResponse {
+  member: OrganizationMemberSummary;
 }

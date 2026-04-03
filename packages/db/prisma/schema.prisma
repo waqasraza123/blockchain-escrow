@@ -30,7 +30,10 @@ enum AuditAction {
   AUTH_LOGOUT
   AUTH_NONCE_ISSUED
   AUTH_SESSION_VERIFIED
+  COUNTERPARTY_CREATED
+  FILE_CREATED
   ORGANIZATION_CREATED
+  ORGANIZATION_INVITE_REVOKED
   ORGANIZATION_INVITE_ACCEPTED
   ORGANIZATION_INVITE_CREATED
   ORGANIZATION_MEMBER_REMOVED
@@ -38,12 +41,21 @@ enum AuditAction {
 }
 
 enum AuditEntityType {
+  COUNTERPARTY
+  FILE
   ORGANIZATION
   ORGANIZATION_INVITE
   ORGANIZATION_MEMBER
   SESSION
   USER
   WALLET
+}
+
+enum FileCategory {
+  GENERAL
+  DRAFT_ATTACHMENT
+  EVIDENCE
+  SIGNED_DOCUMENT
 }
 
 model User {
@@ -53,6 +65,8 @@ model User {
   sessions           Session[]
   wallets            Wallet[]
   organizationsOwned Organization[]
+  counterpartiesCreated Counterparty[]    @relation("CounterpartyCreatedByUser")
+  filesCreated       StoredFile[]         @relation("StoredFileCreatedByUser")
   organizationRoles  OrganizationMember[]
   invitesSent        OrganizationInvite[] @relation("OrganizationInviteInvitedByUser")
   auditLogs          AuditLog[]           @relation("AuditActorUser")
@@ -116,12 +130,56 @@ model Organization {
   createdAt       DateTime             @db.Timestamptz(3)
   updatedAt       DateTime             @db.Timestamptz(3)
   createdByUser   User                 @relation(fields: [createdByUserId], references: [id], onDelete: Restrict)
+  counterparties  Counterparty[]
+  files           StoredFile[]
   members         OrganizationMember[]
   invites         OrganizationInvite[]
   auditLogs       AuditLog[]
 
   @@index([createdByUserId], map: "organizations_created_by_user_id_idx")
   @@map("organizations")
+}
+
+model Counterparty {
+  id              String       @id @db.Text
+  organizationId  String       @db.Text
+  createdByUserId String       @db.Text
+  name            String       @db.Text
+  normalizedName  String       @db.Text
+  legalName       String?      @db.Text
+  contactEmail    String?      @db.Text
+  createdAt       DateTime     @db.Timestamptz(3)
+  updatedAt       DateTime     @db.Timestamptz(3)
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdByUser   User         @relation("CounterpartyCreatedByUser", fields: [createdByUserId], references: [id], onDelete: Restrict)
+
+  @@unique([organizationId, normalizedName], map: "counterparties_organization_id_normalized_name_key")
+  @@index([organizationId], map: "counterparties_organization_id_idx")
+  @@index([createdByUserId], map: "counterparties_created_by_user_id_idx")
+  @@index([organizationId, createdAt], map: "counterparties_organization_id_created_at_idx")
+  @@map("counterparties")
+}
+
+model StoredFile {
+  id               String       @id @db.Text
+  organizationId   String       @db.Text
+  createdByUserId  String       @db.Text
+  originalFilename String       @db.Text
+  mediaType        String       @db.Text
+  byteSize         BigInt
+  sha256Hex        String       @db.Text
+  storageKey       String       @db.Text
+  category         FileCategory
+  createdAt        DateTime     @db.Timestamptz(3)
+  updatedAt        DateTime     @db.Timestamptz(3)
+  organization     Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdByUser    User         @relation("StoredFileCreatedByUser", fields: [createdByUserId], references: [id], onDelete: Restrict)
+
+  @@unique([organizationId, storageKey], map: "files_organization_id_storage_key_key")
+  @@index([organizationId], map: "files_organization_id_idx")
+  @@index([createdByUserId], map: "files_created_by_user_id_idx")
+  @@index([organizationId, createdAt], map: "files_organization_id_created_at_idx")
+  @@map("files")
 }
 
 model OrganizationMember {

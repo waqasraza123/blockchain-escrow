@@ -1,7 +1,9 @@
-import type { EntityId, WalletAddress } from "@blockchain-escrow/shared";
+import type { ChainId, EntityId, WalletAddress } from "@blockchain-escrow/shared";
 
 import type {
   AuditLogRecord,
+  CounterpartyRecord,
+  FileRecord,
   OrganizationInviteRecord,
   OrganizationMemberRecord,
   OrganizationRecord,
@@ -18,6 +20,7 @@ export interface UserRepository {
 
 export interface WalletRepository {
   create(record: WalletRecord): Promise<WalletRecord>;
+  findById(id: EntityId): Promise<WalletRecord | null>;
   findByAddress(address: WalletAddress): Promise<WalletRecord | null>;
   listByUserId(userId: EntityId): Promise<WalletRecord[]>;
 }
@@ -27,6 +30,10 @@ export interface WalletNonceRepository {
   create(record: WalletNonceRecord): Promise<WalletNonceRecord>;
   findActiveByWalletAddress(
     walletAddress: WalletAddress
+  ): Promise<WalletNonceRecord | null>;
+  findActiveByWalletAddressAndChainId(
+    walletAddress: WalletAddress,
+    chainId: ChainId
   ): Promise<WalletNonceRecord | null>;
 }
 
@@ -55,6 +62,7 @@ export interface OrganizationMemberRepository {
   listByOrganizationId(
     organizationId: EntityId
   ): Promise<OrganizationMemberRecord[]>;
+  listByUserId(userId: EntityId): Promise<OrganizationMemberRecord[]>;
   remove(id: EntityId): Promise<OrganizationMemberRecord | null>;
   updateRole(
     id: EntityId,
@@ -66,6 +74,10 @@ export interface OrganizationInviteRepository {
   accept(id: EntityId): Promise<OrganizationInviteRecord | null>;
   create(record: OrganizationInviteRecord): Promise<OrganizationInviteRecord>;
   findById(id: EntityId): Promise<OrganizationInviteRecord | null>;
+  findPendingByOrganizationIdAndEmail(
+    organizationId: EntityId,
+    email: string
+  ): Promise<OrganizationInviteRecord | null>;
   findByTokenHash(tokenHash: string): Promise<OrganizationInviteRecord | null>;
   listPendingByOrganizationId(
     organizationId: EntityId
@@ -81,8 +93,30 @@ export interface AuditLogRepository {
   ): Promise<AuditLogRecord[]>;
 }
 
+export interface CounterpartyRepository {
+  create(record: CounterpartyRecord): Promise<CounterpartyRecord>;
+  findById(id: EntityId): Promise<CounterpartyRecord | null>;
+  findByOrganizationIdAndNormalizedName(
+    organizationId: EntityId,
+    normalizedName: string
+  ): Promise<CounterpartyRecord | null>;
+  listByOrganizationId(organizationId: EntityId): Promise<CounterpartyRecord[]>;
+}
+
+export interface FileRepository {
+  create(record: FileRecord): Promise<FileRecord>;
+  findById(id: EntityId): Promise<FileRecord | null>;
+  findByOrganizationIdAndStorageKey(
+    organizationId: EntityId,
+    storageKey: string
+  ): Promise<FileRecord | null>;
+  listByOrganizationId(organizationId: EntityId): Promise<FileRecord[]>;
+}
+
 export interface Release1Repositories {
   auditLogs: AuditLogRepository;
+  counterparties: CounterpartyRepository;
+  files: FileRepository;
   organizationInvites: OrganizationInviteRepository;
   organizationMembers: OrganizationMemberRepository;
   organizations: OrganizationRepository;

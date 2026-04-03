@@ -17,9 +17,11 @@ export interface SiweVerificationInput {
 
 export interface VerifiedSiweMessage {
   chainId: ChainId;
+  domain: string;
   expirationTime: IsoTimestamp | null;
   issuedAt: IsoTimestamp | null;
   nonce: string;
+  uri: string;
   walletAddress: WalletAddress;
 }
 

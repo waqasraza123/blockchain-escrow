@@ -1,6 +1,7 @@
 import {
   Prisma,
   PrismaClient,
+  FileCategory as PrismaFileCategory,
   SessionStatus as PrismaSessionStatus,
   OrganizationInviteStatus as PrismaOrganizationInviteStatus,
   OrganizationRole as PrismaOrganizationRole,
@@ -10,6 +11,8 @@ import {
 
 import type {
   AuditLogRecord,
+  CounterpartyRecord,
+  FileRecord,
   OrganizationInviteRecord,
   OrganizationMemberRecord,
   OrganizationRecord,
@@ -20,6 +23,8 @@ import type {
 } from "./records";
 import type {
   AuditLogRepository,
+  CounterpartyRepository,
+  FileRepository,
   OrganizationInviteRepository,
   OrganizationMemberRepository,
   OrganizationRepository,
@@ -142,6 +147,58 @@ function mapOrganizationRecord(record: {
   };
 }
 
+function mapCounterpartyRecord(record: {
+  contactEmail: string | null;
+  createdAt: Date;
+  createdByUserId: string;
+  id: string;
+  legalName: string | null;
+  name: string;
+  normalizedName: string;
+  organizationId: string;
+  updatedAt: Date;
+}): CounterpartyRecord {
+  return {
+    contactEmail: record.contactEmail,
+    createdAt: toRequiredIsoTimestamp(record.createdAt),
+    createdByUserId: record.createdByUserId,
+    id: record.id,
+    legalName: record.legalName,
+    name: record.name,
+    normalizedName: record.normalizedName,
+    organizationId: record.organizationId,
+    updatedAt: toRequiredIsoTimestamp(record.updatedAt)
+  };
+}
+
+function mapFileRecord(record: {
+  byteSize: bigint;
+  category: PrismaFileCategory;
+  createdAt: Date;
+  createdByUserId: string;
+  id: string;
+  mediaType: string;
+  organizationId: string;
+  originalFilename: string;
+  sha256Hex: string;
+  storageKey: string;
+  updatedAt: Date;
+}): FileRecord {
+  return {
+    byteSize: Number(record.byteSize),
+    category: record.category,
+    createdAt: toRequiredIsoTimestamp(record.createdAt),
+    createdByUserId: record.createdByUserId,
+    id: record.id,
+    mediaType: record.mediaType,
+    organizationId: record.organizationId,
+    originalFilename: record.originalFilename,
+    sha256Hex: record.sha256Hex,
+    storageKey: record.storageKey,
+    updatedAt: toRequiredIsoTimestamp(record.updatedAt)
+  };
+}
+
 function mapOrganizationMemberRecord(record: {
   createdAt: Date;
   id: string;
@@ -254,6 +311,11 @@ export class PrismaWalletRepository implements WalletRepository {
     return mapWalletRecord(created);
   }
 
+  async findById(id: string): Promise<WalletRecord | null> {
+    const record = await this.prisma.wallet.findUnique({ where: { id } });
+    return record ? mapWalletRecord(record) : null;
+  }
+
   async findByAddress(address: string): Promise<WalletRecord | null> {
     const record = await this.prisma.wallet.findUnique({ where: { address } });
     return record ? mapWalletRecord(record) : null;
@@ -308,6 +370,23 @@ export class PrismaWalletNonceRepository implements WalletNonceRepository {
   ): Promise<WalletNonceRecord | null> {
     const record = await this.prisma.walletNonce.findFirst({
       where: {
+        consumedAt: null,
+        expiresAt: { gt: new Date() },
+        walletAddress
+      },
+      orderBy: { createdAt: "desc" }
+    });
+
+    return record ? mapWalletNonceRecord(record) : null;
+  }
+
+  async findActiveByWalletAddressAndChainId(
+    walletAddress: string,
+    chainId: number
+  ): Promise<WalletNonceRecord | null> {
+    const record = await this.prisma.walletNonce.findFirst({
+      where: {
+        chainId,
         consumedAt: null,
         expiresAt: { gt: new Date() },
         walletAddress
@@ -429,6 +508,112 @@ export class PrismaOrganizationRepository implements OrganizationRepository {
   }
 }
 
+export class PrismaCounterpartyRepository implements CounterpartyRepository {
+  constructor(private readonly prisma: PrismaClient) {}
+
+  async create(record: CounterpartyRecord): Promise<CounterpartyRecord> {
+    const created = await this.prisma.counterparty.create({
+      data: {
+        contactEmail: record.contactEmail,
+        createdAt: toDate(record.createdAt),
+        createdByUserId: record.createdByUserId,
+        id: record.id,
+        legalName: record.legalName,
+        name: record.name,
+        normalizedName: record.normalizedName,
+        organizationId: record.organizationId,
+        updatedAt: toDate(record.updatedAt)
+      }
+    });
+
+    return mapCounterpartyRecord(created);
+  }
+
+  async findById(id: string): Promise<CounterpartyRecord | null> {
+    const record = await this.prisma.counterparty.findUnique({ where: { id } });
+    return record ? mapCounterpartyRecord(record) : null;
+  }
+
+  async findByOrganizationIdAndNormalizedName(
+    organizationId: string,
+    normalizedName: string
+  ): Promise<CounterpartyRecord | null> {
+    const record = await this.prisma.counterparty.findUnique({
+      where: {
+        organizationId_normalizedName: {
+          normalizedName,
+          organizationId
+        }
+      }
+    });
+
+    return record ? mapCounterpartyRecord(record) : null;
+  }
+
+  async listByOrganizationId(organizationId: string): Promise<CounterpartyRecord[]> {
+    const records = await this.prisma.counterparty.findMany({
+      where: { organizationId },
+      orderBy: { createdAt: "asc" }
+    });
+
+    return records.map(mapCounterpartyRecord);
+  }
+}
+
+export class PrismaFileRepository implements FileRepository {
+  constructor(private readonly prisma: PrismaClient) {}
+
+  async create(record: FileRecord): Promise<FileRecord> {
+    const created = await this.prisma.storedFile.create({
+      data: {
+        byteSize: BigInt(record.byteSize),
+        category: record.category,
+        createdAt: toDate(record.createdAt),
+        createdByUserId: record.createdByUserId,
+        id: record.id,
+        mediaType: record.mediaType,
+        organizationId: record.organizationId,
+        originalFilename: record.originalFilename,
+        sha256Hex: record.sha256Hex,
+        storageKey: record.storageKey,
+        updatedAt: toDate(record.updatedAt)
+      }
+    });
+
+    return mapFileRecord(created);
+  }
+
+  async findById(id: string): Promise<FileRecord | null> {
+    const record = await this.prisma.storedFile.findUnique({ where: { id } });
+    return record ? mapFileRecord(record) : null;
+  }
+
+  async findByOrganizationIdAndStorageKey(
+    organizationId: string,
+    storageKey: string
+  ): Promise<FileRecord | null> {
+    const record = await this.prisma.storedFile.findUnique({
+      where: {
+        organizationId_storageKey: {
+          organizationId,
+          storageKey
+        }
+      }
+    });
+
+    return record ? mapFileRecord(record) : null;
+  }
+
+  async listByOrganizationId(organizationId: string): Promise<FileRecord[]> {
+    const records = await this.prisma.storedFile.findMany({
+      where: { organizationId },
+      orderBy: { createdAt: "asc" }
+    });
+
+    return records.map(mapFileRecord);
+  }
+}
+
 export class PrismaOrganizationMemberRepository
   implements OrganizationMemberRepository
 {
@@ -478,6 +663,15 @@ export class PrismaOrganizationMemberRepository
   ): Promise<OrganizationMemberRecord[]> {
     const records = await this.prisma.organizationMember.findMany({
       where: { organizationId },
+      orderBy: { createdAt: "asc" }
+    });
+
+    return records.map(mapOrganizationMemberRecord);
+  }
+
+  async listByUserId(userId: string): Promise<OrganizationMemberRecord[]> {
+    const records = await this.prisma.organizationMember.findMany({
+      where: { userId },
       orderBy: { createdAt: "asc" }
     });
 
@@ -578,6 +772,22 @@ export class PrismaOrganizationInviteRepository
     return record ? mapOrganizationInviteRecord(record) : null;
   }
 
+  async findPendingByOrganizationIdAndEmail(
+    organizationId: string,
+    email: string
+  ): Promise<OrganizationInviteRecord | null> {
+    const record = await this.prisma.organizationInvite.findFirst({
+      where: {
+        email,
+        organizationId,
+        status: PrismaOrganizationInviteStatus.PENDING
+      },
+      orderBy: { createdAt: "desc" }
+    });
+
+    return record ? mapOrganizationInviteRecord(record) : null;
+  }
+
   async findByTokenHash(
     tokenHash: string
   ): Promise<OrganizationInviteRecord | null> {
@@ -663,6 +873,8 @@ export class PrismaAuditLogRepository implements AuditLogRepository {
 
 export class PrismaRelease1Repositories implements Release1Repositories {
   readonly auditLogs: AuditLogRepository;
+  readonly counterparties: CounterpartyRepository;
+  readonly files: FileRepository;
   readonly organizationInvites: OrganizationInviteRepository;
   readonly organizationMembers: OrganizationMemberRepository;
   readonly organizations: OrganizationRepository;
@@ -673,6 +885,8 @@ export class PrismaRelease1Repositories implements Release1Repositories {
 
   constructor(private readonly prisma: PrismaClient) {
     this.auditLogs = new PrismaAuditLogRepository(prisma);
+    this.counterparties = new PrismaCounterpartyRepository(prisma);
+    this.files = new PrismaFileRepository(prisma);
     this.organizationInvites = new PrismaOrganizationInviteRepository(prisma);
     this.organizationMembers = new PrismaOrganizationMemberRepository(prisma);
     this.organizations = new PrismaOrganizationRepository(prisma);

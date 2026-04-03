@@ -11,3 +11,11 @@ export const release1TableNames = {
 
 export type Release1TableName =
   (typeof release1TableNames)[keyof typeof release1TableNames];
+
+export const release2TableNames = {
+  counterparties: "counterparties",
+  files: "files"
+} as const;
+
+export type Release2TableName =
+  (typeof release2TableNames)[keyof typeof release2TableNames];

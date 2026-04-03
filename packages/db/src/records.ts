@@ -3,6 +3,7 @@ import type {
   AuditEntityType,
   ChainId,
   EntityId,
+  FileCategory,
   IsoTimestamp,
   JsonObject,
   OrganizationInviteStatus,
@@ -92,4 +93,30 @@ export interface AuditLogRecord {
   occurredAt: IsoTimestamp;
   organizationId: EntityId | null;
   userAgent: string | null;
+}
+
+export interface CounterpartyRecord {
+  contactEmail: string | null;
+  createdAt: IsoTimestamp;
+  createdByUserId: EntityId;
+  id: EntityId;
+  legalName: string | null;
+  name: string;
+  normalizedName: string;
+  organizationId: EntityId;
+  updatedAt: IsoTimestamp;
+}
+
+export interface FileRecord {
+  byteSize: number;
+  category: FileCategory;
+  createdAt: IsoTimestamp;
+  createdByUserId: EntityId;
+  id: EntityId;
+  mediaType: string;
+  organizationId: EntityId;
+  originalFilename: string;
+  sha256Hex: string;
+  storageKey: string;
+  updatedAt: IsoTimestamp;
 }
