@@ -41,3 +41,11 @@ Release 0 creates durable docs, workspace structure, local infra, shell apps, sh
 ### D-010: Ownership boundary
 
 The API does not write chain projections; the indexer owns normalized chain reads and money movement projections.
+
+### D-011: Release 1 persistence toolchain
+
+Use Prisma in `packages/db` for the first Postgres schema, migrations, generated client, and repository-backed persistence layer.
+
+### D-012: Local Postgres port
+
+Use `127.0.0.1:5433` as the default local Docker Postgres endpoint for the repo to avoid collisions with an existing host Postgres on `5432`.

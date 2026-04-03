@@ -10,6 +10,7 @@ export default tseslint.config(
       "**/dist/**",
       "**/coverage/**",
       "**/.turbo/**",
+      "**/*.d.ts",
       "**/next-env.d.ts",
       "packages/contracts/cache/**",
       "packages/contracts/out/**",

@@ -1,0 +1,182 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum SessionStatus {
+  ACTIVE
+  REVOKED
+  EXPIRED
+}
+
+enum OrganizationRole {
+  OWNER
+  ADMIN
+  MEMBER
+}
+
+enum OrganizationInviteStatus {
+  PENDING
+  ACCEPTED
+  REVOKED
+  EXPIRED
+}
+
+enum AuditAction {
+  AUTH_LOGOUT
+  AUTH_NONCE_ISSUED
+  AUTH_SESSION_VERIFIED
+  ORGANIZATION_CREATED
+  ORGANIZATION_INVITE_ACCEPTED
+  ORGANIZATION_INVITE_CREATED
+  ORGANIZATION_MEMBER_REMOVED
+  ORGANIZATION_MEMBER_ROLE_UPDATED
+}
+
+enum AuditEntityType {
+  ORGANIZATION
+  ORGANIZATION_INVITE
+  ORGANIZATION_MEMBER
+  SESSION
+  USER
+  WALLET
+}
+
+model User {
+  id                 String               @id @db.Text
+  createdAt          DateTime             @db.Timestamptz(3)
+  updatedAt          DateTime             @db.Timestamptz(3)
+  sessions           Session[]
+  wallets            Wallet[]
+  organizationsOwned Organization[]
+  organizationRoles  OrganizationMember[]
+  invitesSent        OrganizationInvite[] @relation("OrganizationInviteInvitedByUser")
+  auditLogs          AuditLog[]           @relation("AuditActorUser")
+
+  @@map("users")
+}
+
+model Wallet {
+  id        String    @id @db.Text
+  userId    String    @db.Text
+  address   String    @unique @db.Text
+  chainId   Int?
+  isPrimary Boolean
+  createdAt DateTime  @db.Timestamptz(3)
+  updatedAt DateTime  @db.Timestamptz(3)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sessions  Session[]
+
+  @@index([userId], map: "wallets_user_id_idx")
+  @@map("wallets")
+}
+
+model WalletNonce {
+  id            String   @id @db.Text
+  walletAddress String   @db.Text
+  chainId       Int
+  nonce         String   @unique @db.Text
+  createdAt     DateTime @db.Timestamptz(3)
+  expiresAt     DateTime @db.Timestamptz(3)
+  consumedAt    DateTime? @db.Timestamptz(3)
+
+  @@index([walletAddress], map: "wallet_nonces_wallet_address_idx")
+  @@index([expiresAt], map: "wallet_nonces_expires_at_idx")
+  @@map("wallet_nonces")
+}
+
+model Session {
+  id         String        @id @db.Text
+  userId     String        @db.Text
+  walletId   String        @db.Text
+  tokenHash  String        @unique @db.Text
+  status     SessionStatus
+  createdAt  DateTime      @db.Timestamptz(3)
+  expiresAt  DateTime      @db.Timestamptz(3)
+  lastSeenAt DateTime?     @db.Timestamptz(3)
+  revokedAt  DateTime?     @db.Timestamptz(3)
+  user       User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  wallet     Wallet        @relation(fields: [walletId], references: [id], onDelete: Cascade)
+
+  @@index([userId], map: "sessions_user_id_idx")
+  @@index([walletId], map: "sessions_wallet_id_idx")
+  @@index([status], map: "sessions_status_idx")
+  @@map("sessions")
+}
+
+model Organization {
+  id              String               @id @db.Text
+  createdByUserId String               @db.Text
+  name            String               @db.Text
+  slug            String               @unique @db.Text
+  createdAt       DateTime             @db.Timestamptz(3)
+  updatedAt       DateTime             @db.Timestamptz(3)
+  createdByUser   User                 @relation(fields: [createdByUserId], references: [id], onDelete: Restrict)
+  members         OrganizationMember[]
+  invites         OrganizationInvite[]
+  auditLogs       AuditLog[]
+
+  @@index([createdByUserId], map: "organizations_created_by_user_id_idx")
+  @@map("organizations")
+}
+
+model OrganizationMember {
+  id             String           @id @db.Text
+  organizationId String           @db.Text
+  userId         String           @db.Text
+  role           OrganizationRole
+  createdAt      DateTime         @db.Timestamptz(3)
+  updatedAt      DateTime         @db.Timestamptz(3)
+  organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user           User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, userId], map: "organization_members_organization_id_user_id_key")
+  @@index([userId], map: "organization_members_user_id_idx")
+  @@index([organizationId], map: "organization_members_organization_id_idx")
+  @@map("organization_members")
+}
+
+model OrganizationInvite {
+  id              String                   @id @db.Text
+  organizationId  String                   @db.Text
+  invitedByUserId String                   @db.Text
+  email           String                   @db.Text
+  role            OrganizationRole
+  status          OrganizationInviteStatus
+  tokenHash       String                   @unique @db.Text
+  createdAt       DateTime                 @db.Timestamptz(3)
+  updatedAt       DateTime                 @db.Timestamptz(3)
+  expiresAt       DateTime                 @db.Timestamptz(3)
+  acceptedAt      DateTime?                @db.Timestamptz(3)
+  organization    Organization             @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  invitedByUser   User                     @relation("OrganizationInviteInvitedByUser", fields: [invitedByUserId], references: [id], onDelete: Restrict)
+
+  @@index([organizationId], map: "organization_invites_organization_id_idx")
+  @@index([email], map: "organization_invites_email_idx")
+  @@index([status], map: "organization_invites_status_idx")
+  @@map("organization_invites")
+}
+
+model AuditLog {
+  id             String          @id @db.Text
+  action         AuditAction
+  actorUserId    String?         @db.Text
+  entityType     AuditEntityType
+  entityId       String          @db.Text
+  organizationId String?         @db.Text
+  metadata       Json?
+  ipAddress      String?         @db.Text
+  userAgent      String?         @db.Text
+  occurredAt     DateTime        @db.Timestamptz(3)
+  actorUser      User?           @relation("AuditActorUser", fields: [actorUserId], references: [id], onDelete: SetNull)
+  organization   Organization?   @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+
+  @@index([entityType, entityId], map: "audit_logs_entity_type_entity_id_idx")
+  @@index([organizationId], map: "audit_logs_organization_id_idx")
+  @@index([actorUserId], map: "audit_logs_actor_user_id_idx")
+  @@map("audit_logs")
+}

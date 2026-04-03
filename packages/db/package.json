@@ -4,11 +4,19 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "dependencies": {
+    "@prisma/client": "^6.6.0",
     "@blockchain-escrow/shared": "workspace:*"
   },
+  "devDependencies": {
+    "prisma": "^6.6.0"
+  },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
-    "lint": "eslint .",
-    "typecheck": "tsc --noEmit"
+    "build": "pnpm run prisma:generate && tsc -p tsconfig.json",
+    "lint": "pnpm run prisma:validate && eslint .",
+    "prisma:generate": "DATABASE_URL=${DATABASE_URL:-postgresql://blockchain_escrow:blockchain_escrow@127.0.0.1:5433/blockchain_escrow} XDG_CACHE_HOME=../../.cache prisma generate",
+    "prisma:migrate:deploy": "DATABASE_URL=${DATABASE_URL:-postgresql://blockchain_escrow:blockchain_escrow@127.0.0.1:5433/blockchain_escrow} XDG_CACHE_HOME=../../.cache prisma migrate deploy",
+    "prisma:migrate:status": "DATABASE_URL=${DATABASE_URL:-postgresql://blockchain_escrow:blockchain_escrow@127.0.0.1:5433/blockchain_escrow} XDG_CACHE_HOME=../../.cache prisma migrate status",
+    "prisma:validate": "DATABASE_URL=${DATABASE_URL:-postgresql://blockchain_escrow:blockchain_escrow@127.0.0.1:5433/blockchain_escrow} XDG_CACHE_HOME=../../.cache prisma validate",
+    "typecheck": "pnpm run prisma:generate && tsc --noEmit"
   }
 }

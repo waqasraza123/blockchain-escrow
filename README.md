@@ -75,6 +75,7 @@ App entrypoints:
 - api: `http://localhost:4000/health/live`
 - worker: `http://localhost:4100/health/live`
 - indexer: `http://localhost:4200/health/live`
+- Postgres: `127.0.0.1:5433`
 - MinIO console: `http://localhost:9001`
 
 ## Validation

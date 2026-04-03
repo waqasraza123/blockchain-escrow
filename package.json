@@ -8,6 +8,9 @@
   },
   "scripts": {
     "build": "turbo run build",
+    "db:generate": "pnpm --filter @blockchain-escrow/db run prisma:generate",
+    "db:migrate:deploy": "pnpm --filter @blockchain-escrow/db run prisma:migrate:deploy",
+    "db:migrate:status": "pnpm --filter @blockchain-escrow/db run prisma:migrate:status",
     "dev": "turbo run dev --parallel",
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",

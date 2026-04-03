@@ -1,7 +1,9 @@
 node_modules
 .pnpm-store
+.cache
 .turbo
 .next
+*.tsbuildinfo
 dist
 coverage
 .env
