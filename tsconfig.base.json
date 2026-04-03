@@ -2,6 +2,7 @@
   "compilerOptions": {
     "target": "ES2022",
     "lib": ["ES2022"],
+    "baseUrl": ".",
     "moduleResolution": "Node",
     "resolveJsonModule": true,
     "esModuleInterop": true,
@@ -10,6 +11,16 @@
     "strict": true,
     "noImplicitOverride": true,
     "noUncheckedIndexedAccess": true,
-    "exactOptionalPropertyTypes": true
+    "exactOptionalPropertyTypes": true,
+    "paths": {
+      "@blockchain-escrow/shared": ["packages/shared/src/index.ts"],
+      "@blockchain-escrow/shared/*": ["packages/shared/src/*"],
+      "@blockchain-escrow/security": ["packages/security/src/index.ts"],
+      "@blockchain-escrow/security/*": ["packages/security/src/*"],
+      "@blockchain-escrow/db": ["packages/db/src/index.ts"],
+      "@blockchain-escrow/db/*": ["packages/db/src/*"],
+      "@blockchain-escrow/contracts-sdk": ["packages/contracts-sdk/src/index.ts"],
+      "@blockchain-escrow/contracts-sdk/*": ["packages/contracts-sdk/src/*"]
+    }
   }
 }

@@ -1,1 +1,3 @@
-export const DB_PACKAGE_NAME = "@blockchain-escrow/db";
+export * from "./records";
+export * from "./repositories";
+export * from "./tables";

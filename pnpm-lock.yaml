@@ -53,6 +53,15 @@ importers:
 
   apps/api:
     dependencies:
+      '@blockchain-escrow/db':
+        specifier: workspace:*
+        version: link:../../packages/db
+      '@blockchain-escrow/security':
+        specifier: workspace:*
+        version: link:../../packages/security
+      '@blockchain-escrow/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
       '@nestjs/common':
         specifier: ^11.0.1
         version: 11.1.17(reflect-metadata@0.2.2)(rxjs@7.8.2)
@@ -89,11 +98,23 @@ importers:
 
   packages/contracts-sdk: {}
 
-  packages/db: {}
+  packages/db:
+    dependencies:
+      '@blockchain-escrow/shared':
+        specifier: workspace:*
+        version: link:../shared
 
-  packages/security: {}
+  packages/security:
+    dependencies:
+      '@blockchain-escrow/shared':
+        specifier: workspace:*
+        version: link:../shared
 
-  packages/shared: {}
+  packages/shared:
+    dependencies:
+      zod:
+        specifier: ^3.24.2
+        version: 3.25.76
 
 packages:
 
@@ -1458,6 +1479,9 @@ packages:
     resolution: {integrity: sha512-rVksvsnNCdJ/ohGc6xgPwyN8eheCxsiLM8mxuE/t/mOVqJewPuO1miLpTHQiRgTKCLexL4MeAFVagts7HmNZ2Q==}
     engines: {node: '>=10'}
 
+  zod@3.25.76:
+    resolution: {integrity: sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ==}
+
 snapshots:
 
   '@borewit/text-codec@0.2.2': {}
@@ -2747,3 +2771,5 @@ snapshots:
   wrappy@1.0.2: {}
 
   yocto-queue@0.1.0: {}
+
+  zod@3.25.76: {}
