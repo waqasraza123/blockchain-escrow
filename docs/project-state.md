@@ -31,7 +31,7 @@
 - Release 0 foundation is complete enough to support implementation work.
 - Release 1 is complete: identity, wallet auth, sessions, users, organizations, org roles, invites, and audit logs.
 - Release 2 is complete: counterparties, files metadata, templates, draft deals, immutable deal versions, milestone snapshots, and accepted typed-signature capture are implemented.
-- Release 3 contract implementation is the next active release boundary.
+- Release 3 contract implementation is in progress: `TokenAllowlist` is implemented with unit tests; `ArbitratorRegistry` is the next smallest contract slice.
 - Later releases for deals, funding, milestones, disputes, operator tooling, partner APIs, and production maturity are defined in `docs/product/RELEASE_ROADMAP.md` but are not current implementation targets.
 
 ## Completed Major Slices
@@ -39,6 +39,7 @@
 - Durable product and architecture docs under `docs/product/*`.
 - Workspace, Turbo, local infra scripts, and app/package shells.
 - Contract scaffold for `TokenAllowlist`, `ArbitratorRegistry`, `ProtocolConfig`, `FeeVault`, `EscrowAgreement`, and `EscrowFactory`.
+- Release 3 `TokenAllowlist` implementation in `packages/contracts` with two-step ownership, enumerable token policy management, and unit tests.
 - Release 1 shared contracts and security interfaces in `packages/shared` and `packages/security`.
 - Release 1 Prisma schema, migration, generated client flow, and repository implementations in `packages/db`.
 - Release 1 auth/session API slice in `apps/api` with nonce issuance, SIWE verification, session persistence, cookie handling, and auth audit logging.
@@ -59,6 +60,7 @@
 - Default local Postgres runs on `127.0.0.1:5433` to avoid host `5432` collisions.
 - Production chain is Base mainnet; development and staging use Base Sepolia.
 - Initial token policy is native USDC only.
+- `TokenAllowlist` intentionally stays minimal: later contracts should depend on `isAllowedToken(address)` rather than embedding token policy.
 - The API owns offchain workflow state; the indexer owns normalized chain reads and projections.
 - Future funded-escrow changes must come through new contracts and release work, not in-place mutation.
 
@@ -74,6 +76,7 @@
 - Invite creation currently returns a raw invite token because no worker/email delivery flow exists yet. Treat that as a temporary Release 1 API convenience and be careful not to leak it into durable docs or logs.
 - The SIWE verifier now enforces allowed domain and URI origin policy; keep those env values aligned with the frontend surfaces that are allowed to initiate sign-in.
 - Release 2 workflow now stops at offchain accepted immutable versions; funded deals and custody transitions remain later-release work.
+- Foundry tests in this environment are stable when run offline; the default online signature lookup path can panic under the current macOS sandbox.
 - Keep local session continuity in `docs/_local/current-session.md`; do not recreate ad hoc session docs elsewhere.
 
 ## Standard Verification
@@ -91,4 +94,4 @@
 - `pnpm test`
 - Contract-specific when relevant:
 - `pnpm contracts:build`
-- `pnpm contracts:test`
+- `FOUNDRY_OFFLINE=true forge test`
