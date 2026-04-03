@@ -1,0 +1,9 @@
+{
+  "name": "@blockchain-escrow/contracts",
+  "private": true,
+  "scripts": {
+    "build:contracts": "forge build",
+    "lint": "forge fmt --check",
+    "test:contracts": "forge test"
+  }
+}
