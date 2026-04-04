@@ -12,9 +12,9 @@ contract ScaffoldTest {
     function testDeployPlaceholderContracts() external {
         new TokenAllowlist();
         new ArbitratorRegistry();
-        new ProtocolConfig();
+        ProtocolConfig protocolConfig = new ProtocolConfig();
         new FeeVault();
-        new EscrowAgreement();
-        new EscrowFactory();
+        EscrowAgreement agreement = new EscrowAgreement();
+        new EscrowFactory(address(agreement), address(protocolConfig));
     }
 }

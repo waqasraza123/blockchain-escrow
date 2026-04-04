@@ -3,6 +3,8 @@
   "private": true,
   "scripts": {
     "build:contracts": "forge build",
+    "deploy:base-sepolia": "forge script script/DeployProtocol.s.sol:DeployProtocolScript --rpc-url $BASE_RPC_URL --broadcast",
+    "export:contracts-sdk": "node scripts/export-contracts-sdk.mjs",
     "lint": "forge fmt --check",
     "test:contracts": "forge test"
   }

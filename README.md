@@ -89,6 +89,15 @@ pnpm contracts:build
 pnpm contracts:test
 ```
 
+## Contracts Deployment
+
+Base Sepolia deployment requires `BASE_RPC_URL`, `DEPLOYER_PRIVATE_KEY`, `SAFE_ADDRESS`, and `USDC_TOKEN_ADDRESS`.
+
+```bash
+pnpm contracts:deploy:base-sepolia
+pnpm contracts:export-sdk
+```
+
 ## Documentation
 
 Use `docs/product/*` for the long-term architecture and roadmap:

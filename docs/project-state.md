@@ -31,7 +31,7 @@
 - Release 0 foundation is complete enough to support implementation work.
 - Release 1 is complete: identity, wallet auth, sessions, users, organizations, org roles, invites, and audit logs.
 - Release 2 is complete: counterparties, files metadata, templates, draft deals, immutable deal versions, milestone snapshots, and accepted typed-signature capture are implemented.
-- Release 3 contract implementation is in progress: `TokenAllowlist` is implemented with unit tests; `ArbitratorRegistry` is the next smallest contract slice.
+- Release 3 contract implementation is in progress: the full v1 contract surface is implemented with unit tests, Base Sepolia deployment wiring, and ABI export; the next Release 3 step is fuzz tests, invariants, and deployment execution against a real target environment.
 - Later releases for deals, funding, milestones, disputes, operator tooling, partner APIs, and production maturity are defined in `docs/product/RELEASE_ROADMAP.md` but are not current implementation targets.
 
 ## Completed Major Slices
@@ -40,6 +40,12 @@
 - Workspace, Turbo, local infra scripts, and app/package shells.
 - Contract scaffold for `TokenAllowlist`, `ArbitratorRegistry`, `ProtocolConfig`, `FeeVault`, `EscrowAgreement`, and `EscrowFactory`.
 - Release 3 `TokenAllowlist` implementation in `packages/contracts` with two-step ownership, enumerable token policy management, and unit tests.
+- Release 3 `ArbitratorRegistry` implementation in `packages/contracts` with two-step ownership, enumerable arbitrator approval management, and unit tests.
+- Release 3 `ProtocolConfig` implementation in `packages/contracts` with two-step ownership, validated dependency and treasury configuration, protocol fee basis points, pause flags, and unit tests.
+- Release 3 `FeeVault` implementation in `packages/contracts` with two-step ownership, treasury configuration, native/ERC20 fee withdrawals, and unit tests.
+- Release 3 `EscrowAgreement` implementation in `packages/contracts` with one-time initialization, immutable deal snapshot storage, protocol dependency validation, policy validation, and unit tests.
+- Release 3 `EscrowFactory` implementation in `packages/contracts` with immutable versioned dependencies, clone-per-deal deployment, create-pause enforcement, deterministic agreement address prediction, duplicate-deal protection, and unit tests.
+- Release 3 deployment/export wiring with a Base Sepolia deploy script in `packages/contracts`, a deployment manifest template, and generated ABI/address exports in `packages/contracts-sdk`.
 - Release 1 shared contracts and security interfaces in `packages/shared` and `packages/security`.
 - Release 1 Prisma schema, migration, generated client flow, and repository implementations in `packages/db`.
 - Release 1 auth/session API slice in `apps/api` with nonce issuance, SIWE verification, session persistence, cookie handling, and auth audit logging.
