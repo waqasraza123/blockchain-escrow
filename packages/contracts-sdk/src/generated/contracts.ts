@@ -25,6 +25,7 @@ export interface DeploymentManifest {
   readonly deployedAt: string | null;
   readonly deployer: HexString | null;
   readonly owner: HexString | null;
+  readonly pendingOwner: HexString | null;
   readonly treasury: HexString | null;
   readonly usdcToken: HexString | null;
   readonly protocolFeeBps: number;
@@ -2370,6 +2371,7 @@ export const deploymentManifests: Record<string, DeploymentManifest> = {
     "deployedAt": null,
     "deployer": null,
     "owner": null,
+    "pendingOwner": null,
     "treasury": null,
     "usdcToken": null,
     "protocolFeeBps": 0,

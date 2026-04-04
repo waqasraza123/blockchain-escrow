@@ -95,7 +95,15 @@ Base Sepolia deployment requires `BASE_RPC_URL`, `DEPLOYER_PRIVATE_KEY`, `SAFE_A
 
 ```bash
 pnpm contracts:deploy:base-sepolia
+pnpm contracts:verify:base-sepolia
+pnpm contracts:release:base-sepolia
 pnpm contracts:export-sdk
+```
+
+For local pipeline validation without live credentials:
+
+```bash
+pnpm contracts:release:base-sepolia:fixture
 ```
 
 ## Documentation

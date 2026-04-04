@@ -19,6 +19,10 @@ Current commands:
 - `pnpm --filter @blockchain-escrow/contracts run build:contracts`
 - `pnpm --filter @blockchain-escrow/contracts run test:contracts`
 - `pnpm --filter @blockchain-escrow/contracts run deploy:base-sepolia`
+- `pnpm --filter @blockchain-escrow/contracts run release:base-sepolia`
+- `pnpm --filter @blockchain-escrow/contracts run verify:base-sepolia`
 - `pnpm --filter @blockchain-escrow/contracts run export:contracts-sdk`
 
 The Release 3 contracts define the protocol surface and immutable agreement deployment flow. They do not implement funding, milestone execution, release/refund, or dispute resolution yet.
+
+The release command deploys the protocol to Base Sepolia, persists `deployments/base-sepolia.json`, regenerates `packages/contracts-sdk`, and verifies the deployed contract state with `cast` calls. The fixture release command validates the manifest/export pipeline without hitting a live chain.

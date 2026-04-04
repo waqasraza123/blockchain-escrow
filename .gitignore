@@ -17,3 +17,4 @@ packages/contracts/cache
 packages/contracts/out
 packages/contracts/broadcast
 packages/contracts/lib
+packages/contracts/scripts/.tmp

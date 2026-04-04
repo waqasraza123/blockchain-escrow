@@ -6,6 +6,9 @@
     "deploy:base-sepolia": "forge script script/DeployProtocol.s.sol:DeployProtocolScript --rpc-url $BASE_RPC_URL --broadcast",
     "export:contracts-sdk": "node scripts/export-contracts-sdk.mjs",
     "lint": "forge fmt --check",
+    "release:base-sepolia": "node scripts/release-base-sepolia.mjs",
+    "release:base-sepolia:fixture": "SAFE_ADDRESS=0x8888888888888888888888888888888888888888 USDC_TOKEN_ADDRESS=0x7777777777777777777777777777777777777777 BASE_EXPLORER_URL=https://sepolia.basescan.org node scripts/release-base-sepolia.mjs --skip-deploy --skip-verify --broadcast-file scripts/fixtures/base-sepolia-run-latest.example.json --manifest-file scripts/.tmp/deployments/base-sepolia.json --export-deployment-dir scripts/.tmp/deployments --export-output-file scripts/.tmp/contracts-sdk.generated.ts",
+    "verify:base-sepolia": "node scripts/verify-base-sepolia-deployment.mjs",
     "test:contracts": "forge test"
   }
 }

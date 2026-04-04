@@ -44,15 +44,17 @@ const deploymentDirectoryPath = path.resolve(
   "deployments"
 );
 
+const cliOptions = parseCliArgs(process.argv.slice(2));
+
 await main();
 
 async function main() {
   const artifacts = await loadArtifacts();
-  const deployments = await loadDeployments();
+  const deployments = await loadDeployments(cliOptions.deploymentDirectoryPath);
   const generatedSource = buildGeneratedSource(artifacts, deployments);
 
-  await mkdir(path.dirname(artifactsOutputPath), { recursive: true });
-  await writeFile(artifactsOutputPath, generatedSource, "utf8");
+  await mkdir(path.dirname(cliOptions.outputFilePath), { recursive: true });
+  await writeFile(cliOptions.outputFilePath, generatedSource, "utf8");
 }
 
 async function loadArtifacts() {
@@ -85,15 +87,15 @@ async function readArtifact(source) {
   return JSON.parse(artifactContents);
 }
 
-async function loadDeployments() {
+async function loadDeployments(deploymentsPath) {
   try {
-    const deploymentFileNames = (await readdir(deploymentDirectoryPath))
+    const deploymentFileNames = (await readdir(deploymentsPath))
       .filter((fileName) => fileName.endsWith(".json"))
       .sort();
 
     const entries = await Promise.all(
       deploymentFileNames.map(async (fileName) => {
-        const deploymentPath = path.resolve(deploymentDirectoryPath, fileName);
+        const deploymentPath = path.resolve(deploymentsPath, fileName);
         const deploymentContents = await readFile(deploymentPath, "utf8");
         const deployment = JSON.parse(deploymentContents);
 
@@ -135,6 +137,7 @@ function buildGeneratedSource(artifacts, deployments) {
     "  readonly deployedAt: string | null;",
     "  readonly deployer: HexString | null;",
     "  readonly owner: HexString | null;",
+    "  readonly pendingOwner: HexString | null;",
     "  readonly treasury: HexString | null;",
     "  readonly usdcToken: HexString | null;",
     "  readonly protocolFeeBps: number;",
@@ -162,4 +165,41 @@ function buildGeneratedSource(artifacts, deployments) {
     "}",
     ""
   ].join("\n");
+}
+
+function parseCliArgs(argv) {
+  const options = {
+    deploymentDirectoryPath,
+    outputFilePath: artifactsOutputPath
+  };
+
+  for (let index = 0; index < argv.length; ++index) {
+    const value = argv[index];
+
+    if (value === "--deployment-dir") {
+      options.deploymentDirectoryPath = path.resolve(
+        process.cwd(),
+        requireNext(argv, ++index, value)
+      );
+    } else if (value === "--output-file") {
+      options.outputFilePath = path.resolve(
+        process.cwd(),
+        requireNext(argv, ++index, value)
+      );
+    } else {
+      throw new Error(`Unsupported argument: ${value}`);
+    }
+  }
+
+  return options;
+}
+
+function requireNext(argv, index, flagName) {
+  const value = argv[index];
+
+  if (!value) {
+    throw new Error(`Missing value for ${flagName}`);
+  }
+
+  return value;
 }

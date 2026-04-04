@@ -5,6 +5,7 @@
   "deployedAt": null,
   "deployer": null,
   "owner": null,
+  "pendingOwner": null,
   "treasury": null,
   "usdcToken": null,
   "protocolFeeBps": 0,

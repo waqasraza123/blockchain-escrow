@@ -31,7 +31,7 @@
 - Release 0 foundation is complete enough to support implementation work.
 - Release 1 is complete: identity, wallet auth, sessions, users, organizations, org roles, invites, and audit logs.
 - Release 2 is complete: counterparties, files metadata, templates, draft deals, immutable deal versions, milestone snapshots, and accepted typed-signature capture are implemented.
-- Release 3 contract implementation is in progress: the full v1 contract surface is implemented with unit tests, fuzz tests, invariant-style hardening coverage, Base Sepolia deployment wiring, and ABI export; the next Release 3 step is deployment execution against a real target environment and follow-up hardening from live feedback.
+- Release 3 contract implementation is in progress: the full v1 contract surface is implemented with unit tests, fuzz tests, invariant-style hardening coverage, Base Sepolia deployment wiring, ABI export, and a release/verification pipeline; the next Release 3 step is execution against a real target environment and follow-up hardening from live feedback.
 - Later releases for deals, funding, milestones, disputes, operator tooling, partner APIs, and production maturity are defined in `docs/product/RELEASE_ROADMAP.md` but are not current implementation targets.
 
 ## Completed Major Slices
@@ -46,6 +46,7 @@
 - Release 3 `EscrowAgreement` implementation in `packages/contracts` with one-time initialization, immutable deal snapshot storage, protocol dependency validation, policy validation, and unit tests.
 - Release 3 `EscrowFactory` implementation in `packages/contracts` with immutable versioned dependencies, clone-per-deal deployment, create-pause enforcement, deterministic agreement address prediction, duplicate-deal protection, and unit tests.
 - Release 3 deployment/export wiring with a Base Sepolia deploy script in `packages/contracts`, a deployment manifest template, and generated ABI/address exports in `packages/contracts-sdk`.
+- Release 3 deployment execution pipeline in `packages/contracts/scripts/*` with broadcast parsing, validated manifest persistence, SDK export regeneration, chain-state verification, and fixture-driven local validation that does not overwrite tracked deployment artifacts.
 - Release 3 hardening tests in `packages/contracts/test/*Hardening.t.sol` covering stateful fuzzed allowlist/registry invariants, protocol config bounds, fee-vault balance conservation, immutable agreement snapshots, and factory uniqueness/determinism across repeated fuzzed agreement creation sequences.
 - Release 1 shared contracts and security interfaces in `packages/shared` and `packages/security`.
 - Release 1 Prisma schema, migration, generated client flow, and repository implementations in `packages/db`.
