@@ -126,7 +126,9 @@ contract DeployProtocolScript {
         deployed.protocolConfig.setArbitratorRegistry(address(deployed.arbitratorRegistry));
         deployed.protocolConfig.setFeeVault(address(deployed.feeVault));
         deployed.protocolConfig.setTreasury(safeAddress);
-        deployed.protocolConfig.setProtocolFeeBps(protocolFeeBps);
+        if (protocolFeeBps != 0) {
+            deployed.protocolConfig.setProtocolFeeBps(protocolFeeBps);
+        }
         deployed.feeVault.setTreasury(safeAddress);
 
         if (safeAddress != deployer) {

@@ -1,6 +1,7 @@
 export type EntityId = string;
 export type IsoTimestamp = string;
 export type ChainId = number;
+export type HexString = `0x${string}`;
 export type WalletAddress = `0x${string}`;
 
 export type JsonPrimitive = boolean | null | number | string;

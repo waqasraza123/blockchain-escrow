@@ -6,6 +6,14 @@
     "build": "tsc -p tsconfig.build.json",
     "start": "node dist/main.js",
     "lint": "eslint .",
+    "test": "node --import tsx --test test/**/*.test.ts",
     "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@blockchain-escrow/contracts-sdk": "workspace:*",
+    "@blockchain-escrow/db": "workspace:*",
+    "@blockchain-escrow/shared": "workspace:*",
+    "@prisma/client": "^6.6.0",
+    "viem": "^2.38.2"
   }
 }

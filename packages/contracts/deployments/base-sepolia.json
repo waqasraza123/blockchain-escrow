@@ -2,12 +2,19 @@
   "chainId": 84532,
   "network": "base-sepolia",
   "explorerUrl": "https://sepolia.basescan.org",
-  "deployedAt": null,
-  "deployer": null,
-  "owner": null,
-  "pendingOwner": null,
-  "treasury": null,
-  "usdcToken": null,
+  "deployedAt": "2026-04-05T06:17:49.519Z",
+  "deployer": "0x00e5e8d73a66588ab7fb63383f8f558ba59c929d",
+  "owner": "0x00e5e8d73a66588ab7fb63383f8f558ba59c929d",
+  "pendingOwner": "0x573b6f6F84cdf764Ee25cCeEA673a4cd259abFDb",
+  "treasury": "0x573b6f6F84cdf764Ee25cCeEA673a4cd259abFDb",
+  "usdcToken": "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
   "protocolFeeBps": 0,
-  "contracts": {}
+  "contracts": {
+    "TokenAllowlist": "0xa46bb7cc73f292d77e27b27fac6863601ce1d49b",
+    "ArbitratorRegistry": "0x968f65ff5627b3581d82c86ab78826e010bdc583",
+    "ProtocolConfig": "0x0f133ac8d69a16efab20709479a521880b509613",
+    "FeeVault": "0xeca4953857048466bd2958273c9b470c28ecab2e",
+    "EscrowAgreement": "0x43292d7fac721139157c69effd18afc6739815f6",
+    "EscrowFactory": "0x47ca3d3f2f6a62240c1e1197dabdf45f05534d83"
+  }
 }

@@ -1,7 +1,10 @@
 import type { ChainId, EntityId, WalletAddress } from "@blockchain-escrow/shared";
 
 import type {
+  ArbitratorRegistryEntryRecord,
   AuditLogRecord,
+  ChainCursorRecord,
+  ContractOwnershipRecord,
   CounterpartyRecord,
   DealVersionAcceptanceRecord,
   DealVersionFileRecord,
@@ -10,12 +13,19 @@ import type {
   DealVersionRecord,
   DraftDealPartyRecord,
   DraftDealRecord,
+  EscrowAgreementRecord,
+  FeeVaultStateRecord,
   FileRecord,
+  IndexedBlockRecord,
+  IndexedContractEventRecord,
+  IndexedTransactionRecord,
   OrganizationInviteRecord,
   OrganizationMemberRecord,
   OrganizationRecord,
+  ProtocolConfigStateRecord,
   SessionRecord,
   TemplateRecord,
+  TokenAllowlistEntryRecord,
   UserRecord,
   WalletNonceRecord,
   WalletRecord
@@ -179,6 +189,106 @@ export interface DealVersionAcceptanceRepository {
   listByDealVersionId(
     dealVersionId: EntityId
   ): Promise<DealVersionAcceptanceRecord[]>;
+}
+
+export interface ChainCursorRepository {
+  findByChainIdAndCursorKey(
+    chainId: ChainId,
+    cursorKey: string
+  ): Promise<ChainCursorRecord | null>;
+  upsert(record: ChainCursorRecord): Promise<ChainCursorRecord>;
+}
+
+export interface IndexedBlockRepository {
+  deleteFromBlockNumber(chainId: ChainId, fromBlockNumber: string): Promise<void>;
+  findByChainIdAndBlockNumber(
+    chainId: ChainId,
+    blockNumber: string
+  ): Promise<IndexedBlockRecord | null>;
+  listByChainId(chainId: ChainId): Promise<IndexedBlockRecord[]>;
+  upsertMany(records: IndexedBlockRecord[]): Promise<void>;
+}
+
+export interface IndexedTransactionRepository {
+  deleteFromBlockNumber(chainId: ChainId, fromBlockNumber: string): Promise<void>;
+  upsertMany(records: IndexedTransactionRecord[]): Promise<void>;
+}
+
+export interface IndexedContractEventRepository {
+  deleteFromBlockNumber(chainId: ChainId, fromBlockNumber: string): Promise<void>;
+  listByChainId(chainId: ChainId): Promise<IndexedContractEventRecord[]>;
+  upsertMany(records: IndexedContractEventRecord[]): Promise<void>;
+}
+
+export interface ContractOwnershipRepository {
+  listByChainId(chainId: ChainId): Promise<ContractOwnershipRecord[]>;
+  resetByChainId(chainId: ChainId): Promise<void>;
+  upsert(record: ContractOwnershipRecord): Promise<ContractOwnershipRecord>;
+}
+
+export interface TokenAllowlistEntryRepository {
+  listByChainId(chainId: ChainId): Promise<TokenAllowlistEntryRecord[]>;
+  listAllowedByChainIdAndContract(
+    chainId: ChainId,
+    tokenAllowlistAddress: WalletAddress
+  ): Promise<TokenAllowlistEntryRecord[]>;
+  resetByChainId(chainId: ChainId): Promise<void>;
+  upsert(record: TokenAllowlistEntryRecord): Promise<TokenAllowlistEntryRecord>;
+}
+
+export interface ArbitratorRegistryEntryRepository {
+  listApprovedByChainIdAndContract(
+    chainId: ChainId,
+    arbitratorRegistryAddress: WalletAddress
+  ): Promise<ArbitratorRegistryEntryRecord[]>;
+  listByChainId(chainId: ChainId): Promise<ArbitratorRegistryEntryRecord[]>;
+  resetByChainId(chainId: ChainId): Promise<void>;
+  upsert(
+    record: ArbitratorRegistryEntryRecord
+  ): Promise<ArbitratorRegistryEntryRecord>;
+}
+
+export interface ProtocolConfigStateRepository {
+  findByChainIdAndAddress(
+    chainId: ChainId,
+    protocolConfigAddress: WalletAddress
+  ): Promise<ProtocolConfigStateRecord | null>;
+  listByChainId(chainId: ChainId): Promise<ProtocolConfigStateRecord[]>;
+  resetByChainId(chainId: ChainId): Promise<void>;
+  upsert(record: ProtocolConfigStateRecord): Promise<ProtocolConfigStateRecord>;
+}
+
+export interface FeeVaultStateRepository {
+  findByChainIdAndAddress(
+    chainId: ChainId,
+    feeVaultAddress: WalletAddress
+  ): Promise<FeeVaultStateRecord | null>;
+  listByChainId(chainId: ChainId): Promise<FeeVaultStateRecord[]>;
+  resetByChainId(chainId: ChainId): Promise<void>;
+  upsert(record: FeeVaultStateRecord): Promise<FeeVaultStateRecord>;
+}
+
+export interface EscrowAgreementRepository {
+  findByChainIdAndAddress(
+    chainId: ChainId,
+    agreementAddress: WalletAddress
+  ): Promise<EscrowAgreementRecord | null>;
+  listByChainId(chainId: ChainId): Promise<EscrowAgreementRecord[]>;
+  resetByChainId(chainId: ChainId): Promise<void>;
+  upsert(record: EscrowAgreementRecord): Promise<EscrowAgreementRecord>;
+}
+
+export interface Release4Repositories {
+  arbitratorRegistryEntries: ArbitratorRegistryEntryRepository;
+  chainCursors: ChainCursorRepository;
+  contractOwnerships: ContractOwnershipRepository;
+  escrowAgreements: EscrowAgreementRepository;
+  feeVaultStates: FeeVaultStateRepository;
+  indexedBlocks: IndexedBlockRepository;
+  indexedContractEvents: IndexedContractEventRepository;
+  indexedTransactions: IndexedTransactionRepository;
+  protocolConfigStates: ProtocolConfigStateRepository;
+  tokenAllowlistEntries: TokenAllowlistEntryRepository;
 }
 
 export interface Release1Repositories {

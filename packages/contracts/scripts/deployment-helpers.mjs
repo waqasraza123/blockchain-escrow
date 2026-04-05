@@ -221,7 +221,11 @@ export async function loadBroadcastDeployment(broadcastFile) {
   }
 
   const deployer =
-    transactions.find((item) => typeof item?.from === "string" && item.from.length > 0)?.from ?? null;
+    transactions.find(
+      (item) =>
+        typeof item?.transaction?.from === "string" &&
+        item.transaction.from.length > 0
+    )?.transaction.from ?? null;
 
   return {
     contracts,

@@ -98,6 +98,33 @@ enum TypedSignatureScheme {
   EIP712
 }
 
+enum IndexedContractName {
+  TokenAllowlist
+  ArbitratorRegistry
+  ProtocolConfig
+  FeeVault
+  EscrowAgreement
+  EscrowFactory
+}
+
+enum IndexedEventName {
+  OwnershipTransferStarted
+  OwnershipTransferred
+  TokenStatusUpdated
+  ArbitratorApprovalUpdated
+  ArbitratorRegistryUpdated
+  CreateEscrowPauseUpdated
+  FeeVaultUpdated
+  FundingPauseUpdated
+  ProtocolFeeBpsUpdated
+  TokenAllowlistUpdated
+  TreasuryUpdated
+  NativeFeesWithdrawn
+  TokenFeesWithdrawn
+  AgreementCreated
+  AgreementInitialized
+}
+
 model User {
   id                         String                 @id @db.Text
   createdAt                  DateTime               @db.Timestamptz(3)
@@ -469,4 +496,200 @@ model AuditLog {
   @@index([organizationId], map: "audit_logs_organization_id_idx")
   @@index([actorUserId], map: "audit_logs_actor_user_id_idx")
   @@map("audit_logs")
+}
+
+model ChainCursor {
+  id                      String   @id @db.Text
+  chainId                 Int
+  cursorKey               String   @db.Text
+  nextBlockNumber         BigInt
+  lastProcessedBlockNumber BigInt?
+  lastProcessedBlockHash  String?  @db.Text
+  updatedAt               DateTime @db.Timestamptz(3)
+
+  @@unique([chainId, cursorKey], map: "chain_cursors_chain_id_cursor_key_key")
+  @@index([chainId], map: "chain_cursors_chain_id_idx")
+  @@map("chain_cursors")
+}
+
+model IndexedBlock {
+  id              String   @id @db.Text
+  chainId         Int
+  blockNumber     BigInt
+  blockHash       String   @db.Text
+  parentBlockHash String   @db.Text
+  timestamp       DateTime @db.Timestamptz(3)
+  indexedAt       DateTime @db.Timestamptz(3)
+
+  @@unique([chainId, blockNumber], map: "indexed_blocks_chain_id_block_number_key")
+  @@unique([chainId, blockHash], map: "indexed_blocks_chain_id_block_hash_key")
+  @@index([chainId, blockNumber], map: "indexed_blocks_chain_id_block_number_idx")
+  @@map("indexed_blocks")
+}
+
+model IndexedTransaction {
+  id               String    @id @db.Text
+  chainId          Int
+  blockNumber      BigInt
+  blockHash        String    @db.Text
+  transactionHash  String    @db.Text
+  transactionIndex Int
+  fromAddress      String?   @db.Text
+  toAddress        String?   @db.Text
+  indexedAt        DateTime  @db.Timestamptz(3)
+
+  @@unique([chainId, transactionHash], map: "indexed_transactions_chain_id_transaction_hash_key")
+  @@index([chainId, blockNumber], map: "indexed_transactions_chain_id_block_number_idx")
+  @@index([chainId, transactionHash], map: "indexed_transactions_chain_id_transaction_hash_idx")
+  @@map("indexed_transactions")
+}
+
+model IndexedContractEvent {
+  id               String              @id @db.Text
+  chainId          Int
+  blockNumber      BigInt
+  blockHash        String              @db.Text
+  blockTimestamp   DateTime            @db.Timestamptz(3)
+  transactionHash  String              @db.Text
+  transactionIndex Int
+  logIndex         Int
+  contractAddress  String              @db.Text
+  contractName     IndexedContractName
+  eventName        IndexedEventName
+  topic0           String              @db.Text
+  topics           String[]
+  data             Json
+  indexedAt        DateTime            @db.Timestamptz(3)
+
+  @@unique([chainId, transactionHash, logIndex], map: "indexed_contract_events_chain_id_transaction_hash_log_index_key")
+  @@unique([chainId, blockNumber, logIndex], map: "indexed_contract_events_chain_id_block_number_log_index_key")
+  @@index([chainId, blockNumber, transactionIndex, logIndex], map: "indexed_contract_events_chain_id_block_number_order_idx")
+  @@index([chainId, contractAddress], map: "indexed_contract_events_chain_id_contract_address_idx")
+  @@index([chainId, eventName], map: "indexed_contract_events_chain_id_event_name_idx")
+  @@map("indexed_contract_events")
+}
+
+model ContractOwnershipProjection {
+  id                    String              @id @db.Text
+  chainId               Int
+  contractAddress       String              @db.Text
+  contractName          IndexedContractName
+  owner                 String              @db.Text
+  pendingOwner          String?             @db.Text
+  updatedBlockNumber    BigInt
+  updatedBlockHash      String              @db.Text
+  updatedTransactionHash String             @db.Text
+  updatedLogIndex       Int
+  updatedAt             DateTime            @db.Timestamptz(3)
+
+  @@unique([chainId, contractAddress], map: "contract_ownership_projections_chain_id_contract_address_key")
+  @@index([chainId, contractName], map: "contract_ownership_projections_chain_id_contract_name_idx")
+  @@map("contract_ownership_projections")
+}
+
+model TokenAllowlistEntryProjection {
+  id                    String   @id @db.Text
+  chainId               Int
+  tokenAllowlistAddress String   @db.Text
+  token                 String   @db.Text
+  isAllowed             Boolean
+  updatedBlockNumber    BigInt
+  updatedBlockHash      String   @db.Text
+  updatedTransactionHash String  @db.Text
+  updatedLogIndex       Int
+  updatedAt             DateTime @db.Timestamptz(3)
+
+  @@unique([chainId, tokenAllowlistAddress, token], map: "tae_proj_chain_allowlist_token_key")
+  @@index([chainId, tokenAllowlistAddress, isAllowed], map: "tae_proj_chain_allowlist_allowed_idx")
+  @@map("token_allowlist_entry_projections")
+}
+
+model ArbitratorRegistryEntryProjection {
+  id                       String   @id @db.Text
+  chainId                  Int
+  arbitratorRegistryAddress String  @db.Text
+  arbitrator               String   @db.Text
+  isApproved               Boolean
+  updatedBlockNumber       BigInt
+  updatedBlockHash         String   @db.Text
+  updatedTransactionHash   String   @db.Text
+  updatedLogIndex          Int
+  updatedAt                DateTime @db.Timestamptz(3)
+
+  @@unique([chainId, arbitratorRegistryAddress, arbitrator], map: "are_proj_chain_registry_arbitrator_key")
+  @@index([chainId, arbitratorRegistryAddress, isApproved], map: "are_proj_chain_registry_approved_idx")
+  @@map("arbitrator_registry_entry_projections")
+}
+
+model ProtocolConfigProjection {
+  id                       String   @id @db.Text
+  chainId                  Int
+  protocolConfigAddress    String   @db.Text
+  owner                    String   @db.Text
+  pendingOwner             String?  @db.Text
+  tokenAllowlistAddress    String?  @db.Text
+  arbitratorRegistryAddress String? @db.Text
+  feeVaultAddress          String?  @db.Text
+  treasuryAddress          String?  @db.Text
+  protocolFeeBps           Int
+  createEscrowPaused       Boolean
+  fundingPaused            Boolean
+  updatedBlockNumber       BigInt
+  updatedBlockHash         String   @db.Text
+  updatedTransactionHash   String   @db.Text
+  updatedLogIndex          Int
+  updatedAt                DateTime @db.Timestamptz(3)
+
+  @@unique([chainId, protocolConfigAddress], map: "pc_proj_chain_address_key")
+  @@map("protocol_config_projections")
+}
+
+model FeeVaultProjection {
+  id                     String   @id @db.Text
+  chainId                Int
+  feeVaultAddress        String   @db.Text
+  owner                  String   @db.Text
+  pendingOwner           String?  @db.Text
+  treasuryAddress        String?  @db.Text
+  updatedBlockNumber     BigInt
+  updatedBlockHash       String   @db.Text
+  updatedTransactionHash String   @db.Text
+  updatedLogIndex        Int
+  updatedAt              DateTime @db.Timestamptz(3)
+
+  @@unique([chainId, feeVaultAddress], map: "fee_vault_projections_chain_id_fee_vault_address_key")
+  @@map("fee_vault_projections")
+}
+
+model EscrowAgreementProjection {
+  id                      String   @id @db.Text
+  chainId                 Int
+  agreementAddress        String   @db.Text
+  dealId                  String   @db.Text
+  dealVersionHash         String   @db.Text
+  factoryAddress          String   @db.Text
+  protocolConfigAddress   String   @db.Text
+  buyerAddress            String   @db.Text
+  sellerAddress           String   @db.Text
+  settlementTokenAddress  String   @db.Text
+  arbitratorAddress       String?  @db.Text
+  feeVaultAddress         String   @db.Text
+  protocolFeeBps          Int
+  totalAmount             String   @db.Text
+  milestoneCount          Int
+  createdBlockNumber      BigInt
+  createdBlockHash        String   @db.Text
+  createdTransactionHash  String   @db.Text
+  createdLogIndex         Int
+  initializedBlockNumber  BigInt
+  initializedBlockHash    String   @db.Text
+  initializedTransactionHash String @db.Text
+  initializedLogIndex     Int
+  initializedTimestamp    DateTime @db.Timestamptz(3)
+  updatedAt               DateTime @db.Timestamptz(3)
+
+  @@unique([chainId, agreementAddress], map: "escrow_agreement_projections_chain_id_agreement_address_key")
+  @@unique([chainId, dealId], map: "escrow_agreement_projections_chain_id_deal_id_key")
+  @@index([chainId, factoryAddress], map: "escrow_agreement_projections_chain_id_factory_address_idx")
+  @@map("escrow_agreement_projections")
 }

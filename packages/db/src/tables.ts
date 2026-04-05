@@ -27,3 +27,19 @@ export const release2TableNames = {
 
 export type Release2TableName =
   (typeof release2TableNames)[keyof typeof release2TableNames];
+
+export const release4TableNames = {
+  arbitratorRegistryEntryProjections: "arbitrator_registry_entry_projections",
+  chainCursors: "chain_cursors",
+  contractOwnershipProjections: "contract_ownership_projections",
+  escrowAgreementProjections: "escrow_agreement_projections",
+  feeVaultProjections: "fee_vault_projections",
+  indexedBlocks: "indexed_blocks",
+  indexedContractEvents: "indexed_contract_events",
+  indexedTransactions: "indexed_transactions",
+  protocolConfigProjections: "protocol_config_projections",
+  tokenAllowlistEntryProjections: "token_allowlist_entry_projections"
+} as const;
+
+export type Release4TableName =
+  (typeof release4TableNames)[keyof typeof release4TableNames];
