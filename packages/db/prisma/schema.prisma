@@ -31,6 +31,7 @@ enum AuditAction {
   AUTH_NONCE_ISSUED
   AUTH_SESSION_VERIFIED
   COUNTERPARTY_CREATED
+  DRAFT_DEAL_COUNTERPARTY_WALLET_UPDATED
   DEAL_VERSION_ACCEPTANCE_CREATED
   DEAL_VERSION_CREATED
   DRAFT_DEAL_CREATED
@@ -320,6 +321,7 @@ model DraftDealParty {
   subjectType    DealPartySubjectType
   organizationId String?             @db.Text
   counterpartyId String?             @db.Text
+  walletAddress  String?             @db.Text
   createdAt      DateTime            @db.Timestamptz(3)
   updatedAt      DateTime            @db.Timestamptz(3)
   draftDeal      DraftDeal           @relation(fields: [draftDealId], references: [id], onDelete: Cascade)

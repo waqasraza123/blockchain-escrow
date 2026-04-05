@@ -165,6 +165,7 @@ export interface DraftDealPartyRecord {
   role: DealPartyRole;
   subjectType: DealPartySubjectType;
   updatedAt: IsoTimestamp;
+  walletAddress: WalletAddress | null;
 }
 
 export interface DealVersionRecord {

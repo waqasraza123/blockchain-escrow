@@ -1,0 +1,4 @@
+ALTER TYPE "AuditAction" ADD VALUE 'DRAFT_DEAL_COUNTERPARTY_WALLET_UPDATED';
+
+ALTER TABLE "draft_deal_parties"
+ADD COLUMN "walletAddress" TEXT;

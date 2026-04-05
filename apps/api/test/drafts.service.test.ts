@@ -511,6 +511,56 @@ test("drafts service creates and lists immutable typed acceptances for the organ
   assert.equal(listed.acceptances[0]?.id, created.acceptance.id);
 });
 
+test("drafts service updates the draft counterparty wallet", async () => {
+  const { draftsService, repositories, sessionTokenService } = createDraftsService();
+  const actor = await seedAuthenticatedActor(repositories, sessionTokenService);
+  const seeded = await seedDraftVersionScenario(draftsService, repositories, actor);
+
+  const updated = await draftsService.updateCounterpartyWallet(
+    {
+      draftDealId: seeded.draft.draft.id,
+      organizationId: "org-1"
+    },
+    {
+      walletAddress: "0xAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    },
+    {
+      cookieHeader: actor.cookieHeader,
+      ipAddress: "127.0.0.1",
+      userAgent: "test-agent"
+    }
+  );
+
+  assert.equal(
+    updated.party.walletAddress,
+    "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  );
+  assert.equal(
+    repositories.auditLogRecords.at(-1)?.action,
+    "DRAFT_DEAL_COUNTERPARTY_WALLET_UPDATED"
+  );
+
+  const draft = await draftsService.getDraft(
+    {
+      draftDealId: seeded.draft.draft.id,
+      organizationId: "org-1"
+    },
+    {
+      cookieHeader: actor.cookieHeader,
+      ipAddress: "127.0.0.1",
+      userAgent: "test-agent"
+    }
+  );
+
+  const counterpartyParty = draft.parties.find(
+    (party) => party.subjectType === "COUNTERPARTY"
+  );
+  assert.equal(
+    counterpartyParty?.walletAddress,
+    "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  );
+});
+
 test("drafts service prevents duplicate acceptances for the same organization-side party", async () => {
   const { draftsService, repositories, sessionTokenService } = createDraftsService();
   const actor = await seedAuthenticatedActor(repositories, sessionTokenService);

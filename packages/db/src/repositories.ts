@@ -150,6 +150,11 @@ export interface DraftDealRepository {
 export interface DraftDealPartyRepository {
   add(record: DraftDealPartyRecord): Promise<DraftDealPartyRecord>;
   listByDraftDealId(draftDealId: EntityId): Promise<DraftDealPartyRecord[]>;
+  updateWalletAddress(
+    id: EntityId,
+    walletAddress: WalletAddress | null,
+    updatedAt: string
+  ): Promise<DraftDealPartyRecord | null>;
 }
 
 export interface DealVersionRepository {

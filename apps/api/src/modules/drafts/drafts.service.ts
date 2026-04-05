@@ -22,6 +22,7 @@ import {
   dealVersionAcceptanceParamsSchema,
   draftDealParamsSchema,
   organizationDraftDealsParamsSchema,
+  updateDraftCounterpartyWalletSchema,
   type CreateDealVersionAcceptanceResponse,
   type CreateDealVersionResponse,
   type CreateDraftDealResponse,
@@ -37,7 +38,8 @@ import {
   type DraftDealSummary,
   type FileSummary,
   type ListDealVersionAcceptancesResponse,
-  type ListDraftDealsResponse
+  type ListDraftDealsResponse,
+  type UpdateDraftCounterpartyWalletResponse
 } from "@blockchain-escrow/shared";
 import {
   BadRequestException,
@@ -222,7 +224,8 @@ export class DraftsService {
       organizationId,
       role: organizationPartyRole,
       subjectType: "ORGANIZATION",
-      updatedAt: now
+      updatedAt: now,
+      walletAddress: null
     });
     await this.repositories.draftDealParties.add({
       counterpartyId: counterparty.id,
@@ -232,7 +235,8 @@ export class DraftsService {
       organizationId: null,
       role: counterpartyRole,
       subjectType: "COUNTERPARTY",
-      updatedAt: now
+      updatedAt: now,
+      walletAddress: null
     });
 
     await this.repositories.auditLogs.append({
@@ -473,6 +477,75 @@ export class DraftsService {
     };
   }
 
+  async updateCounterpartyWallet(
+    draftInput: unknown,
+    walletInput: unknown,
+    requestMetadata: RequestMetadata
+  ): Promise<UpdateDraftCounterpartyWalletResponse> {
+    const parsedDraft = draftDealParamsSchema.safeParse(draftInput);
+    const parsedWallet = updateDraftCounterpartyWalletSchema.safeParse(walletInput);
+
+    if (!parsedDraft.success) {
+      throw new BadRequestException(parsedDraft.error.flatten());
+    }
+
+    if (!parsedWallet.success) {
+      throw new BadRequestException(parsedWallet.error.flatten());
+    }
+
+    const authorized = await this.requireOrganizationAccess(
+      parsedDraft.data.organizationId,
+      requestMetadata,
+      "ADMIN"
+    );
+    const draft = await this.repositories.draftDeals.findById(parsedDraft.data.draftDealId);
+
+    if (!draft || draft.organizationId !== parsedDraft.data.organizationId) {
+      throw new NotFoundException("draft deal not found");
+    }
+
+    const parties = await this.repositories.draftDealParties.listByDraftDealId(draft.id);
+    const counterpartyParties = parties.filter(
+      (party) => party.subjectType === "COUNTERPARTY"
+    );
+
+    if (counterpartyParties.length !== 1) {
+      throw new ConflictException("draft deal must have exactly one counterparty party");
+    }
+
+    const counterpartyParty = counterpartyParties[0] as DraftDealPartyRecord;
+    const now = new Date().toISOString();
+    const updated = await this.repositories.draftDealParties.updateWalletAddress(
+      counterpartyParty.id,
+      parsedWallet.data.walletAddress.toLowerCase() as DraftDealPartyRecord["walletAddress"],
+      now
+    );
+
+    if (!updated) {
+      throw new NotFoundException("draft deal party not found");
+    }
+
+    await this.repositories.auditLogs.append({
+      action: "DRAFT_DEAL_COUNTERPARTY_WALLET_UPDATED",
+      actorUserId: authorized.actor.user.id,
+      entityId: draft.id,
+      entityType: "DRAFT_DEAL",
+      id: randomUUID(),
+      ipAddress: requestMetadata.ipAddress,
+      metadata: {
+        draftDealPartyId: updated.id,
+        walletAddress: updated.walletAddress
+      },
+      occurredAt: now,
+      organizationId: draft.organizationId,
+      userAgent: requestMetadata.userAgent
+    });
+
+    return {
+      party: await this.toDraftPartySummary(updated)
+    };
+  }
+
   private async buildDraftListItem(draft: DraftDealRecord): Promise<DraftDealListItem> {
     const [parties, latestVersion] = await Promise.all([
       this.buildDraftPartySummaries(draft.id),
@@ -523,7 +596,8 @@ export class DraftsService {
       organizationId: party.organizationId,
       role: party.role,
       subjectType: party.subjectType,
-      updatedAt: party.updatedAt
+      updatedAt: party.updatedAt,
+      walletAddress: party.walletAddress
     };
   }
 

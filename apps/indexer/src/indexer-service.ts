@@ -167,7 +167,7 @@ export class IndexerService {
   }
 
   private scheduleNext(): void {
-    if (!this.running) {
+    if (!this.running || this.config.runOnce) {
       return;
     }
 

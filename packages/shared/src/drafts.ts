@@ -2,7 +2,7 @@ import { z } from "zod";
 
 import type { CounterpartySummary } from "./counterparties";
 import type { FileSummary } from "./files";
-import type { EntityId, IsoTimestamp } from "./primitives";
+import type { EntityId, IsoTimestamp, WalletAddress } from "./primitives";
 
 export const dealStateSchema = z.enum([
   "DRAFT",
@@ -40,6 +40,13 @@ export const createDraftDealSchema = z.object({
   title: z.string().trim().min(1).max(200)
 });
 export type CreateDraftDealInput = z.infer<typeof createDraftDealSchema>;
+
+export const updateDraftCounterpartyWalletSchema = z.object({
+  walletAddress: z.string().trim().regex(/^0x[a-fA-F0-9]{40}$/)
+});
+export type UpdateDraftCounterpartyWalletInput = z.infer<
+  typeof updateDraftCounterpartyWalletSchema
+>;
 
 export const draftDealParamsSchema = z.object({
   draftDealId: z.string().trim().min(1),
@@ -95,6 +102,7 @@ export interface DraftDealPartySummary {
   role: DealPartyRole;
   subjectType: DealPartySubjectType;
   updatedAt: IsoTimestamp;
+  walletAddress: WalletAddress | null;
 }
 
 export interface DealVersionSummary {
@@ -156,4 +164,8 @@ export type CreateDraftDealResponse = DraftDealDetailResponse;
 
 export interface CreateDealVersionResponse {
   version: DealVersionDetail;
+}
+
+export interface UpdateDraftCounterpartyWalletResponse {
+  party: DraftDealPartySummary;
 }

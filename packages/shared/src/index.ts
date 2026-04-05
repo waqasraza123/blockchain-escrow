@@ -4,6 +4,7 @@ export * from "./auth";
 export * from "./counterparties";
 export * from "./drafts";
 export * from "./files";
+export * from "./funding";
 export * from "./indexer";
 export * from "./organizations";
 export * from "./primitives";

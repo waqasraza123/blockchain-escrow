@@ -9,6 +9,16 @@ async function main(): Promise<void> {
   const healthState = new HealthState();
   const indexerService = new IndexerService(config, healthState);
 
+  const shutdown = async () => {
+    await indexerService.close();
+  };
+
+  if (config.runOnce) {
+    await indexerService.start();
+    await shutdown();
+    return;
+  }
+
   const server = createServer((request, response) => {
     if (request.url === "/health/live") {
       response.writeHead(200, { "content-type": "application/json" });
@@ -29,17 +39,17 @@ async function main(): Promise<void> {
     response.end(JSON.stringify({ service: "indexer", status: "not_found" }));
   });
 
-  const shutdown = async () => {
+  const shutdownWithServer = async () => {
     server.close();
-    await indexerService.close();
+    await shutdown();
     process.exit(0);
   };
 
   process.on("SIGINT", () => {
-    void shutdown();
+    void shutdownWithServer();
   });
   process.on("SIGTERM", () => {
-    void shutdown();
+    void shutdownWithServer();
   });
 
   server.listen(config.port, () => {

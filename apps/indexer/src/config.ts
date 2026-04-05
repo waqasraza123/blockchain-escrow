@@ -67,6 +67,7 @@ export interface IndexerConfig {
   readonly network: string;
   readonly pollIntervalMs: number;
   readonly port: number;
+  readonly runOnce: boolean;
   readonly startBlock: bigint;
 }
 
@@ -90,6 +91,7 @@ export function loadIndexerConfig(): IndexerConfig {
     network,
     pollIntervalMs: parsePositiveInteger("INDEXER_POLL_INTERVAL_MS", 15000),
     port: parsePositiveInteger("INDEXER_PORT", 4200),
+    runOnce: parseBoolean("INDEXER_RUN_ONCE", false),
     startBlock: BigInt(parseNonNegativeInteger("INDEXER_START_BLOCK", 0))
   };
 }

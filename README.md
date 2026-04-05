@@ -49,11 +49,11 @@ docs/product/
 ## Local Setup
 
 1. Install Node 22, pnpm, Foundry, and Docker Desktop.
-2. Copy `.env.example` to `.env` and adjust values if needed.
+2. Create `.env` or `.env.local` and override any values you need. Root scripts merge `.env.example`, `.env`, and `.env.local` in that order, with your shell env taking final precedence.
 3. Start infrastructure:
 
 ```bash
-docker compose up -d
+pnpm boot:infra
 ```
 
 4. Install workspace dependencies:
@@ -87,6 +87,13 @@ pnpm test
 pnpm build
 pnpm contracts:build
 pnpm contracts:test
+```
+
+For the Release 4 local database and indexer path:
+
+```bash
+pnpm release4:bootstrap:local
+pnpm release4:verify:local
 ```
 
 ## Contracts Deployment

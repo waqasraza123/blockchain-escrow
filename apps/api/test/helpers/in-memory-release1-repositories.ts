@@ -137,7 +137,23 @@ export class InMemoryRelease1Repositories implements Release1Repositories {
     ): Promise<DraftDealPartyRecord[]> =>
       this.draftDealPartyRecords
         .filter((record) => record.draftDealId === draftDealId)
-        .sort((left, right) => compareIsoTimestamps(left.createdAt, right.createdAt))
+        .sort((left, right) => compareIsoTimestamps(left.createdAt, right.createdAt)),
+    updateWalletAddress: async (
+      id: string,
+      walletAddress: string | null,
+      updatedAt: string
+    ): Promise<DraftDealPartyRecord | null> => {
+      const record = this.draftDealPartyRecords.find((entry) => entry.id === id);
+
+      if (!record) {
+        return null;
+      }
+
+      record.walletAddress = walletAddress as DraftDealPartyRecord["walletAddress"];
+      record.updatedAt = updatedAt;
+
+      return record;
+    }
   };
 
   readonly dealVersions = {

@@ -1,11 +1,12 @@
-import { Body, Controller, Get, Param, Post, Req } from "@nestjs/common";
+import { Body, Controller, Get, Param, Patch, Post, Req } from "@nestjs/common";
 import type {
   CreateDealVersionAcceptanceResponse,
   CreateDealVersionResponse,
   CreateDraftDealResponse,
   DraftDealDetailResponse,
   ListDealVersionAcceptancesResponse,
-  ListDraftDealsResponse
+  ListDraftDealsResponse,
+  UpdateDraftCounterpartyWalletResponse
 } from "@blockchain-escrow/shared";
 
 import { readRequestMetadata, type HttpRequestLike } from "../auth/auth.http";
@@ -88,6 +89,20 @@ export class DraftsController {
   ): Promise<CreateDealVersionAcceptanceResponse> {
     return this.draftsService.createVersionAcceptance(
       { dealVersionId, draftDealId, organizationId },
+      body,
+      readRequestMetadata(request)
+    );
+  }
+
+  @Patch(":draftDealId/counterparty-wallet")
+  async updateCounterpartyWallet(
+    @Param("organizationId") organizationId: string,
+    @Param("draftDealId") draftDealId: string,
+    @Body() body: unknown,
+    @Req() request: HttpRequestLike
+  ): Promise<UpdateDraftCounterpartyWalletResponse> {
+    return this.draftsService.updateCounterpartyWallet(
+      { draftDealId, organizationId },
       body,
       readRequestMetadata(request)
     );

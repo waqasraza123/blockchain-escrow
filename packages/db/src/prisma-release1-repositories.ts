@@ -287,6 +287,7 @@ function mapDraftDealPartyRecord(record: {
   role: PrismaDealPartyRole;
   subjectType: PrismaDealPartySubjectType;
   updatedAt: Date;
+  walletAddress: string | null;
 }): DraftDealPartyRecord {
   return {
     counterpartyId: record.counterpartyId,
@@ -296,7 +297,8 @@ function mapDraftDealPartyRecord(record: {
     organizationId: record.organizationId,
     role: record.role,
     subjectType: record.subjectType,
-    updatedAt: toRequiredIsoTimestamp(record.updatedAt)
+    updatedAt: toRequiredIsoTimestamp(record.updatedAt),
+    walletAddress: record.walletAddress as DraftDealPartyRecord["walletAddress"]
   };
 }
 
@@ -932,7 +934,8 @@ export class PrismaDraftDealPartyRepository implements DraftDealPartyRepository 
         organizationId: record.organizationId,
         role: record.role,
         subjectType: record.subjectType,
-        updatedAt: toDate(record.updatedAt)
+        updatedAt: toDate(record.updatedAt),
+        walletAddress: record.walletAddress
       }
     });
 
@@ -946,6 +949,28 @@ export class PrismaDraftDealPartyRepository implements DraftDealPartyRepository 
     });
 
     return records.map(mapDraftDealPartyRecord);
+  }
+
+  async updateWalletAddress(
+    id: string,
+    walletAddress: string | null,
+    updatedAt: string
+  ): Promise<DraftDealPartyRecord | null> {
+    const existing = await this.prisma.draftDealParty.findUnique({ where: { id } });
+
+    if (!existing) {
+      return null;
+    }
+
+    const updated = await this.prisma.draftDealParty.update({
+      where: { id },
+      data: {
+        updatedAt: toDate(updatedAt),
+        walletAddress
+      }
+    });
+
+    return mapDraftDealPartyRecord(updated);
   }
 }
 
