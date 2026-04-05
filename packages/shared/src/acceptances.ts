@@ -75,3 +75,40 @@ export interface ListDealVersionAcceptancesResponse {
 export interface CreateDealVersionAcceptanceResponse {
   acceptance: DealVersionAcceptanceDetail;
 }
+
+export const createCounterpartyDealVersionAcceptanceSchema = z.object({
+  signature: z.string().trim().regex(/^0x[a-fA-F0-9]+$/)
+});
+export type CreateCounterpartyDealVersionAcceptanceInput = z.infer<
+  typeof createCounterpartyDealVersionAcceptanceSchema
+>;
+
+export interface CounterpartyDealVersionAcceptanceSummary {
+  acceptedAt: IsoTimestamp;
+  dealVersionId: EntityId;
+  id: EntityId;
+  partyId: EntityId;
+  scheme: TypedSignatureScheme;
+  signature: string;
+  signerWalletAddress: WalletAddress;
+  typedData: JsonObject;
+}
+
+export interface CounterpartyDealVersionAcceptanceDetail
+  extends CounterpartyDealVersionAcceptanceSummary {
+  party: DealVersionPartySnapshot;
+}
+
+export interface CounterpartyDealVersionAcceptanceChallenge {
+  expectedWalletAddress: WalletAddress;
+  typedData: JsonObject;
+}
+
+export interface GetCounterpartyDealVersionAcceptanceResponse {
+  acceptance: CounterpartyDealVersionAcceptanceDetail | null;
+  challenge: CounterpartyDealVersionAcceptanceChallenge;
+}
+
+export interface CreateCounterpartyDealVersionAcceptanceResponse {
+  acceptance: CounterpartyDealVersionAcceptanceDetail;
+}

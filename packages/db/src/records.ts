@@ -225,6 +225,17 @@ export interface DealVersionAcceptanceRecord {
   typedData: JsonObject;
 }
 
+export interface CounterpartyDealVersionAcceptanceRecord {
+  acceptedAt: IsoTimestamp;
+  dealVersionId: EntityId;
+  dealVersionPartyId: EntityId;
+  id: EntityId;
+  scheme: TypedSignatureScheme;
+  signature: string;
+  signerWalletAddress: WalletAddress;
+  typedData: JsonObject;
+}
+
 export interface ChainCursorRecord {
   chainId: ChainId;
   cursorKey: string;

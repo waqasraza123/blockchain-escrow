@@ -33,7 +33,7 @@
 - Release 2 is complete: counterparties, files metadata, templates, draft deals, immutable deal versions, milestone snapshots, and accepted typed-signature capture are implemented.
 - Release 3 is complete: the v1 contract surface is implemented, deployed to Base Sepolia, exported through `packages/contracts-sdk`, and covered by unit tests, hardening tests, and release verification.
 - Release 4 is in progress: the indexer foundation now covers block/cursor tracking, contract discovery, event decoding, raw event persistence, replayable projections, drift checks, and reorg recovery for the deployed Release 3 surface.
-- Release 5 has started with a funding preparation foundation in `apps/api`, `packages/shared`, and `packages/db`: drafts now support counterparty wallet capture and the API can compute funding-readiness blockers, canonical deal/version hashes, and `EscrowFactory.createAgreement` calldata from accepted immutable versions plus indexer-owned protocol projections.
+- Release 5 has started in `apps/api`, `packages/shared`, and `packages/db`: drafts now support counterparty wallet capture, cryptographically verified counterparty version acceptance, automatic offchain transition to `AWAITING_FUNDING` once both sides accept the latest version, and a funding-preparation API that computes readiness blockers, canonical deal/version hashes, and `EscrowFactory.createAgreement` calldata from accepted immutable versions plus indexer-owned protocol projections.
 - Later releases for funding, milestones, disputes, operator tooling, partner APIs, and production maturity are defined in `docs/product/RELEASE_ROADMAP.md` but are not current implementation targets.
 
 ## Completed Major Slices
@@ -64,7 +64,7 @@
 - Release 2 template foundation in `packages/shared`, `packages/db`, and `apps/api` with organization-scoped create/list/detail flows, unique normalized names per organization, optional default counterparties, and template audit logging.
 - Release 2 drafting foundation in `packages/shared`, `packages/db`, and `apps/api` with organization-scoped draft creation, current draft parties, immutable deal version snapshots, milestone snapshots, linked file metadata, template references, and audit logging for draft and version creation.
 - Release 2 deal-version acceptance foundation in `packages/shared`, `packages/db`, and `apps/api` with organization-side typed-signature capture for immutable versions, signer wallet binding from the authenticated session, acceptance audit logging, and read endpoints per version.
-- Release 5 funding preparation foundation in `packages/shared`, `packages/db`, and `apps/api` with draft counterparty wallet capture, audit logging for wallet updates, and a funding-preparation API that derives deal hashes, create-agreement calldata, readiness blockers, and existing onchain linkage from accepted versions plus Release 4 projections.
+- Release 5 counterparty acceptance and funding-readiness foundation in `packages/shared`, `packages/db`, and `apps/api` with draft counterparty wallet capture, canonical deal identity helpers, cryptographically verified counterparty typed-signature capture, audit logging for wallet updates and counterparty acceptances, automatic draft-state promotion to `AWAITING_FUNDING` for the latest doubly accepted version, and a funding-preparation API that derives deal hashes, create-agreement calldata, readiness blockers, and existing onchain linkage from accepted versions plus Release 4 projections.
 - Behavioral API tests for auth lifecycle, organization workflows, users, wallets, audit access, and SIWE domain/URI policy checks.
 
 ## Important Decisions
@@ -80,7 +80,7 @@
 ## Deferred / Not Yet Implemented
 
 - Release 5+ business modules such as funding, disputes, approvals, partner APIs, and reporting are not implemented.
-- Release 5 allowance checks, funding transaction tracking, live escrow activation, and deal lifecycle writes beyond funding preparation are not implemented.
+- Release 5 allowance checks, funding transaction tracking, live escrow activation, and deal lifecycle writes beyond offchain acceptance/funding preparation are not implemented.
 - Worker side effects and operator-facing reconciliation tooling are not implemented.
 - The Release 4 indexer foundation is implemented, but it has not yet been exercised against a live local database in this workspace because Prisma migration commands currently fail against the local Postgres configuration on `127.0.0.1:5433`.
 

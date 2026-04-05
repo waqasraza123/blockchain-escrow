@@ -32,7 +32,6 @@ import {
   getCreate2Address,
   keccak256,
   parseAbiParameters,
-  stringToHex,
   type Abi
 } from "viem";
 
@@ -42,9 +41,13 @@ import {
   AuthenticatedSessionService,
   type AuthenticatedSessionContext
 } from "../auth/authenticated-session.service";
+import {
+  buildCanonicalDealId,
+  buildCanonicalDealVersionHash,
+  normalizeApiChainId
+} from "../drafts/deal-identity";
 
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
-const DEFAULT_CHAIN_ID = 84532;
 
 function normalizeAddress(value: string): `0x${string}` {
   return getAddress(value).toLowerCase() as `0x${string}`;
@@ -54,37 +57,10 @@ function cloneCreationCode(implementation: `0x${string}`): `0x${string}` {
   return `0x3d602d80600a3d3981f3363d3d373d3d3d363d73${implementation.slice(2)}5af43d82803e903d91602b57fd5bf3`;
 }
 
-function sortObjectKeys(value: unknown): unknown {
-  if (Array.isArray(value)) {
-    return value.map(sortObjectKeys);
-  }
-
-  if (value && typeof value === "object") {
-    return Object.fromEntries(
-      Object.entries(value as Record<string, unknown>)
-        .sort(([left], [right]) => left.localeCompare(right))
-        .map(([key, nestedValue]) => [key, sortObjectKeys(nestedValue)])
-    );
-  }
-
-  return value;
-}
-
 function sumMilestones(milestones: readonly DealVersionMilestoneRecord[]): string {
   return milestones
     .reduce((total, milestone) => total + BigInt(milestone.amountMinor), 0n)
     .toString();
-}
-
-function normalizeChainId(): number {
-  const raw = process.env.BASE_CHAIN_ID;
-
-  if (!raw) {
-    return DEFAULT_CHAIN_ID;
-  }
-
-  const parsed = Number.parseInt(raw, 10);
-  return Number.isInteger(parsed) && parsed > 0 ? parsed : DEFAULT_CHAIN_ID;
 }
 
 @Injectable()
@@ -125,7 +101,7 @@ export class FundingService {
       access.draft.id
     );
 
-    const chainId = normalizeChainId();
+    const chainId = normalizeApiChainId();
     const manifest = getDeploymentManifestByChainId(chainId);
 
     if (!manifest) {
@@ -145,6 +121,7 @@ export class FundingService {
     }
 
     const counterpartyDraftParty = this.requireSingleDraftCounterpartyParty(draftParties);
+    const counterpartyVersionParty = this.requireSingleVersionCounterpartyParty(parties);
     const counterpartyWalletAddress = counterpartyDraftParty.walletAddress
       ? normalizeAddress(counterpartyDraftParty.walletAddress)
       : null;
@@ -155,16 +132,23 @@ export class FundingService {
     const organizationSignerWalletAddress = organizationAcceptance
       ? normalizeAddress(organizationAcceptance.signerWalletAddress)
       : null;
+    const counterpartyAcceptance =
+      await this.release1Repositories.counterpartyDealVersionAcceptances.findByDealVersionPartyId(
+        counterpartyVersionParty.id
+      );
+
+    if (!counterpartyAcceptance) {
+      blockers.push("COUNTERPARTY_ACCEPTANCE_MISSING");
+    }
+
     const versionPartyAddresses = this.resolveBuyerAndSellerAddresses(
       parties,
       organizationSignerWalletAddress,
       counterpartyWalletAddress
     );
 
-    const dealId = keccak256(
-      stringToHex(`blockchain-escrow:deal:${access.organization.id}:${access.draft.id}`)
-    );
-    const dealVersionHash = this.buildDealVersionHash(
+    const dealId = buildCanonicalDealId(access.organization.id, access.draft.id);
+    const dealVersionHash = buildCanonicalDealVersionHash(
       access.draft,
       access.version,
       parties,
@@ -325,58 +309,6 @@ export class FundingService {
     };
   }
 
-  private buildDealVersionHash(
-    draft: DraftDealRecord,
-    version: DealVersionRecord,
-    parties: readonly DealVersionPartyRecord[],
-    milestones: readonly DealVersionMilestoneRecord[],
-    files: readonly FileRecord[]
-  ): `0x${string}` {
-    return keccak256(
-      stringToHex(
-        JSON.stringify(
-          sortObjectKeys({
-            bodyMarkdown: version.bodyMarkdown,
-            draftDealId: draft.id,
-            files: files
-              .map((file) => ({
-                id: file.id,
-                mediaType: file.mediaType,
-                originalFilename: file.originalFilename,
-                sha256Hex: file.sha256Hex
-              }))
-              .sort((left, right) => left.id.localeCompare(right.id)),
-            milestones: milestones
-              .map((milestone) => ({
-                amountMinor: milestone.amountMinor,
-                description: milestone.description,
-                dueAt: milestone.dueAt,
-                position: milestone.position,
-                title: milestone.title
-              }))
-              .sort((left, right) => left.position - right.position),
-            organizationId: draft.organizationId,
-            parties: parties
-              .map((party) => ({
-                counterpartyId: party.counterpartyId,
-                displayName: party.displayName,
-                organizationId: party.organizationId,
-                role: party.role,
-                subjectType: party.subjectType
-              }))
-              .sort((left, right) => left.role.localeCompare(right.role)),
-            settlementCurrency: version.settlementCurrency,
-            summary: version.summary,
-            templateId: version.templateId,
-            title: version.title,
-            versionId: version.id,
-            versionNumber: version.versionNumber
-          })
-        )
-      )
-    );
-  }
-
   private requireSingleDraftCounterpartyParty(
     parties: readonly DraftDealPartyRecord[]
   ): DraftDealPartyRecord {
@@ -389,6 +321,20 @@ export class FundingService {
     }
 
     return counterpartyParties[0] as DraftDealPartyRecord;
+  }
+
+  private requireSingleVersionCounterpartyParty(
+    parties: readonly DealVersionPartyRecord[]
+  ): DealVersionPartyRecord {
+    const counterpartyParties = parties.filter(
+      (party) => party.subjectType === "COUNTERPARTY"
+    );
+
+    if (counterpartyParties.length !== 1) {
+      throw new NotFoundException("deal version counterparty party not found");
+    }
+
+    return counterpartyParties[0] as DealVersionPartyRecord;
   }
 
   private resolveBuyerAndSellerAddresses(

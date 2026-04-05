@@ -1,6 +1,7 @@
 import type {
   AuditLogRecord,
   CounterpartyRecord,
+  CounterpartyDealVersionAcceptanceRecord,
   DealVersionAcceptanceRecord,
   DealVersionRecord,
   DraftDealRecord,
@@ -143,6 +144,17 @@ export class AuditService {
         return this.repositories.auditLogs.listByEntity(
           "DEAL_VERSION_ACCEPTANCE",
           dealVersionAcceptance.id
+        );
+      }
+      case "DEAL_VERSION_COUNTERPARTY_ACCEPTANCE": {
+        const counterpartyAcceptance =
+          await this.requireCounterpartyDealVersionAcceptanceAccess(
+            actor,
+            params.entityId
+          );
+        return this.repositories.auditLogs.listByEntity(
+          "DEAL_VERSION_COUNTERPARTY_ACCEPTANCE",
+          counterpartyAcceptance.id
         );
       }
       case "FILE": {
@@ -330,6 +342,28 @@ export class AuditService {
 
     await this.requireOrganizationAccess(actor, dealVersionAcceptance.organizationId);
     return dealVersionAcceptance;
+  }
+
+  private async requireCounterpartyDealVersionAcceptanceAccess(
+    actor: AuthenticatedSessionContext,
+    counterpartyDealVersionAcceptanceId: string
+  ): Promise<CounterpartyDealVersionAcceptanceRecord> {
+    const counterpartyDealVersionAcceptance =
+      await this.repositories.counterpartyDealVersionAcceptances.findById(
+        counterpartyDealVersionAcceptanceId
+      );
+
+    if (!counterpartyDealVersionAcceptance) {
+      throw new NotFoundException("counterparty deal version acceptance not found");
+    }
+
+    const dealVersion = await this.requireDealVersionAccess(
+      actor,
+      counterpartyDealVersionAcceptance.dealVersionId
+    );
+    await this.requireOrganizationAccess(actor, dealVersion.organizationId);
+
+    return counterpartyDealVersionAcceptance;
   }
 
   private async requireFileAccess(

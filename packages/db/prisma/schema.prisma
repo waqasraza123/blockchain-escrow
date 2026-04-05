@@ -33,6 +33,7 @@ enum AuditAction {
   COUNTERPARTY_CREATED
   DRAFT_DEAL_COUNTERPARTY_WALLET_UPDATED
   DEAL_VERSION_ACCEPTANCE_CREATED
+  DEAL_VERSION_COUNTERPARTY_ACCEPTANCE_CREATED
   DEAL_VERSION_CREATED
   DRAFT_DEAL_CREATED
   FILE_CREATED
@@ -48,6 +49,7 @@ enum AuditAction {
 enum AuditEntityType {
   COUNTERPARTY
   DEAL_VERSION_ACCEPTANCE
+  DEAL_VERSION_COUNTERPARTY_ACCEPTANCE
   DEAL_VERSION
   DRAFT_DEAL
   FILE
@@ -352,6 +354,7 @@ model DealVersion {
   createdByUser      User               @relation("DealVersionCreatedByUser", fields: [createdByUserId], references: [id], onDelete: Restrict)
   template           Template?          @relation("DealVersionTemplate", fields: [templateId], references: [id], onDelete: SetNull)
   acceptances        DealVersionAcceptance[]
+  counterpartyAcceptances CounterpartyDealVersionAcceptance[]
   parties            DealVersionParty[]
   milestones         DealVersionMilestone[]
   files              DealVersionFile[]
@@ -378,6 +381,7 @@ model DealVersionParty {
   organization   Organization?           @relation("DealVersionPartyOrganization", fields: [organizationId], references: [id], onDelete: SetNull)
   counterparty   Counterparty?           @relation("DealVersionPartyCounterparty", fields: [counterpartyId], references: [id], onDelete: SetNull)
   acceptances    DealVersionAcceptance[]
+  counterpartyAcceptance CounterpartyDealVersionAcceptance?
 
   @@unique([dealVersionId, role], map: "deal_version_parties_deal_version_id_role_key")
   @@index([dealVersionId], map: "deal_version_parties_deal_version_id_idx")
@@ -441,6 +445,24 @@ model DealVersionAcceptance {
   @@index([signerWalletId], map: "deal_version_acceptances_signer_wallet_id_idx")
   @@index([dealVersionId, acceptedAt], map: "deal_version_acceptances_deal_version_id_accepted_at_idx")
   @@map("deal_version_acceptances")
+}
+
+model CounterpartyDealVersionAcceptance {
+  id                  String               @id @db.Text
+  dealVersionId       String               @db.Text
+  dealVersionPartyId  String               @db.Text
+  signerWalletAddress String               @db.Text
+  scheme              TypedSignatureScheme
+  signature           String               @db.Text
+  typedData           Json
+  acceptedAt          DateTime             @db.Timestamptz(3)
+  dealVersion         DealVersion          @relation(fields: [dealVersionId], references: [id], onDelete: Cascade)
+  dealVersionParty    DealVersionParty     @relation(fields: [dealVersionPartyId], references: [id], onDelete: Cascade)
+
+  @@unique([dealVersionPartyId], map: "ctpty_dv_acceptances_party_id_key")
+  @@index([dealVersionId], map: "ctpty_dv_acceptances_version_id_idx")
+  @@index([dealVersionId, acceptedAt], map: "ctpty_dv_acceptances_version_id_accepted_at_idx")
+  @@map("counterparty_deal_version_acceptances")
 }
 
 model OrganizationMember {

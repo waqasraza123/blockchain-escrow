@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 
 import type {
   CounterpartyRecord,
+  CounterpartyDealVersionAcceptanceRecord,
   DealVersionAcceptanceRecord,
   DealVersionMilestoneRecord,
   DealVersionPartyRecord,
@@ -16,6 +17,7 @@ import type {
 } from "@blockchain-escrow/db";
 import { hasMinimumOrganizationRole } from "@blockchain-escrow/security";
 import {
+  createCounterpartyDealVersionAcceptanceSchema,
   createDealVersionAcceptanceSchema,
   createDealVersionSchema,
   createDraftDealSchema,
@@ -24,8 +26,11 @@ import {
   organizationDraftDealsParamsSchema,
   updateDraftCounterpartyWalletSchema,
   type CreateDealVersionAcceptanceResponse,
+  type CreateCounterpartyDealVersionAcceptanceResponse,
   type CreateDealVersionResponse,
   type CreateDraftDealResponse,
+  type CounterpartyDealVersionAcceptanceChallenge,
+  type CounterpartyDealVersionAcceptanceDetail,
   type DealVersionAcceptanceSummary,
   type DealVersionAcceptanceDetail,
   type DealVersionDetail,
@@ -37,6 +42,7 @@ import {
   type DraftDealPartySummary,
   type DraftDealSummary,
   type FileSummary,
+  type GetCounterpartyDealVersionAcceptanceResponse,
   type ListDealVersionAcceptancesResponse,
   type ListDraftDealsResponse,
   type UpdateDraftCounterpartyWalletResponse
@@ -47,8 +53,13 @@ import {
   ForbiddenException,
   Inject,
   Injectable,
-  NotFoundException
+  NotFoundException,
+  UnauthorizedException
 } from "@nestjs/common";
+import {
+  getAddress,
+  verifyTypedData
+} from "viem";
 
 import { RELEASE1_REPOSITORIES } from "../../infrastructure/tokens";
 import type { RequestMetadata } from "../auth/auth.http";
@@ -56,6 +67,13 @@ import {
   AuthenticatedSessionService,
   type AuthenticatedSessionContext
 } from "../auth/authenticated-session.service";
+import {
+  buildCanonicalDealId,
+  buildCanonicalDealVersionHash,
+  buildCounterpartyAcceptanceTypedData,
+  counterpartyAcceptancePrimaryType,
+  counterpartyAcceptanceTypes
+} from "./deal-identity";
 
 function oppositeRole(role: DraftDealPartyRecord["role"]): DraftDealPartyRecord["role"] {
   return role === "BUYER" ? "SELLER" : "BUYER";
@@ -121,6 +139,21 @@ function toDealVersionAcceptanceSummary(
     signature: acceptance.signature,
     signerWalletAddress: acceptance.signerWalletAddress,
     signerWalletId: acceptance.signerWalletId,
+    typedData: acceptance.typedData
+  };
+}
+
+function toCounterpartyDealVersionAcceptanceSummary(
+  acceptance: CounterpartyDealVersionAcceptanceRecord
+) {
+  return {
+    acceptedAt: acceptance.acceptedAt,
+    dealVersionId: acceptance.dealVersionId,
+    id: acceptance.id,
+    partyId: acceptance.dealVersionPartyId,
+    scheme: acceptance.scheme,
+    signature: acceptance.signature,
+    signerWalletAddress: acceptance.signerWalletAddress,
     typedData: acceptance.typedData
   };
 }
@@ -376,6 +409,8 @@ export class DraftsService {
       userAgent: requestMetadata.userAgent
     });
 
+    await this.syncDraftFundingState(draft.id, now);
+
     return {
       version: await this.buildDealVersionDetail(version)
     };
@@ -472,8 +507,121 @@ export class DraftsService {
       userAgent: requestMetadata.userAgent
     });
 
+    await this.syncDraftFundingState(authorized.draft.id, now);
+
     return {
       acceptance: this.toAcceptanceDetail(acceptance, organizationParty)
+    };
+  }
+
+  async getCounterpartyAcceptance(
+    input: unknown
+  ): Promise<GetCounterpartyDealVersionAcceptanceResponse> {
+    const { counterpartyParty, typedData, versionCounterpartyParty } =
+      await this.requireCounterpartyAcceptanceContext(input);
+    const acceptance =
+      await this.repositories.counterpartyDealVersionAcceptances.findByDealVersionPartyId(
+        versionCounterpartyParty.id
+      );
+
+    return {
+      acceptance: acceptance
+        ? this.toCounterpartyAcceptanceDetail(
+            acceptance,
+            versionCounterpartyParty
+          )
+        : null,
+      challenge: {
+        expectedWalletAddress: counterpartyParty.walletAddress!,
+        typedData
+      }
+    };
+  }
+
+  async createCounterpartyAcceptance(
+    versionInput: unknown,
+    acceptanceInput: unknown
+  ): Promise<CreateCounterpartyDealVersionAcceptanceResponse> {
+    const parsedAcceptance = createCounterpartyDealVersionAcceptanceSchema.safeParse(
+      acceptanceInput
+    );
+
+    if (!parsedAcceptance.success) {
+      throw new BadRequestException(parsedAcceptance.error.flatten());
+    }
+
+    const { counterpartyParty, draft, typedData, version, versionCounterpartyParty } =
+      await this.requireCounterpartyAcceptanceContext(versionInput);
+    const existing =
+      await this.repositories.counterpartyDealVersionAcceptances.findByDealVersionPartyId(
+        versionCounterpartyParty.id
+      );
+
+    if (existing) {
+      throw new ConflictException("counterparty deal version acceptance already exists");
+    }
+
+    const isValid = await verifyTypedData({
+      address: getAddress(counterpartyParty.walletAddress!),
+      domain: typedData.domain as {
+        chainId: number;
+        name: string;
+        version: string;
+      },
+      message: typedData.message as {
+        dealId: `0x${string}`;
+        dealVersionHash: `0x${string}`;
+        dealVersionId: string;
+        draftDealId: string;
+        intent: string;
+        organizationId: string;
+      },
+      primaryType: counterpartyAcceptancePrimaryType,
+      signature: parsedAcceptance.data.signature as `0x${string}`,
+      types: counterpartyAcceptanceTypes
+    });
+
+    if (!isValid) {
+      throw new UnauthorizedException("invalid counterparty acceptance signature");
+    }
+
+    const now = new Date().toISOString();
+    const acceptance =
+      await this.repositories.counterpartyDealVersionAcceptances.create({
+        acceptedAt: now,
+        dealVersionId: version.id,
+        dealVersionPartyId: versionCounterpartyParty.id,
+        id: randomUUID(),
+        scheme: "EIP712",
+        signature: parsedAcceptance.data.signature,
+        signerWalletAddress: counterpartyParty.walletAddress!,
+        typedData
+      });
+
+    await this.repositories.auditLogs.append({
+      action: "DEAL_VERSION_COUNTERPARTY_ACCEPTANCE_CREATED",
+      actorUserId: null,
+      entityId: acceptance.id,
+      entityType: "DEAL_VERSION_COUNTERPARTY_ACCEPTANCE",
+      id: randomUUID(),
+      ipAddress: null,
+      metadata: {
+        dealVersionId: acceptance.dealVersionId,
+        dealVersionPartyId: acceptance.dealVersionPartyId,
+        signerWalletAddress: acceptance.signerWalletAddress
+      },
+      occurredAt: now,
+      organizationId: draft.organizationId,
+      userAgent: null
+    });
+
+    await this.syncDraftFundingState(draft.id, now);
+
+    return {
+      acceptance: this.toCounterpartyAcceptanceDetail(
+        acceptance,
+        versionCounterpartyParty
+      )
     };
   }
 
@@ -676,6 +824,16 @@ export class DraftsService {
     };
   }
 
+  private toCounterpartyAcceptanceDetail(
+    acceptance: CounterpartyDealVersionAcceptanceRecord,
+    party: DealVersionPartyRecord
+  ): CounterpartyDealVersionAcceptanceDetail {
+    return {
+      ...toCounterpartyDealVersionAcceptanceSummary(acceptance),
+      party: this.toVersionPartySnapshot(party)
+    };
+  }
+
   private toMilestoneSnapshot(
     milestone: DealVersionMilestoneRecord
   ): DealVersionMilestoneSnapshot {
@@ -796,6 +954,98 @@ export class DraftsService {
     return draft;
   }
 
+  private async requireCounterpartyAcceptanceContext(input: unknown): Promise<{
+    counterpartyParty: DraftDealPartyRecord;
+    draft: DraftDealRecord;
+    typedData: CounterpartyDealVersionAcceptanceChallenge["typedData"];
+    version: DealVersionRecord;
+    versionCounterpartyParty: DealVersionPartyRecord;
+  }> {
+    const parsed = dealVersionAcceptanceParamsSchema.safeParse(input);
+
+    if (!parsed.success) {
+      throw new BadRequestException(parsed.error.flatten());
+    }
+
+    const draft = await this.repositories.draftDeals.findById(parsed.data.draftDealId);
+    const version = await this.repositories.dealVersions.findById(parsed.data.dealVersionId);
+
+    if (!draft || draft.organizationId !== parsed.data.organizationId) {
+      throw new NotFoundException("draft deal not found");
+    }
+
+    if (
+      !version ||
+      version.organizationId !== parsed.data.organizationId ||
+      version.draftDealId !== draft.id
+    ) {
+      throw new NotFoundException("deal version not found");
+    }
+
+    const [draftParties, versionParties, fileLinks, milestones] = await Promise.all([
+      this.repositories.draftDealParties.listByDraftDealId(draft.id),
+      this.repositories.dealVersionParties.listByDealVersionId(version.id),
+      this.repositories.dealVersionFiles.listByDealVersionId(version.id),
+      this.repositories.dealVersionMilestones.listByDealVersionId(version.id)
+    ]);
+    const files = await Promise.all(
+      fileLinks.map(async (link) => {
+        const file = await this.repositories.files.findById(link.fileId);
+
+        if (!file) {
+          throw new NotFoundException("linked file not found");
+        }
+
+        return file;
+      })
+    );
+
+    const counterpartyParties = draftParties.filter(
+      (party) => party.subjectType === "COUNTERPARTY"
+    );
+    if (counterpartyParties.length !== 1) {
+      throw new ConflictException("draft deal must have exactly one counterparty party");
+    }
+
+    const versionCounterpartyParties = versionParties.filter(
+      (party) => party.subjectType === "COUNTERPARTY"
+    );
+    if (versionCounterpartyParties.length !== 1) {
+      throw new ConflictException(
+        "deal version must have exactly one counterparty-side party"
+      );
+    }
+
+    const counterpartyParty = counterpartyParties[0] as DraftDealPartyRecord;
+    const versionCounterpartyParty = versionCounterpartyParties[0] as DealVersionPartyRecord;
+
+    if (!counterpartyParty.walletAddress) {
+      throw new ConflictException("counterparty wallet address is required");
+    }
+
+    const dealId = buildCanonicalDealId(draft.organizationId, draft.id);
+    const dealVersionHash = buildCanonicalDealVersionHash(
+      draft,
+      version,
+      versionParties,
+      milestones,
+      files
+    );
+
+    return {
+      counterpartyParty,
+      draft,
+      typedData: buildCounterpartyAcceptanceTypedData(
+        draft,
+        version,
+        dealId,
+        dealVersionHash
+      ),
+      version,
+      versionCounterpartyParty
+    };
+  }
+
   private async requireDealVersionAccess(
     organizationId: string,
     draftDealId: string,
@@ -858,6 +1108,59 @@ export class DraftsService {
     }
 
     return matchingParties[0] as DealVersionPartyRecord;
+  }
+
+  private async syncDraftFundingState(
+    draftDealId: string,
+    updatedAt: string
+  ): Promise<void> {
+    const draft = await this.repositories.draftDeals.findById(draftDealId);
+
+    if (!draft || (draft.state !== "DRAFT" && draft.state !== "AWAITING_FUNDING")) {
+      return;
+    }
+
+    const latestVersion = await this.repositories.dealVersions.findLatestByDraftDealId(
+      draftDealId
+    );
+
+    if (!latestVersion) {
+      return;
+    }
+
+    const parties = await this.repositories.dealVersionParties.listByDealVersionId(
+      latestVersion.id
+    );
+    const organizationParty = parties.find(
+      (party) =>
+        party.subjectType === "ORGANIZATION" &&
+        party.organizationId === draft.organizationId
+    );
+    const counterpartyParty = parties.find(
+      (party) => party.subjectType === "COUNTERPARTY"
+    );
+
+    const [organizationAcceptance, counterpartyAcceptance] = await Promise.all([
+      organizationParty
+        ? this.repositories.dealVersionAcceptances.findByDealVersionPartyId(
+            organizationParty.id
+          )
+        : Promise.resolve(null),
+      counterpartyParty
+        ? this.repositories.counterpartyDealVersionAcceptances.findByDealVersionPartyId(
+            counterpartyParty.id
+          )
+        : Promise.resolve(null)
+    ]);
+
+    const desiredState =
+      organizationAcceptance && counterpartyAcceptance
+        ? "AWAITING_FUNDING"
+        : "DRAFT";
+
+    if (draft.state !== desiredState) {
+      await this.repositories.draftDeals.updateState(draft.id, desiredState, updatedAt);
+    }
   }
 
   private async requireOrganizationAccess(

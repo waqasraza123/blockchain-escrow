@@ -17,6 +17,7 @@ import type {
   Release4Repositories,
   TokenAllowlistEntryRecord
 } from "@blockchain-escrow/db";
+import { privateKeyToAccount } from "viem/accounts";
 
 import { AuthenticatedSessionService } from "../src/modules/auth/authenticated-session.service";
 import { DraftsService } from "../src/modules/drafts/drafts.service";
@@ -27,6 +28,10 @@ import {
   seedAuthenticatedActor
 } from "./helpers/auth-test-context";
 import { InMemoryRelease1Repositories } from "./helpers/in-memory-release1-repositories";
+
+const counterpartyAccount = privateKeyToAccount(
+  "0x8b3a350cf5c34c9194ca7a545d6a76fc4d6f8d4894d3e9d2046df1d5c8d14d14"
+);
 
 class InMemoryRelease4Repositories implements Release4Repositories {
   readonly arbitratorRegistryEntries = {
@@ -460,23 +465,61 @@ async function seedFundingScenario() {
   };
 }
 
-test("funding service returns a ready preparation when projections and counterparty wallet exist", async () => {
-  const { actor, draft, manifest, services, version } = await seedFundingScenario();
+async function signCounterpartyChallenge(
+  challenge: Awaited<ReturnType<DraftsService["getCounterpartyAcceptance"]>>
+): Promise<`0x${string}`> {
+  return (
+    counterpartyAccount.signTypedData as (input: {
+      domain: unknown;
+      message: unknown;
+      primaryType: unknown;
+      types: unknown;
+    }) => Promise<`0x${string}`>
+  )({
+    domain: challenge.challenge.typedData.domain,
+    message: challenge.challenge.typedData.message,
+    primaryType: challenge.challenge.typedData.primaryType,
+    types: challenge.challenge.typedData.types
+  });
+}
 
-  await services.draftsService.updateCounterpartyWallet(
+async function createCounterpartyAcceptance(input: Awaited<ReturnType<typeof seedFundingScenario>>) {
+  await input.services.draftsService.updateCounterpartyWallet(
     {
-      draftDealId: draft.draft.id,
+      draftDealId: input.draft.draft.id,
       organizationId: "org-1"
     },
     {
-      walletAddress: "0x3333333333333333333333333333333333333333"
+      walletAddress: counterpartyAccount.address
     },
     {
-      cookieHeader: actor.cookieHeader,
+      cookieHeader: input.actor.cookieHeader,
       ipAddress: "127.0.0.1",
       userAgent: "test-agent"
     }
   );
+
+  const challenge = await input.services.draftsService.getCounterpartyAcceptance({
+    dealVersionId: input.version.version.id,
+    draftDealId: input.draft.draft.id,
+    organizationId: "org-1"
+  });
+  const signature = await signCounterpartyChallenge(challenge);
+
+  await input.services.draftsService.createCounterpartyAcceptance(
+    {
+      dealVersionId: input.version.version.id,
+      draftDealId: input.draft.draft.id,
+      organizationId: "org-1"
+    },
+    { signature }
+  );
+}
+
+test("funding service returns a ready preparation when projections and both acceptances exist", async () => {
+  const { actor, draft, manifest, services, version } = await seedFundingScenario();
+
+  await createCounterpartyAcceptance({ actor, draft, manifest, services, version });
 
   const result = await services.fundingService.getFundingPreparation(
     {
@@ -508,7 +551,7 @@ test("funding service returns a ready preparation when projections and counterpa
   assert.equal(result.preparation.buyerAddress, actor.walletAddress);
   assert.equal(
     result.preparation.sellerAddress,
-    "0x3333333333333333333333333333333333333333"
+    counterpartyAccount.address.toLowerCase()
   );
   assert.equal(result.preparation.totalAmountMinor, "3500000");
   assert.equal(result.preparation.milestoneCount, 2);
@@ -541,6 +584,47 @@ test("funding service reports blockers when the draft counterparty wallet is mis
   );
 
   assert.equal(result.preparation.ready, false);
+  assert.ok(result.preparation.blockers.includes("COUNTERPARTY_ACCEPTANCE_MISSING"));
   assert.ok(result.preparation.blockers.includes("COUNTERPARTY_WALLET_MISSING"));
   assert.equal(result.preparation.createAgreementTransaction, null);
+});
+
+test("funding service reports a counterparty acceptance blocker when the wallet exists but no signature is stored", async () => {
+  const seeded = await seedFundingScenario();
+
+  await seeded.services.draftsService.updateCounterpartyWallet(
+    {
+      draftDealId: seeded.draft.draft.id,
+      organizationId: "org-1"
+    },
+    {
+      walletAddress: counterpartyAccount.address
+    },
+    {
+      cookieHeader: seeded.actor.cookieHeader,
+      ipAddress: "127.0.0.1",
+      userAgent: "test-agent"
+    }
+  );
+
+  const result = await seeded.services.fundingService.getFundingPreparation(
+    {
+      dealVersionId: seeded.version.version.id,
+      draftDealId: seeded.draft.draft.id,
+      organizationId: "org-1"
+    },
+    {
+      cookieHeader: seeded.actor.cookieHeader,
+      ipAddress: "127.0.0.1",
+      userAgent: "test-agent"
+    }
+  );
+
+  assert.equal(result.preparation.ready, false);
+  assert.ok(result.preparation.blockers.includes("COUNTERPARTY_ACCEPTANCE_MISSING"));
+  assert.ok(!result.preparation.blockers.includes("COUNTERPARTY_WALLET_MISSING"));
+  assert.equal(
+    result.preparation.counterpartyWalletAddress,
+    counterpartyAccount.address.toLowerCase()
+  );
 });

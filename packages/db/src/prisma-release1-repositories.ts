@@ -17,6 +17,7 @@ import {
 import type {
   AuditLogRecord,
   CounterpartyRecord,
+  CounterpartyDealVersionAcceptanceRecord,
   DealVersionAcceptanceRecord,
   DealVersionFileRecord,
   DealVersionMilestoneRecord,
@@ -37,6 +38,7 @@ import type {
 import type {
   AuditLogRepository,
   CounterpartyRepository,
+  CounterpartyDealVersionAcceptanceRepository,
   DealVersionAcceptanceRepository,
   DealVersionFileRepository,
   DealVersionMilestoneRepository,
@@ -413,6 +415,30 @@ function mapDealVersionAcceptanceRecord(record: {
     signerWalletAddress: record.signerWalletAddress as DealVersionAcceptanceRecord["signerWalletAddress"],
     signerWalletId: record.signerWalletId,
     typedData: record.typedData as DealVersionAcceptanceRecord["typedData"]
+  };
+}
+
+function mapCounterpartyDealVersionAcceptanceRecord(record: {
+  acceptedAt: Date;
+  dealVersionId: string;
+  dealVersionPartyId: string;
+  id: string;
+  scheme: PrismaTypedSignatureScheme;
+  signature: string;
+  signerWalletAddress: string;
+  typedData: unknown;
+}): CounterpartyDealVersionAcceptanceRecord {
+  return {
+    acceptedAt: toRequiredIsoTimestamp(record.acceptedAt),
+    dealVersionId: record.dealVersionId,
+    dealVersionPartyId: record.dealVersionPartyId,
+    id: record.id,
+    scheme: record.scheme,
+    signature: record.signature,
+    signerWalletAddress:
+      record.signerWalletAddress as CounterpartyDealVersionAcceptanceRecord["signerWalletAddress"],
+    typedData:
+      record.typedData as CounterpartyDealVersionAcceptanceRecord["typedData"]
   };
 }
 
@@ -919,6 +945,28 @@ export class PrismaDraftDealRepository implements DraftDealRepository {
 
     return records.map(mapDraftDealRecord);
   }
+
+  async updateState(
+    id: string,
+    state: DraftDealRecord["state"],
+    updatedAt: string
+  ): Promise<DraftDealRecord | null> {
+    const existing = await this.prisma.draftDeal.findUnique({ where: { id } });
+
+    if (!existing) {
+      return null;
+    }
+
+    const updated = await this.prisma.draftDeal.update({
+      where: { id },
+      data: {
+        state,
+        updatedAt: toDate(updatedAt)
+      }
+    });
+
+    return mapDraftDealRecord(updated);
+  }
 }
 
 export class PrismaDraftDealPartyRepository implements DraftDealPartyRepository {
@@ -1175,6 +1223,62 @@ export class PrismaDealVersionAcceptanceRepository
     });
 
     return records.map(mapDealVersionAcceptanceRecord);
+  }
+}
+
+export class PrismaCounterpartyDealVersionAcceptanceRepository
+  implements CounterpartyDealVersionAcceptanceRepository
+{
+  constructor(private readonly prisma: PrismaClient) {}
+
+  async create(
+    record: CounterpartyDealVersionAcceptanceRecord
+  ): Promise<CounterpartyDealVersionAcceptanceRecord> {
+    const created = await this.prisma.counterpartyDealVersionAcceptance.create({
+      data: {
+        acceptedAt: toDate(record.acceptedAt),
+        dealVersionId: record.dealVersionId,
+        dealVersionPartyId: record.dealVersionPartyId,
+        id: record.id,
+        scheme: record.scheme,
+        signature: record.signature,
+        signerWalletAddress: record.signerWalletAddress,
+        typedData: toPrismaJsonObject(record.typedData)
+      }
+    });
+
+    return mapCounterpartyDealVersionAcceptanceRecord(created);
+  }
+
+  async findByDealVersionPartyId(
+    dealVersionPartyId: string
+  ): Promise<CounterpartyDealVersionAcceptanceRecord | null> {
+    const record = await this.prisma.counterpartyDealVersionAcceptance.findUnique({
+      where: { dealVersionPartyId }
+    });
+
+    return record ? mapCounterpartyDealVersionAcceptanceRecord(record) : null;
+  }
+
+  async findById(
+    id: string
+  ): Promise<CounterpartyDealVersionAcceptanceRecord | null> {
+    const record = await this.prisma.counterpartyDealVersionAcceptance.findUnique({
+      where: { id }
+    });
+
+    return record ? mapCounterpartyDealVersionAcceptanceRecord(record) : null;
+  }
+
+  async listByDealVersionId(
+    dealVersionId: string
+  ): Promise<CounterpartyDealVersionAcceptanceRecord[]> {
+    const records = await this.prisma.counterpartyDealVersionAcceptance.findMany({
+      where: { dealVersionId },
+      orderBy: { acceptedAt: "asc" }
+    });
+
+    return records.map(mapCounterpartyDealVersionAcceptanceRecord);
   }
 }
 
@@ -1438,6 +1542,7 @@ export class PrismaAuditLogRepository implements AuditLogRepository {
 export class PrismaRelease1Repositories implements Release1Repositories {
   readonly auditLogs: AuditLogRepository;
   readonly counterparties: CounterpartyRepository;
+  readonly counterpartyDealVersionAcceptances: CounterpartyDealVersionAcceptanceRepository;
   readonly dealVersionAcceptances: DealVersionAcceptanceRepository;
   readonly dealVersionFiles: DealVersionFileRepository;
   readonly dealVersionMilestones: DealVersionMilestoneRepository;
@@ -1458,6 +1563,8 @@ export class PrismaRelease1Repositories implements Release1Repositories {
   constructor(private readonly prisma: PrismaClient) {
     this.auditLogs = new PrismaAuditLogRepository(prisma);
     this.counterparties = new PrismaCounterpartyRepository(prisma);
+    this.counterpartyDealVersionAcceptances =
+      new PrismaCounterpartyDealVersionAcceptanceRepository(prisma);
     this.dealVersionAcceptances = new PrismaDealVersionAcceptanceRepository(prisma);
     this.dealVersionFiles = new PrismaDealVersionFileRepository(prisma);
     this.dealVersionMilestones = new PrismaDealVersionMilestoneRepository(prisma);

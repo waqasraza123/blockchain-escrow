@@ -6,6 +6,7 @@ import type {
   ChainCursorRecord,
   ContractOwnershipRecord,
   CounterpartyRecord,
+  CounterpartyDealVersionAcceptanceRecord,
   DealVersionAcceptanceRecord,
   DealVersionFileRecord,
   DealVersionMilestoneRecord,
@@ -145,6 +146,11 @@ export interface DraftDealRepository {
   create(record: DraftDealRecord): Promise<DraftDealRecord>;
   findById(id: EntityId): Promise<DraftDealRecord | null>;
   listByOrganizationId(organizationId: EntityId): Promise<DraftDealRecord[]>;
+  updateState(
+    id: EntityId,
+    state: DraftDealRecord["state"],
+    updatedAt: string
+  ): Promise<DraftDealRecord | null>;
 }
 
 export interface DraftDealPartyRepository {
@@ -194,6 +200,19 @@ export interface DealVersionAcceptanceRepository {
   listByDealVersionId(
     dealVersionId: EntityId
   ): Promise<DealVersionAcceptanceRecord[]>;
+}
+
+export interface CounterpartyDealVersionAcceptanceRepository {
+  create(
+    record: CounterpartyDealVersionAcceptanceRecord
+  ): Promise<CounterpartyDealVersionAcceptanceRecord>;
+  findByDealVersionPartyId(
+    dealVersionPartyId: EntityId
+  ): Promise<CounterpartyDealVersionAcceptanceRecord | null>;
+  findById(id: EntityId): Promise<CounterpartyDealVersionAcceptanceRecord | null>;
+  listByDealVersionId(
+    dealVersionId: EntityId
+  ): Promise<CounterpartyDealVersionAcceptanceRecord[]>;
 }
 
 export interface ChainCursorRepository {
@@ -299,6 +318,7 @@ export interface Release4Repositories {
 export interface Release1Repositories {
   auditLogs: AuditLogRepository;
   counterparties: CounterpartyRepository;
+  counterpartyDealVersionAcceptances: CounterpartyDealVersionAcceptanceRepository;
   dealVersionAcceptances: DealVersionAcceptanceRepository;
   dealVersionFiles: DealVersionFileRepository;
   dealVersionMilestones: DealVersionMilestoneRepository;

@@ -1,9 +1,11 @@
 import { Body, Controller, Get, Param, Patch, Post, Req } from "@nestjs/common";
 import type {
+  CreateCounterpartyDealVersionAcceptanceResponse,
   CreateDealVersionAcceptanceResponse,
   CreateDealVersionResponse,
   CreateDraftDealResponse,
   DraftDealDetailResponse,
+  GetCounterpartyDealVersionAcceptanceResponse,
   ListDealVersionAcceptancesResponse,
   ListDraftDealsResponse,
   UpdateDraftCounterpartyWalletResponse
@@ -91,6 +93,32 @@ export class DraftsController {
       { dealVersionId, draftDealId, organizationId },
       body,
       readRequestMetadata(request)
+    );
+  }
+
+  @Get(":draftDealId/versions/:dealVersionId/counterparty-acceptance")
+  async getCounterpartyAcceptance(
+    @Param("organizationId") organizationId: string,
+    @Param("draftDealId") draftDealId: string,
+    @Param("dealVersionId") dealVersionId: string
+  ): Promise<GetCounterpartyDealVersionAcceptanceResponse> {
+    return this.draftsService.getCounterpartyAcceptance({
+      dealVersionId,
+      draftDealId,
+      organizationId
+    });
+  }
+
+  @Post(":draftDealId/versions/:dealVersionId/counterparty-acceptance")
+  async createCounterpartyAcceptance(
+    @Param("organizationId") organizationId: string,
+    @Param("draftDealId") draftDealId: string,
+    @Param("dealVersionId") dealVersionId: string,
+    @Body() body: unknown
+  ): Promise<CreateCounterpartyDealVersionAcceptanceResponse> {
+    return this.draftsService.createCounterpartyAcceptance(
+      { dealVersionId, draftDealId, organizationId },
+      body
     );
   }
 

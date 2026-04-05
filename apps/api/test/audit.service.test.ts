@@ -603,3 +603,107 @@ test("audit service lists deal version acceptance logs for organization members"
   assert.equal(response.auditLogs.length, 1);
   assert.equal(response.auditLogs[0]?.action, "DEAL_VERSION_ACCEPTANCE_CREATED");
 });
+
+test("audit service lists counterparty deal version acceptance logs for organization members", async () => {
+  const { auditService, repositories, sessionTokenService } = createAuditService();
+  const actor = await seedAuthenticatedActor(repositories, sessionTokenService);
+  const now = new Date().toISOString();
+
+  await repositories.organizations.create({
+    createdAt: now,
+    createdByUserId: actor.userId,
+    id: "org-1",
+    name: "Acme",
+    slug: "acme",
+    updatedAt: now
+  });
+  await repositories.organizationMembers.add({
+    createdAt: now,
+    id: "member-1",
+    organizationId: "org-1",
+    role: "OWNER",
+    updatedAt: now,
+    userId: actor.userId
+  });
+  await repositories.draftDeals.create({
+    createdAt: now,
+    createdByUserId: actor.userId,
+    id: "draft-1",
+    organizationId: "org-1",
+    settlementCurrency: "USDC",
+    state: "DRAFT",
+    summary: null,
+    templateId: null,
+    title: "Website Rebuild",
+    updatedAt: now
+  });
+  await repositories.dealVersions.create({
+    bodyMarkdown: "# Terms",
+    createdAt: now,
+    createdByUserId: actor.userId,
+    draftDealId: "draft-1",
+    id: "deal-version-1",
+    organizationId: "org-1",
+    settlementCurrency: "USDC",
+    summary: null,
+    templateId: null,
+    title: "Website Rebuild v1",
+    versionNumber: 1
+  });
+  await repositories.dealVersionParties.add({
+    counterpartyId: "counterparty-1",
+    createdAt: now,
+    dealVersionId: "deal-version-1",
+    displayName: "Vendor One",
+    id: "deal-version-party-2",
+    organizationId: null,
+    role: "SELLER",
+    subjectType: "COUNTERPARTY"
+  });
+  await repositories.counterpartyDealVersionAcceptances.create({
+    acceptedAt: now,
+    dealVersionId: "deal-version-1",
+    dealVersionPartyId: "deal-version-party-2",
+    id: "counterparty-deal-version-acceptance-1",
+    scheme: "EIP712",
+    signature: "0x1234",
+    signerWalletAddress: "0x3333333333333333333333333333333333333333",
+    typedData: {
+      message: {
+        dealVersionId: "deal-version-1"
+      }
+    }
+  });
+  await repositories.auditLogs.append({
+    action: "DEAL_VERSION_COUNTERPARTY_ACCEPTANCE_CREATED",
+    actorUserId: null,
+    entityId: "counterparty-deal-version-acceptance-1",
+    entityType: "DEAL_VERSION_COUNTERPARTY_ACCEPTANCE",
+    id: "audit-10",
+    ipAddress: null,
+    metadata: {
+      dealVersionId: "deal-version-1"
+    },
+    occurredAt: now,
+    organizationId: "org-1",
+    userAgent: null
+  });
+
+  const response = await auditService.listByEntity(
+    {
+      entityId: "counterparty-deal-version-acceptance-1",
+      entityType: "DEAL_VERSION_COUNTERPARTY_ACCEPTANCE"
+    },
+    {
+      cookieHeader: actor.cookieHeader,
+      ipAddress: "127.0.0.1",
+      userAgent: "test-agent"
+    }
+  );
+
+  assert.equal(response.auditLogs.length, 1);
+  assert.equal(
+    response.auditLogs[0]?.action,
+    "DEAL_VERSION_COUNTERPARTY_ACCEPTANCE_CREATED"
+  );
+});

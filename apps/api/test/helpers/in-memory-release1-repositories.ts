@@ -1,6 +1,7 @@
 import type {
   AuditLogRecord,
   CounterpartyRecord,
+  CounterpartyDealVersionAcceptanceRecord,
   DealVersionAcceptanceRecord,
   DealVersionFileRecord,
   DealVersionMilestoneRecord,
@@ -27,6 +28,7 @@ function compareIsoTimestamps(a: string, b: string): number {
 export class InMemoryRelease1Repositories implements Release1Repositories {
   readonly auditLogRecords: AuditLogRecord[] = [];
   readonly counterpartyRecords: CounterpartyRecord[] = [];
+  readonly counterpartyDealVersionAcceptanceRecords: CounterpartyDealVersionAcceptanceRecord[] = [];
   readonly dealVersionAcceptanceRecords: DealVersionAcceptanceRecord[] = [];
   readonly dealVersionFileRecords: DealVersionFileRecord[] = [];
   readonly dealVersionMilestoneRecords: DealVersionMilestoneRecord[] = [];
@@ -112,6 +114,32 @@ export class InMemoryRelease1Repositories implements Release1Repositories {
         .sort((left, right) => compareIsoTimestamps(left.acceptedAt, right.acceptedAt))
   };
 
+  readonly counterpartyDealVersionAcceptances = {
+    create: async (
+      record: CounterpartyDealVersionAcceptanceRecord
+    ): Promise<CounterpartyDealVersionAcceptanceRecord> => {
+      this.counterpartyDealVersionAcceptanceRecords.push(record);
+      return record;
+    },
+    findByDealVersionPartyId: async (
+      dealVersionPartyId: string
+    ): Promise<CounterpartyDealVersionAcceptanceRecord | null> =>
+      this.counterpartyDealVersionAcceptanceRecords.find(
+        (record) => record.dealVersionPartyId === dealVersionPartyId
+      ) ?? null,
+    findById: async (
+      id: string
+    ): Promise<CounterpartyDealVersionAcceptanceRecord | null> =>
+      this.counterpartyDealVersionAcceptanceRecords.find((record) => record.id === id) ??
+      null,
+    listByDealVersionId: async (
+      dealVersionId: string
+    ): Promise<CounterpartyDealVersionAcceptanceRecord[]> =>
+      this.counterpartyDealVersionAcceptanceRecords
+        .filter((record) => record.dealVersionId === dealVersionId)
+        .sort((left, right) => compareIsoTimestamps(left.acceptedAt, right.acceptedAt))
+  };
+
   readonly draftDeals = {
     create: async (record: DraftDealRecord): Promise<DraftDealRecord> => {
       this.draftDealRecords.push(record);
@@ -124,7 +152,23 @@ export class InMemoryRelease1Repositories implements Release1Repositories {
     ): Promise<DraftDealRecord[]> =>
       this.draftDealRecords
         .filter((record) => record.organizationId === organizationId)
-        .sort((left, right) => compareIsoTimestamps(left.createdAt, right.createdAt))
+        .sort((left, right) => compareIsoTimestamps(left.createdAt, right.createdAt)),
+    updateState: async (
+      id: string,
+      state: DraftDealRecord["state"],
+      updatedAt: string
+    ): Promise<DraftDealRecord | null> => {
+      const record = this.draftDealRecords.find((entry) => entry.id === id);
+
+      if (!record) {
+        return null;
+      }
+
+      record.state = state;
+      record.updatedAt = updatedAt;
+
+      return record;
+    }
   };
 
   readonly draftDealParties = {
