@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 
+import { readFile } from "node:fs/promises";
+import path from "node:path";
 import { spawn } from "node:child_process";
 
 import { loadLocalEnvironment, repoRoot } from "./local-env.mjs";
@@ -33,7 +35,23 @@ async function main() {
     throw new Error("Missing BASE_RPC_URL for Release 4 indexer verification");
   }
 
+  if (!env.INDEXER_END_BLOCK || env.INDEXER_END_BLOCK.trim().length === 0) {
+    const manifestPath = path.resolve(
+      repoRoot,
+      "packages/contracts/deployments/base-sepolia.json"
+    );
+    const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+
+    if (
+      typeof manifest.deploymentStartBlock === "string" &&
+      manifest.deploymentStartBlock.length > 0
+    ) {
+      env.INDEXER_END_BLOCK = manifest.deploymentStartBlock;
+    }
+  }
+
   await runCommand("node", ["scripts/release4-bootstrap-local.mjs"], env);
+  await runCommand("pnpm", ["release4:reset:local"], env);
   await runCommand(
     "pnpm",
     ["--filter", "@blockchain-escrow/indexer", "exec", "tsx", "src/main.ts"],

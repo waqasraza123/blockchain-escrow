@@ -25,7 +25,9 @@
     "contracts:verify:base-sepolia": "node scripts/with-local-env.mjs pnpm --filter @blockchain-escrow/contracts run verify:base-sepolia",
     "contracts:release:base-sepolia": "node scripts/with-local-env.mjs pnpm --filter @blockchain-escrow/contracts run release:base-sepolia",
     "contracts:release:base-sepolia:fixture": "node scripts/with-local-env.mjs pnpm --filter @blockchain-escrow/contracts run release:base-sepolia:fixture",
+    "release4:doctor:local": "node scripts/release4-doctor-local.mjs",
     "release4:bootstrap:local": "node scripts/release4-bootstrap-local.mjs",
+    "release4:reset:local": "node scripts/with-local-env.mjs pnpm --filter @blockchain-escrow/indexer exec tsx src/reset-local.ts",
     "release4:verify:local": "node scripts/release4-verify-local.mjs"
   },
   "devDependencies": {

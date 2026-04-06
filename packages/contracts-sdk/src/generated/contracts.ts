@@ -23,6 +23,7 @@ export interface DeploymentManifest {
   readonly network: string;
   readonly explorerUrl: string;
   readonly deployedAt: string | null;
+  readonly deploymentStartBlock: string | null;
   readonly deployer: HexString | null;
   readonly owner: HexString | null;
   readonly pendingOwner: HexString | null;
@@ -2369,6 +2370,7 @@ export const deploymentManifests: Record<string, DeploymentManifest> = {
     "network": "base-sepolia",
     "explorerUrl": "https://sepolia.basescan.org",
     "deployedAt": "2026-04-05T06:17:49.519Z",
+    "deploymentStartBlock": "39797620",
     "deployer": "0x00e5e8d73a66588ab7fb63383f8f558ba59c929d",
     "owner": "0x00e5e8d73a66588ab7fb63383f8f558ba59c929d",
     "pendingOwner": "0x573b6f6F84cdf764Ee25cCeEA673a4cd259abFDb",

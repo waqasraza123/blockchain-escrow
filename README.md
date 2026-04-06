@@ -49,7 +49,7 @@ docs/product/
 ## Local Setup
 
 1. Install Node 22, pnpm, Foundry, and Docker Desktop.
-2. Create `.env` or `.env.local` and override any values you need. Root scripts merge `.env.example`, `.env`, and `.env.local` in that order, with your shell env taking final precedence.
+2. Create `.env` or `.env.local` and override any values you need. Root scripts merge `.env.example`, `.env`, and `.env.local` in that order, with your shell env taking final precedence. For local Postgres, you can override `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, and `POSTGRES_DB`; root scripts derive `DATABASE_URL` from those values if you do not set it explicitly.
 3. Start infrastructure:
 
 ```bash
@@ -92,9 +92,12 @@ pnpm contracts:test
 For the Release 4 local database and indexer path:
 
 ```bash
+pnpm release4:doctor:local
 pnpm release4:bootstrap:local
 pnpm release4:verify:local
 ```
+
+If `release4:doctor:local` reports that another Postgres instance is already bound to the configured port, move the repo-local database to a different local port in `.env.local` by overriding `POSTGRES_PORT` and let the root scripts derive the matching `DATABASE_URL`. `release4:verify:local` is a bounded verification run; if you need a wider replay window locally, override `INDEXER_START_BLOCK` and `INDEXER_END_BLOCK`.
 
 ## Contracts Deployment
 

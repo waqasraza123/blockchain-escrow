@@ -63,3 +63,48 @@ test("loadIndexerConfig parses runOnce when enabled", () => {
     }
   );
 });
+
+test("loadIndexerConfig defaults startBlock from the deployment manifest", () => {
+  withEnv(
+    {
+      BASE_RPC_URL: "https://sepolia.base.org",
+      INDEXER_CHAIN_ID: "84532",
+      INDEXER_START_BLOCK: undefined
+    },
+    () => {
+      const config = loadIndexerConfig();
+
+      assert.equal(config.startBlock, 39797620n);
+    }
+  );
+});
+
+test("loadIndexerConfig parses an explicit start block override", () => {
+  withEnv(
+    {
+      BASE_RPC_URL: "https://sepolia.base.org",
+      INDEXER_CHAIN_ID: "84532",
+      INDEXER_START_BLOCK: "39797621"
+    },
+    () => {
+      const config = loadIndexerConfig();
+
+      assert.equal(config.startBlock, 39797621n);
+    }
+  );
+});
+
+test("loadIndexerConfig parses an optional end block override", () => {
+  withEnv(
+    {
+      BASE_RPC_URL: "https://sepolia.base.org",
+      INDEXER_CHAIN_ID: "84532",
+      INDEXER_END_BLOCK: "39797620"
+    },
+    () => {
+      const config = loadIndexerConfig();
+
+      assert.equal(config.endBlock, 39797620n);
+    }
+  );
+});

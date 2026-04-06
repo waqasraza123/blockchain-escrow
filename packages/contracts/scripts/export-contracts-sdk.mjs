@@ -135,6 +135,7 @@ function buildGeneratedSource(artifacts, deployments) {
     "  readonly network: string;",
     "  readonly explorerUrl: string;",
     "  readonly deployedAt: string | null;",
+    "  readonly deploymentStartBlock: string | null;",
     "  readonly deployer: HexString | null;",
     "  readonly owner: HexString | null;",
     "  readonly pendingOwner: HexString | null;",

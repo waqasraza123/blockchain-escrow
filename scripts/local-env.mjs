@@ -7,8 +7,6 @@ const __dirname = path.dirname(__filename);
 
 export const repoRoot = path.resolve(__dirname, "..");
 
-const defaultEnvFiles = [".env.example", ".env", ".env.local"];
-
 function decodeDoubleQuotedValue(value) {
   return value.replace(/\\n/g, "\n").replace(/\\r/g, "\r").replace(/\\t/g, "\t").replace(/\\"/g, "\"").replace(/\\\\/g, "\\");
 }
@@ -74,15 +72,53 @@ function parseEnvFile(filePath) {
   return parsed;
 }
 
-export function loadLocalEnvironment(baseEnv = process.env) {
-  const mergedEnv = {};
-
-  for (const relativeFilePath of defaultEnvFiles) {
-    Object.assign(mergedEnv, parseEnvFile(path.join(repoRoot, relativeFilePath)));
+function parsePositiveInteger(value, fallback) {
+  if (!value || value.trim().length === 0) {
+    return fallback;
   }
 
-  return {
-    ...mergedEnv,
+  const parsed = Number.parseInt(value, 10);
+
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    throw new Error(`Expected a positive integer but received "${value}".`);
+  }
+
+  return parsed;
+}
+
+function buildDerivedDatabaseUrl(env) {
+  const host = env.POSTGRES_HOST?.trim() || "127.0.0.1";
+  const port = parsePositiveInteger(env.POSTGRES_PORT, 5433);
+  const username = env.POSTGRES_USER?.trim() || "blockchain_escrow";
+  const password = env.POSTGRES_PASSWORD?.trim() || "blockchain_escrow";
+  const database = env.POSTGRES_DB?.trim() || "blockchain_escrow";
+
+  return `postgresql://${encodeURIComponent(username)}:${encodeURIComponent(password)}@${host}:${port}/${encodeURIComponent(database)}`;
+}
+
+export function loadLocalEnvironment(baseEnv = process.env) {
+  const exampleEnv = parseEnvFile(path.join(repoRoot, ".env.example"));
+  const projectEnv = {
+    ...parseEnvFile(path.join(repoRoot, ".env")),
+    ...parseEnvFile(path.join(repoRoot, ".env.local"))
+  };
+
+  const environment = {
+    ...exampleEnv,
+    ...projectEnv,
     ...baseEnv
   };
+
+  const hasExplicitDatabaseUrl =
+    Boolean(baseEnv.DATABASE_URL && baseEnv.DATABASE_URL.trim().length > 0) ||
+    Boolean(projectEnv.DATABASE_URL && projectEnv.DATABASE_URL.trim().length > 0);
+
+  if (!hasExplicitDatabaseUrl) {
+    environment.DATABASE_URL = buildDerivedDatabaseUrl(environment);
+    environment.LOCAL_DATABASE_URL_SOURCE = "POSTGRES_*";
+  } else {
+    environment.LOCAL_DATABASE_URL_SOURCE = "DATABASE_URL";
+  }
+
+  return environment;
 }

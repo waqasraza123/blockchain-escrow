@@ -60,11 +60,19 @@ function asAddressArray(value: unknown, label: string): WalletAddress[] {
 }
 
 function asBigInt(value: unknown, label: string): bigint {
-  if (typeof value !== "bigint") {
-    throw new Error(`Expected ${label} to be a bigint`);
+  if (typeof value === "bigint") {
+    return value;
   }
 
-  return value;
+  if (typeof value === "number" && Number.isInteger(value) && value >= 0) {
+    return BigInt(value);
+  }
+
+  if (typeof value === "string" && /^[0-9]+$/u.test(value)) {
+    return BigInt(value);
+  }
+
+  throw new Error(`Expected ${label} to be a bigint-compatible integer`);
 }
 
 function asBoolean(value: unknown, label: string): boolean {
@@ -131,6 +139,29 @@ function buildCursor(
   };
 }
 
+async function mapWithConcurrency<TInput, TOutput>(
+  values: readonly TInput[],
+  concurrency: number,
+  mapper: (value: TInput, index: number) => Promise<TOutput>
+): Promise<TOutput[]> {
+  const results: TOutput[] = new Array(values.length);
+  let nextIndex = 0;
+
+  const workers = Array.from(
+    { length: Math.min(concurrency, values.length) },
+    async () => {
+      while (nextIndex < values.length) {
+        const currentIndex = nextIndex;
+        nextIndex += 1;
+        results[currentIndex] = await mapper(values[currentIndex]!, currentIndex);
+      }
+    }
+  );
+
+  await Promise.all(workers);
+  return results;
+}
+
 export class IndexerService {
   private readonly client: PublicClient;
   private readonly prisma = createPrismaClient();
@@ -195,6 +226,10 @@ export class IndexerService {
     } catch (error) {
       console.error("Indexer sync failed", error);
       this.healthState.markSyncFailure(error);
+
+      if (this.config.runOnce) {
+        throw error;
+      }
     } finally {
       this.syncing = false;
       this.scheduleNext();
@@ -219,8 +254,12 @@ export class IndexerService {
 
     const latestBlockNumber = await this.client.getBlockNumber();
     const finalityBuffer = BigInt(this.config.finalityBuffer);
-    const targetBlockNumber =
+    const unconstrainedTargetBlockNumber =
       latestBlockNumber > finalityBuffer ? latestBlockNumber - finalityBuffer : 0n;
+    const targetBlockNumber =
+      this.config.endBlock !== null && this.config.endBlock < unconstrainedTargetBlockNumber
+        ? this.config.endBlock
+        : unconstrainedTargetBlockNumber;
 
     let nextBlockNumber = BigInt(cursor.nextBlockNumber);
 
@@ -319,30 +358,36 @@ export class IndexerService {
       (event) => event.eventName === "AgreementCreated"
     );
 
-    const agreementInitializedEvents: IndexedContractEventSummary[] = [];
+    const decodedReceiptEvents = await mapWithConcurrency(
+      agreementCreatedEvents,
+      this.config.rpcConcurrency,
+      async (event) => {
+        const agreementAddress = normalizeAddress(String(event.data.agreement));
+        const receipt = await this.client.getTransactionReceipt({
+          hash: event.transactionHash
+        });
+        const blockTimestamp = blockTimestampByNumber.get(event.blockNumber);
 
-    for (const event of agreementCreatedEvents) {
-      const agreementAddress = normalizeAddress(String(event.data.agreement));
-      const receipt = await this.client.getTransactionReceipt({
-        hash: event.transactionHash
-      });
-      const blockTimestamp = blockTimestampByNumber.get(event.blockNumber);
+        if (!blockTimestamp) {
+          throw new Error(
+            `Missing block timestamp for agreement initialization tx ${event.transactionHash}`
+          );
+        }
 
-      if (!blockTimestamp) {
-        throw new Error(
-          `Missing block timestamp for agreement initialization tx ${event.transactionHash}`
-        );
-      }
-
-      agreementInitializedEvents.push(
-        ...decodeAgreementInitializedEventsFromReceipt(
+        return decodeAgreementInitializedEventsFromReceipt(
           this.config.chainId,
           receipt,
           new Set([agreementAddress]),
           indexedAt,
           blockTimestamp
-        )
-      );
+        );
+      }
+    );
+
+    const agreementInitializedEvents: IndexedContractEventSummary[] = [];
+
+    for (const receiptEvents of decodedReceiptEvents) {
+      agreementInitializedEvents.push(...receiptEvents);
     }
 
     return agreementInitializedEvents;
@@ -359,12 +404,13 @@ export class IndexerService {
       blockNumbers.push(current);
     }
 
-    const blocks = await Promise.all(
-      blockNumbers.map((blockNumber) =>
+    const blocks = await mapWithConcurrency(
+      blockNumbers,
+      this.config.rpcConcurrency,
+      (blockNumber) =>
         this.client.getBlock({
           blockNumber
         })
-      )
     );
 
     return blocks.map((block) => ({
@@ -388,13 +434,14 @@ export class IndexerService {
       blockNumbers.push(current);
     }
 
-    const blocks = await Promise.all(
-      blockNumbers.map((blockNumber) =>
+    const blocks = await mapWithConcurrency(
+      blockNumbers,
+      this.config.rpcConcurrency,
+      (blockNumber) =>
         this.client.getBlock({
           blockNumber,
           includeTransactions: true
         })
-      )
     );
     const trackedTransactions = new Map<HexString, Transaction>();
 
@@ -420,10 +467,10 @@ export class IndexerService {
       }
     }
 
-    const receipts = await Promise.all(
-      [...trackedTransactions.keys()].map((hash) =>
-        this.client.getTransactionReceipt({ hash })
-      )
+    const receipts = await mapWithConcurrency(
+      [...trackedTransactions.keys()],
+      this.config.rpcConcurrency,
+      (hash) => this.client.getTransactionReceipt({ hash })
     );
     const executionStatusByHash = new Map(
       receipts.map((receipt) => [

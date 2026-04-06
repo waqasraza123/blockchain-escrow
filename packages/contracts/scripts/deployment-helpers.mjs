@@ -112,6 +112,18 @@ export function normalizeNullableAddress(value, label) {
   return normalizeAddress(value, label);
 }
 
+export function normalizeNullableBlockNumber(value, label) {
+  if (value == null) {
+    return null;
+  }
+
+  if (typeof value !== "string" || !/^[0-9]+$/u.test(value)) {
+    throw new Error(`Invalid ${label}: expected decimal block number string`);
+  }
+
+  return value;
+}
+
 export function requireAddress(value, label) {
   if (value == null) {
     throw new Error(`Missing ${label}`);
@@ -226,16 +238,33 @@ export async function loadBroadcastDeployment(broadcastFile) {
         typeof item?.transaction?.from === "string" &&
         item.transaction.from.length > 0
     )?.transaction.from ?? null;
+  const deploymentStartBlock = transactions.reduce((lowestBlock, item) => {
+    const blockNumber = item?.receipt?.blockNumber ?? item?.transaction?.blockNumber;
+
+    if (typeof blockNumber !== "string" || blockNumber.length === 0) {
+      return lowestBlock;
+    }
+
+    const parsedBlockNumber = BigInt(blockNumber);
+    if (lowestBlock === null || parsedBlockNumber < lowestBlock) {
+      return parsedBlockNumber;
+    }
+
+    return lowestBlock;
+  }, null);
 
   return {
     contracts,
-    deployer: normalizeNullableAddress(deployer, "broadcast deployer")
+    deployer: normalizeNullableAddress(deployer, "broadcast deployer"),
+    deploymentStartBlock:
+      deploymentStartBlock === null ? null : deploymentStartBlock.toString()
   };
 }
 
 export function buildDeploymentManifest({
   contracts,
   deployer,
+  deploymentStartBlock,
   safeAddress,
   usdcTokenAddress,
   protocolFeeBps,
@@ -260,6 +289,7 @@ export function buildDeploymentManifest({
     network: baseSepoliaNetwork,
     explorerUrl: normalizedExplorerUrl,
     deployedAt,
+    deploymentStartBlock: deploymentStartBlock ?? null,
     deployer: normalizedDeployer,
     owner,
     pendingOwner,
@@ -298,6 +328,10 @@ export function validateDeploymentManifest(manifest) {
     network: manifest.network,
     explorerUrl: normalizeExplorerUrl(manifest.explorerUrl),
     deployedAt: manifest.deployedAt ?? null,
+    deploymentStartBlock: normalizeNullableBlockNumber(
+      manifest.deploymentStartBlock,
+      "manifest deployment start block"
+    ),
     deployer: normalizeNullableAddress(manifest.deployer, "manifest deployer"),
     owner: normalizeNullableAddress(manifest.owner, "manifest owner"),
     pendingOwner: normalizeNullableAddress(

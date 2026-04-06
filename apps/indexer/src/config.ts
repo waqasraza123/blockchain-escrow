@@ -30,6 +30,34 @@ function parseNonNegativeInteger(name: string, defaultValue: number): number {
   return parsed;
 }
 
+function parseNonNegativeBigIntString(name: string, defaultValue: bigint): bigint {
+  const raw = process.env[name];
+
+  if (!raw) {
+    return defaultValue;
+  }
+
+  if (!/^[0-9]+$/u.test(raw)) {
+    throw new Error(`Invalid ${name}: expected non-negative integer, received ${raw}`);
+  }
+
+  return BigInt(raw);
+}
+
+function parseOptionalNonNegativeBigIntString(name: string): bigint | null {
+  const raw = process.env[name];
+
+  if (!raw) {
+    return null;
+  }
+
+  if (!/^[0-9]+$/u.test(raw)) {
+    throw new Error(`Invalid ${name}: expected non-negative integer, received ${raw}`);
+  }
+
+  return BigInt(raw);
+}
+
 function parseBoolean(name: string, defaultValue: boolean): boolean {
   const raw = process.env[name];
 
@@ -63,10 +91,12 @@ export interface IndexerConfig {
   readonly chainId: number;
   readonly cursorKey: string;
   readonly enableDriftChecks: boolean;
+  readonly endBlock: bigint | null;
   readonly finalityBuffer: number;
   readonly network: string;
   readonly pollIntervalMs: number;
   readonly port: number;
+  readonly rpcConcurrency: number;
   readonly runOnce: boolean;
   readonly startBlock: bigint;
 }
@@ -80,6 +110,10 @@ export function loadIndexerConfig(): IndexerConfig {
   }
 
   const network = process.env.INDEXER_NETWORK ?? manifest.network;
+  const defaultStartBlock =
+    manifest.deploymentStartBlock && /^[0-9]+$/u.test(manifest.deploymentStartBlock)
+      ? BigInt(manifest.deploymentStartBlock)
+      : 0n;
 
   return {
     baseRpcUrl: requireEnv("BASE_RPC_URL"),
@@ -87,11 +121,13 @@ export function loadIndexerConfig(): IndexerConfig {
     chainId,
     cursorKey: process.env.INDEXER_CURSOR_KEY ?? `release4:${network}`,
     enableDriftChecks: parseBoolean("INDEXER_ENABLE_DRIFT_CHECKS", true),
+    endBlock: parseOptionalNonNegativeBigIntString("INDEXER_END_BLOCK"),
     finalityBuffer: parseNonNegativeInteger("INDEXER_FINALITY_BUFFER", 0),
     network,
     pollIntervalMs: parsePositiveInteger("INDEXER_POLL_INTERVAL_MS", 15000),
     port: parsePositiveInteger("INDEXER_PORT", 4200),
+    rpcConcurrency: parsePositiveInteger("INDEXER_RPC_CONCURRENCY", 10),
     runOnce: parseBoolean("INDEXER_RUN_ONCE", false),
-    startBlock: BigInt(parseNonNegativeInteger("INDEXER_START_BLOCK", 0))
+    startBlock: parseNonNegativeBigIntString("INDEXER_START_BLOCK", defaultStartBlock)
   };
 }

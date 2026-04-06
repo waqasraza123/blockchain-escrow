@@ -1,9 +1,15 @@
 #!/usr/bin/env node
 
-import net from "node:net";
 import { spawn } from "node:child_process";
 
 import { loadLocalEnvironment, repoRoot } from "./local-env.mjs";
+import {
+  canConnect,
+  isDockerComposeServiceRunning,
+  probeDatabaseAuthentication,
+  resolveLocalDatabaseConnection,
+  waitForPort
+} from "./local-database.mjs";
 
 function runCommand(command, args, env) {
   return new Promise((resolve, reject) => {
@@ -27,103 +33,77 @@ function runCommand(command, args, env) {
   });
 }
 
-function parseDatabaseTarget(databaseUrl) {
-  let parsedUrl;
-
-  try {
-    parsedUrl = new URL(databaseUrl);
-  } catch (error) {
-    throw new Error(`Invalid DATABASE_URL: ${databaseUrl}`, { cause: error });
-  }
-
-  const port =
-    parsedUrl.port.length > 0
-      ? Number.parseInt(parsedUrl.port, 10)
-      : parsedUrl.protocol === "postgresql:"
-        ? 5432
-        : Number.NaN;
-
-  if (!parsedUrl.hostname || !Number.isInteger(port) || port <= 0) {
-    throw new Error(`Invalid DATABASE_URL host or port: ${databaseUrl}`);
-  }
-
-  return {
-    host: parsedUrl.hostname,
-    port
-  };
+function describeConnection(connection) {
+  return `${connection.host}:${connection.port}/${connection.database} as ${connection.username} (${connection.source})`;
 }
 
-function canConnect(host, port, timeoutMs) {
-  return new Promise((resolve) => {
-    const socket = new net.Socket();
-
-    const finish = (connected) => {
-      socket.destroy();
-      resolve(connected);
-    };
-
-    socket.setTimeout(timeoutMs);
-    socket.once("connect", () => finish(true));
-    socket.once("timeout", () => finish(false));
-    socket.once("error", () => finish(false));
-    socket.connect(port, host);
-  });
-}
-
-function isLocalHost(host) {
-  return host === "127.0.0.1" || host === "localhost" || host === "::1";
-}
-
-async function waitForPort(host, port, timeoutMs) {
-  const startedAt = Date.now();
-
-  while (Date.now() - startedAt < timeoutMs) {
-    if (await canConnect(host, port, 1000)) {
-      return;
-    }
-
-    await new Promise((resolve) => {
-      setTimeout(resolve, 1000);
-    });
-  }
-
-  throw new Error(`Timed out waiting for Postgres at ${host}:${port}`);
-}
-
-async function ensureDatabaseReachable(env) {
-  const databaseUrl = env.DATABASE_URL;
-  if (!databaseUrl) {
-    throw new Error("Missing DATABASE_URL after loading local environment");
-  }
-
-  const target = parseDatabaseTarget(databaseUrl);
-  if (await canConnect(target.host, target.port, 1000)) {
-    return target;
-  }
-
-  if (!isLocalHost(target.host)) {
-    throw new Error(
-      `Postgres is unreachable at ${target.host}:${target.port}. Point DATABASE_URL at a reachable database before running Release 4 local bootstrap.`
-    );
-  }
-
+async function startDockerPostgres(env, connection) {
   try {
     await runCommand("docker", ["compose", "up", "-d", "postgres"], env);
   } catch (error) {
     throw new Error(
-      `Postgres is unreachable at ${target.host}:${target.port} and docker compose could not start the local postgres service. Ensure Docker Desktop is running or point DATABASE_URL at a reachable database.`,
+      `Failed to start the repo-local Postgres service for ${describeConnection(connection)}. This usually means Docker is unavailable or another service already owns ${connection.host}:${connection.port}.`,
       { cause: error }
     );
   }
 
-  await waitForPort(target.host, target.port, 30000);
-  return target;
+  await waitForPort(connection.host, connection.port, 30000);
+}
+
+async function ensureDatabaseReady(env) {
+  const connection = resolveLocalDatabaseConnection(env);
+  env.DATABASE_URL = connection.databaseUrl;
+
+  const reachable = await canConnect(connection.host, connection.port, 1000);
+  const composeStatus =
+    connection.isLocalHost
+      ? await isDockerComposeServiceRunning("postgres", env, repoRoot)
+      : { available: false, running: false };
+
+  if (!reachable) {
+    if (!connection.isLocalHost) {
+      throw new Error(
+        `Postgres is unreachable at ${describeConnection(connection)}. Point DATABASE_URL or POSTGRES_* at a reachable database before running Release 4 local bootstrap.`
+      );
+    }
+
+    await startDockerPostgres(env, connection);
+  }
+
+  const authenticationProbe = await probeDatabaseAuthentication(connection, env);
+
+  if (authenticationProbe.status === "ok" || authenticationProbe.status === "unavailable") {
+    return connection;
+  }
+
+  if (!connection.isLocalHost) {
+    throw new Error(
+      `Postgres is reachable but authentication failed for ${describeConnection(connection)}.\n${authenticationProbe.detail}`
+    );
+  }
+
+  if (!composeStatus.running) {
+    await startDockerPostgres(env, connection);
+
+    const retryProbe = await probeDatabaseAuthentication(connection, env);
+    if (retryProbe.status === "ok" || retryProbe.status === "unavailable") {
+      return connection;
+    }
+
+    throw new Error(
+      `The repo-local Postgres service started, but authentication still failed for ${describeConnection(connection)}.\n${retryProbe.detail}\nCheck POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB, and DATABASE_URL for mismatches or a stale Postgres data volume.`
+    );
+  }
+
+  throw new Error(
+    `Postgres is reachable but authentication failed for ${describeConnection(connection)}.\n${authenticationProbe.detail}\nThe repo-local postgres container is already running, so the configured credentials likely do not match the running database.`
+  );
 }
 
 async function main() {
   const env = loadLocalEnvironment();
 
-  await ensureDatabaseReachable(env);
+  await ensureDatabaseReady(env);
   await runCommand("pnpm", ["db:migrate:deploy"], env);
   await runCommand("pnpm", ["db:migrate:status"], env);
 }

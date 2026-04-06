@@ -43,6 +43,7 @@ async function main() {
   const manifest = buildDeploymentManifest({
     contracts: broadcastDeployment.contracts,
     deployer: broadcastDeployment.deployer,
+    deploymentStartBlock: broadcastDeployment.deploymentStartBlock,
     safeAddress,
     usdcTokenAddress,
     protocolFeeBps,
