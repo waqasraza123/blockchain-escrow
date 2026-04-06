@@ -1,6 +1,7 @@
 {
   "chainId": 84532,
   "network": "base-sepolia",
+  "contractVersion": 1,
   "explorerUrl": "https://sepolia.basescan.org",
   "deployedAt": "2026-04-05T06:17:49.519Z",
   "deploymentStartBlock": "39797620",

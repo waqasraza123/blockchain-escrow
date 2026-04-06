@@ -29,6 +29,7 @@ export const contractNames = [
   "EscrowAgreement",
   "EscrowFactory"
 ];
+export const currentContractVersion = 2;
 
 export function parseCliArgs(argv) {
   const flags = {
@@ -85,6 +86,16 @@ export function parseProtocolFeeBps(value) {
 
   if (!Number.isInteger(parsed) || parsed < 0 || parsed > 10_000) {
     throw new Error(`Invalid protocol fee basis points value: ${value}`);
+  }
+
+  return parsed;
+}
+
+export function parseContractVersion(value) {
+  const parsed = Number.parseInt(String(value), 10);
+
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    throw new Error(`Invalid contract version value: ${value}`);
   }
 
   return parsed;
@@ -287,6 +298,7 @@ export function buildDeploymentManifest({
   return {
     chainId: baseSepoliaChainId,
     network: baseSepoliaNetwork,
+    contractVersion: currentContractVersion,
     explorerUrl: normalizedExplorerUrl,
     deployedAt,
     deploymentStartBlock: deploymentStartBlock ?? null,
@@ -326,6 +338,7 @@ export function validateDeploymentManifest(manifest) {
   return {
     chainId: manifest.chainId,
     network: manifest.network,
+    contractVersion: parseContractVersion(manifest.contractVersion ?? 1),
     explorerUrl: normalizeExplorerUrl(manifest.explorerUrl),
     deployedAt: manifest.deployedAt ?? null,
     deploymentStartBlock: normalizeNullableBlockNumber(

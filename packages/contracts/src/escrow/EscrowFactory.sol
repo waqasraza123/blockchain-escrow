@@ -5,6 +5,7 @@ import {EscrowAgreement} from "./EscrowAgreement.sol";
 
 interface IFactoryProtocolConfig {
     function createEscrowPaused() external view returns (bool);
+    function fundingPaused() external view returns (bool);
 }
 
 interface IFactoryEscrowAgreement {
@@ -24,9 +25,11 @@ contract EscrowFactory {
     }
 
     error AgreementInitializationFailed();
+    error AgreementFundingFailed();
     error AgreementNotFound(bytes32 dealId);
     error CreateEscrowPaused();
     error DealAlreadyExists(bytes32 dealId, address agreement);
+    error FundingPaused();
     error InvalidAgreementImplementation(address agreementImplementation);
     error InvalidProtocolConfig(address protocolConfig);
 
@@ -63,6 +66,23 @@ contract EscrowFactory {
     }
 
     function createAgreement(EscrowCreation calldata creation) external returns (address agreementAddress) {
+        agreementAddress = _createAgreement(creation);
+    }
+
+    function createAndFundAgreement(EscrowCreation calldata creation) external returns (address agreementAddress) {
+        if (IFactoryProtocolConfig(protocolConfig).fundingPaused()) {
+            revert FundingPaused();
+        }
+
+        agreementAddress = _createAgreement(creation);
+
+        try EscrowAgreement(agreementAddress).fund() {}
+        catch {
+            revert AgreementFundingFailed();
+        }
+    }
+
+    function _createAgreement(EscrowCreation calldata creation) private returns (address agreementAddress) {
         if (IFactoryProtocolConfig(protocolConfig).createEscrowPaused()) {
             revert CreateEscrowPaused();
         }
@@ -176,9 +196,12 @@ contract EscrowFactory {
             return false;
         }
 
-        (bool success, bytes memory data) =
+        (bool createPauseSuccess, bytes memory createPauseData) =
             protocolConfigAddress.staticcall(abi.encodeWithSelector(IFactoryProtocolConfig.createEscrowPaused.selector));
+        (bool fundingPauseSuccess, bytes memory fundingPauseData) =
+            protocolConfigAddress.staticcall(abi.encodeWithSelector(IFactoryProtocolConfig.fundingPaused.selector));
 
-        return success && data.length == 32;
+        return
+            createPauseSuccess && createPauseData.length == 32 && fundingPauseSuccess && fundingPauseData.length == 32;
     }
 }

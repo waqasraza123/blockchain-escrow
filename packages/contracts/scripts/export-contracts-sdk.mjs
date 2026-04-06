@@ -133,6 +133,7 @@ function buildGeneratedSource(artifacts, deployments) {
     "export interface DeploymentManifest {",
     "  readonly chainId: number;",
     "  readonly network: string;",
+    "  readonly contractVersion: number;",
     "  readonly explorerUrl: string;",
     "  readonly deployedAt: string | null;",
     "  readonly deploymentStartBlock: string | null;",
@@ -163,6 +164,10 @@ function buildGeneratedSource(artifacts, deployments) {
     "",
     "export function getDeploymentManifestByChainId(chainId: number): DeploymentManifest | null {",
     "  return deploymentManifestsByChainId.get(chainId) ?? null;",
+    "}",
+    "",
+    "export function deploymentSupportsCreateAndFund(manifest: DeploymentManifest): boolean {",
+    "  return manifest.contractVersion >= 2;",
     "}",
     ""
   ].join("\n");

@@ -8,12 +8,55 @@ import {TokenAllowlist} from "../src/core/TokenAllowlist.sol";
 import {EscrowAgreement} from "../src/escrow/EscrowAgreement.sol";
 import {EscrowFactory} from "../src/escrow/EscrowFactory.sol";
 
+contract MockFundingErc20 {
+    mapping(address owner => mapping(address spender => uint256 allowanceAmount)) private allowances;
+    mapping(address account => uint256 balance) private balances;
+
+    function approve(address spender, uint256 amount) external returns (bool) {
+        allowances[msg.sender][spender] = amount;
+        return true;
+    }
+
+    function balanceOf(address account) external view returns (uint256) {
+        return balances[account];
+    }
+
+    function mint(address account, uint256 amount) external {
+        balances[account] += amount;
+    }
+
+    function transferFrom(address from, address to, uint256 amount) external returns (bool) {
+        uint256 availableAllowance = allowances[from][msg.sender];
+        uint256 availableBalance = balances[from];
+
+        require(availableAllowance >= amount, "insufficient allowance");
+        require(availableBalance >= amount, "insufficient balance");
+
+        allowances[from][msg.sender] = availableAllowance - amount;
+        balances[from] = availableBalance - amount;
+        balances[to] += amount;
+
+        return true;
+    }
+}
+
 contract EscrowFactoryActor {
     function createAgreement(EscrowFactory factory, EscrowFactory.EscrowCreation calldata creation)
         external
         returns (address)
     {
         return factory.createAgreement(creation);
+    }
+
+    function createAndFundAgreement(EscrowFactory factory, EscrowFactory.EscrowCreation calldata creation)
+        external
+        returns (address)
+    {
+        return factory.createAndFundAgreement(creation);
+    }
+
+    function approve(MockFundingErc20 token, address spender, uint256 amount) external {
+        token.approve(spender, amount);
     }
 }
 
@@ -25,10 +68,10 @@ contract EscrowFactoryTest {
     EscrowAgreement private agreementImplementation;
     EscrowFactory private factory;
     EscrowFactoryActor private actor;
+    MockFundingErc20 private fundingToken;
 
     address private constant BUYER = address(0x5001);
     address private constant SELLER = address(0x5002);
-    address private constant SETTLEMENT_TOKEN = address(0x5003);
     address private constant ARBITRATOR = address(0x5004);
     bytes32 private constant DEAL_ID = keccak256("factory-deal-1");
     bytes32 private constant DEAL_VERSION_HASH = keccak256("factory-deal-version-1");
@@ -43,8 +86,9 @@ contract EscrowFactoryTest {
         feeVault = new FeeVault();
         agreementImplementation = new EscrowAgreement();
         actor = new EscrowFactoryActor();
+        fundingToken = new MockFundingErc20();
 
-        tokenAllowlist.setTokenAllowed(SETTLEMENT_TOKEN, true);
+        tokenAllowlist.setTokenAllowed(address(fundingToken), true);
         arbitratorRegistry.setArbitratorApproved(ARBITRATOR, true);
         protocolConfig.setTokenAllowlist(address(tokenAllowlist));
         protocolConfig.setArbitratorRegistry(address(arbitratorRegistry));
@@ -78,13 +122,32 @@ contract EscrowFactoryTest {
         require(agreement.feeVault() == address(feeVault), "agreement fee vault mismatch");
         require(agreement.buyer() == BUYER, "agreement buyer mismatch");
         require(agreement.seller() == SELLER, "agreement seller mismatch");
-        require(agreement.settlementToken() == SETTLEMENT_TOKEN, "agreement token mismatch");
+        require(agreement.settlementToken() == address(fundingToken), "agreement token mismatch");
         require(agreement.arbitrator() == ARBITRATOR, "agreement arbitrator mismatch");
         require(agreement.dealId() == DEAL_ID, "agreement deal id mismatch");
         require(agreement.dealVersionHash() == DEAL_VERSION_HASH, "agreement version hash mismatch");
         require(agreement.totalAmount() == TOTAL_AMOUNT, "agreement total amount mismatch");
         require(agreement.milestoneCount() == MILESTONE_COUNT, "agreement milestone count mismatch");
         require(agreement.protocolFeeBps() == PROTOCOL_FEE_BPS, "agreement fee bps mismatch");
+        require(!agreement.funded(), "agreement funded mismatch");
+    }
+
+    function testCreatesAndFundsAgreementAtomically() external {
+        EscrowFactory.EscrowCreation memory creation = _defaultCreation();
+        creation.buyer = address(actor);
+        address predictedAgreement = factory.predictAgreementAddress(creation.dealId, creation.dealVersionHash);
+
+        fundingToken.mint(address(actor), TOTAL_AMOUNT);
+        actor.approve(fundingToken, predictedAgreement, TOTAL_AMOUNT);
+
+        address agreementAddress = actor.createAndFundAgreement(factory, creation);
+        EscrowAgreement agreement = EscrowAgreement(agreementAddress);
+
+        require(agreementAddress == predictedAgreement, "predicted funded agreement mismatch");
+        require(agreement.funded(), "agreement should be funded");
+        require(agreement.fundedAt() > 0, "agreement funded at mismatch");
+        require(fundingToken.balanceOf(address(actor)) == 0, "buyer token balance mismatch");
+        require(fundingToken.balanceOf(agreementAddress) == TOTAL_AMOUNT, "agreement token balance mismatch");
     }
 
     function testRejectsDuplicateDealCreation() external {
@@ -99,6 +162,17 @@ contract EscrowFactoryTest {
         protocolConfig.setCreateEscrowPaused(true);
 
         _expectCustomError(_callCreateAgreement(_defaultCreation()), EscrowFactory.CreateEscrowPaused.selector);
+    }
+
+    function testRejectsCreateAndFundWhenFundingIsPausedOrFundingFails() external {
+        EscrowFactory.EscrowCreation memory creation = _defaultCreation();
+        creation.buyer = address(actor);
+
+        protocolConfig.setFundingPaused(true);
+        _expectCustomError(_callCreateAndFundAgreement(creation), EscrowFactory.FundingPaused.selector);
+
+        protocolConfig.setFundingPaused(false);
+        _expectCustomError(_callCreateAndFundAgreement(creation), EscrowFactory.AgreementFundingFailed.selector);
     }
 
     function testRejectsMissingAgreementLookup() external view {
@@ -136,11 +210,11 @@ contract EscrowFactoryTest {
         require(!factory.hasAgreement(bytes32(uint256(123))), "unexpected deal found");
     }
 
-    function _defaultCreation() private pure returns (EscrowFactory.EscrowCreation memory) {
+    function _defaultCreation() private view returns (EscrowFactory.EscrowCreation memory) {
         return EscrowFactory.EscrowCreation({
             buyer: BUYER,
             seller: SELLER,
-            settlementToken: SETTLEMENT_TOKEN,
+            settlementToken: address(fundingToken),
             arbitrator: ARBITRATOR,
             dealId: DEAL_ID,
             dealVersionHash: DEAL_VERSION_HASH,
@@ -151,6 +225,14 @@ contract EscrowFactoryTest {
 
     function _callCreateAgreement(EscrowFactory.EscrowCreation memory creation) private returns (bytes memory) {
         try actor.createAgreement(factory, creation) returns (address) {
+            revert("expected revert");
+        } catch (bytes memory reason) {
+            return reason;
+        }
+    }
+
+    function _callCreateAndFundAgreement(EscrowFactory.EscrowCreation memory creation) private returns (bytes memory) {
+        try actor.createAndFundAgreement(factory, creation) returns (address) {
             revert("expected revert");
         } catch (bytes memory reason) {
             return reason;

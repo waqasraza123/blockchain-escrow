@@ -4,6 +4,7 @@ pragma solidity 0.8.28;
 interface IAgreementProtocolConfig {
     function arbitratorRegistry() external view returns (address);
     function feeVault() external view returns (address);
+    function fundingPaused() external view returns (bool);
     function protocolFeeBps() external view returns (uint16);
     function tokenAllowlist() external view returns (address);
 }
@@ -14,6 +15,10 @@ interface IAgreementTokenAllowlist {
 
 interface IAgreementArbitratorRegistry {
     function isApprovedArbitrator(address arbitrator) external view returns (bool);
+}
+
+interface IAgreementErc20 {
+    function transferFrom(address from, address to, uint256 value) external returns (bool);
 }
 
 contract EscrowAgreement {
@@ -37,9 +42,13 @@ contract EscrowAgreement {
     }
 
     error AlreadyInitialized();
+    error AlreadyFunded();
     error ArbitratorNotApproved(address arbitrator);
+    error Erc20TransferFromFailed(address token, address from, address to, uint256 amount);
     error ArbitratorRegistryNotSet();
     error FeeVaultNotSet();
+    error FundingPaused();
+    error FundingUnauthorized(address caller);
     error IdenticalParties(address buyer, address seller);
     error InvalidBuyer(address buyer);
     error InvalidDealId(bytes32 dealId);
@@ -66,8 +75,16 @@ contract EscrowAgreement {
         uint256 totalAmount,
         uint32 milestoneCount
     );
+    event AgreementFunded(
+        bytes32 indexed dealId,
+        bytes32 indexed dealVersionHash,
+        address indexed payer,
+        address settlementToken,
+        uint256 amount
+    );
 
     bool public initialized;
+    bool public funded;
     address public factory;
     address public protocolConfig;
     address public feeVault;
@@ -80,6 +97,7 @@ contract EscrowAgreement {
     uint256 public totalAmount;
     uint32 public milestoneCount;
     uint16 public protocolFeeBps;
+    uint64 public fundedAt;
     uint64 public initializedAt;
 
     function initialize(AgreementInitialization calldata initialization) external {
@@ -122,6 +140,27 @@ contract EscrowAgreement {
             totalAmount,
             milestoneCount
         );
+    }
+
+    function fund() external {
+        if (msg.sender != factory && msg.sender != buyer) {
+            revert FundingUnauthorized(msg.sender);
+        }
+
+        if (funded) {
+            revert AlreadyFunded();
+        }
+
+        if (IAgreementProtocolConfig(protocolConfig).fundingPaused()) {
+            revert FundingPaused();
+        }
+
+        _safeTransferFrom(settlementToken, buyer, address(this), totalAmount);
+
+        funded = true;
+        fundedAt = uint64(block.timestamp);
+
+        emit AgreementFunded(dealId, dealVersionHash, buyer, settlementToken, totalAmount);
     }
 
     function _validateCoreInitialization(AgreementInitialization calldata initialization) private pure {
@@ -199,6 +238,15 @@ contract EscrowAgreement {
                 && !IAgreementArbitratorRegistry(protocolSnapshot.arbitratorRegistry).isApprovedArbitrator(arbitratorAddress)
         ) {
             revert ArbitratorNotApproved(arbitratorAddress);
+        }
+    }
+
+    function _safeTransferFrom(address token, address from, address to, uint256 amount) private {
+        (bool success, bytes memory returnData) =
+            token.call(abi.encodeCall(IAgreementErc20.transferFrom, (from, to, amount)));
+
+        if (!success || (returnData.length != 0 && !abi.decode(returnData, (bool)))) {
+            revert Erc20TransferFromFailed(token, from, to, amount);
         }
     }
 }
