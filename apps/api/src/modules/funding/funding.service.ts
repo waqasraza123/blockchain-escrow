@@ -5,6 +5,7 @@ import {
   getDeploymentManifestByChainId
 } from "@blockchain-escrow/contracts-sdk";
 import type {
+  ChainCursorRecord,
   DealVersionFileRecord,
   DealVersionMilestoneRecord,
   DealVersionPartyRecord,
@@ -61,12 +62,18 @@ import {
   type AuthenticatedSessionContext
 } from "../auth/authenticated-session.service";
 import {
+  FUNDING_RECONCILIATION_CONFIGURATION,
+  type FundingReconciliationConfiguration,
+  resolveFundingReconciliationCursorKey
+} from "./funding.tokens";
+import {
   buildCanonicalDealId,
   buildCanonicalDealVersionHash,
   normalizeApiChainId
 } from "../drafts/deal-identity";
 import {
   buildFundingTransactionObservation,
+  resolveFundingTransactionStalePendingState,
   resolveFundingTransactionState
 } from "./funding-tracking";
 
@@ -98,6 +105,8 @@ interface FundingComputationContext extends FundingAccessContext {
   manifest: NonNullable<ReturnType<typeof getDeploymentManifestByChainId>>;
   milestones: DealVersionMilestoneRecord[];
   parties: DealVersionPartyRecord[];
+  release4ChainCursor: ChainCursorRecord | null;
+  staleEvaluatedAt: string;
 }
 
 function normalizeAddress(value: string): `0x${string}` {
@@ -121,7 +130,9 @@ export class FundingService {
     private readonly release1Repositories: Release1Repositories,
     @Inject(RELEASE4_REPOSITORIES)
     private readonly release4Repositories: Release4Repositories,
-    private readonly authenticatedSessionService: AuthenticatedSessionService
+    private readonly authenticatedSessionService: AuthenticatedSessionService,
+    @Inject(FUNDING_RECONCILIATION_CONFIGURATION)
+    private readonly fundingReconciliationConfiguration: FundingReconciliationConfiguration
   ) {}
 
   async getFundingPreparation(
@@ -140,7 +151,7 @@ export class FundingService {
       parsed.data.dealVersionId,
       requestMetadata
     );
-    const context = await this.buildFundingContext(access);
+    const context = await this.buildFundingContext(access, new Date().toISOString());
 
     await this.syncDraftActivation(access.draft, context.linkedAgreement, new Date().toISOString());
 
@@ -172,7 +183,8 @@ export class FundingService {
       requestMetadata,
       "ADMIN"
     );
-    const context = await this.buildFundingContext(access);
+    const now = new Date().toISOString();
+    const context = await this.buildFundingContext(access, now);
     const preparation = await this.buildFundingPreparationSummary(context);
 
     if (context.linkedAgreement) {
@@ -196,7 +208,6 @@ export class FundingService {
       throw new ConflictException("funding transaction is already tracked");
     }
 
-    const now = new Date().toISOString();
     const fundingTransaction = await this.release1Repositories.fundingTransactions.create({
       chainId: context.chainId,
       dealVersionId: access.version.id,
@@ -264,7 +275,7 @@ export class FundingService {
       parsed.data.dealVersionId,
       requestMetadata
     );
-    const context = await this.buildFundingContext(access);
+    const context = await this.buildFundingContext(access, new Date().toISOString());
 
     await this.syncDraftActivation(access.draft, context.linkedAgreement, new Date().toISOString());
 
@@ -281,7 +292,8 @@ export class FundingService {
   }
 
   private async buildFundingContext(
-    access: FundingAccessContext
+    access: FundingAccessContext,
+    staleEvaluatedAt: string
   ): Promise<FundingComputationContext> {
     const [parties, milestones, fileLinks, acceptances, latestVersion, draftParties] =
       await Promise.all([
@@ -308,11 +320,21 @@ export class FundingService {
       milestones,
       files
     );
+    const release4CursorKey = resolveFundingReconciliationCursorKey(
+      this.fundingReconciliationConfiguration,
+      chainId
+    );
     const [agreements, fundingTransactions, indexedTransactions] = await Promise.all([
       this.release4Repositories.escrowAgreements.listByChainId(chainId),
       this.release1Repositories.fundingTransactions.listByDealVersionId(access.version.id),
       this.release4Repositories.indexedTransactions.listByChainId(chainId)
     ]);
+    const release4ChainCursor = release4CursorKey
+      ? await this.release4Repositories.chainCursors.findByChainIdAndCursorKey(
+          chainId,
+          release4CursorKey
+        )
+      : null;
     const linkedAgreement = agreements.find((agreement) => agreement.dealId === dealId) ?? null;
 
     return {
@@ -340,7 +362,9 @@ export class FundingService {
       linkedAgreement,
       manifest,
       milestones,
-      parties
+      parties,
+      release4ChainCursor,
+      staleEvaluatedAt
     };
   }
 
@@ -552,6 +576,16 @@ export class FundingService {
         context.agreementsByCreatedTransactionHash.get(record.transactionHash) ?? null
     });
     const observation = buildFundingTransactionObservation(indexedTransaction);
+    const stalePendingState = resolveFundingTransactionStalePendingState({
+      currentStatus: resolvedState.status,
+      evaluatedAt: context.staleEvaluatedAt,
+      fundingTransaction: record,
+      indexerFreshnessTtlSeconds:
+        this.fundingReconciliationConfiguration.indexerFreshnessTtlSeconds,
+      pendingStaleAfterSeconds:
+        this.fundingReconciliationConfiguration.pendingStaleAfterSeconds,
+      release4ChainCursor: context.release4ChainCursor
+    });
     const supersededByTransaction =
       record.supersededByFundingTransactionId
         ? context.fundingTransactionsById.get(record.supersededByFundingTransactionId) ?? null
@@ -569,6 +603,9 @@ export class FundingService {
       indexedExecutionStatus: observation.indexedExecutionStatus,
       matchesTrackedVersion: resolvedState.matchesTrackedVersion,
       organizationId: record.organizationId,
+      stalePending: stalePendingState.stalePending,
+      stalePendingAt: stalePendingState.stalePendingAt,
+      stalePendingEvaluation: stalePendingState.stalePendingEvaluation,
       status: resolvedState.status,
       submittedAt: record.submittedAt,
       submittedByUserId: record.submittedByUserId,

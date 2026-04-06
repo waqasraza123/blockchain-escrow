@@ -8,6 +8,7 @@ import { privateKeyToAccount } from "viem/accounts";
 import { AuthenticatedSessionService } from "../src/modules/auth/authenticated-session.service";
 import { buildCanonicalDealId } from "../src/modules/drafts/deal-identity";
 import { DraftsService } from "../src/modules/drafts/drafts.service";
+import type { FundingReconciliationConfiguration } from "../src/modules/funding/funding.tokens";
 import {
   authConfiguration,
   FakeSessionTokenService,
@@ -22,6 +23,30 @@ const counterpartyAccount = privateKeyToAccount(
 const alternateCounterpartyAccount = privateKeyToAccount(
   "0x0dbbe8d4c1fdb23f4d4cf8f3668a5985bce4a35d7473f2c452ecf72edb5d2d57"
 );
+const fundingReconciliationConfiguration: FundingReconciliationConfiguration = {
+  indexerFreshnessTtlSeconds: 300,
+  pendingStaleAfterSeconds: 3600,
+  release4CursorKeyOverride: "release4:base-sepolia"
+};
+
+function isoFromNow(offsetSeconds: number): string {
+  return new Date(Date.now() + offsetSeconds * 1000).toISOString();
+}
+
+async function upsertRelease4Cursor(
+  release4Repositories: InMemoryRelease4Repositories,
+  updatedAt: string
+) {
+  await release4Repositories.chainCursors.upsert({
+    chainId: 84532,
+    cursorKey: fundingReconciliationConfiguration.release4CursorKeyOverride ?? "release4:base-sepolia",
+    lastProcessedBlockHash:
+      "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    lastProcessedBlockNumber: "100",
+    nextBlockNumber: "101",
+    updatedAt
+  });
+}
 
 async function seedOrganizationMembership(
   repositories: InMemoryRelease1Repositories,
@@ -78,7 +103,8 @@ function createDraftsService() {
     draftsService: new DraftsService(
       repositories,
       release4Repositories,
-      authenticatedSessionService
+      authenticatedSessionService,
+      fundingReconciliationConfiguration
     ),
     repositories,
     release4Repositories,
@@ -325,6 +351,10 @@ test("drafts service creates a draft, links template/counterparty, and lists it"
   assert.equal(created.draft.escrow, null);
   assert.equal(created.draft.funding.trackedTransactionCount, 0);
   assert.equal(created.draft.funding.latestStatus, null);
+  assert.equal(created.draft.funding.latestStalePending, null);
+  assert.equal(created.draft.funding.latestStalePendingAt, null);
+  assert.equal(created.draft.funding.latestStalePendingEvaluation, null);
+  assert.equal(created.draft.funding.stalePendingTransactionCount, 0);
   assert.equal(created.parties.length, 2);
   assert.equal(created.parties[0]?.role, "BUYER");
   assert.equal(created.parties[1]?.counterpartyId, "counterparty-1");
@@ -343,6 +373,7 @@ test("drafts service creates a draft, links template/counterparty, and lists it"
   assert.equal(listed.drafts[0]?.latestVersion, null);
   assert.equal(listed.drafts[0]?.draft.escrow, null);
   assert.equal(listed.drafts[0]?.draft.funding.trackedTransactionCount, 0);
+  assert.equal(listed.drafts[0]?.draft.funding.stalePendingTransactionCount, 0);
 });
 
 test("drafts service creates immutable version snapshots with milestones and files", async () => {
@@ -1049,15 +1080,77 @@ test("drafts service exposes tracked funding progress on detail responses", asyn
   assert.equal(detail.draft.funding.latestIndexedBlockNumber, null);
   assert.equal(detail.draft.funding.latestIndexedExecutionStatus, null);
   assert.equal(detail.draft.funding.latestStatus, "PENDING");
+  assert.equal(detail.draft.funding.latestStalePending, null);
+  assert.equal(detail.draft.funding.latestStalePendingAt, null);
+  assert.equal(
+    detail.draft.funding.latestStalePendingEvaluation,
+    "INDEXER_CURSOR_MISSING"
+  );
+  assert.equal(detail.draft.funding.stalePendingTransactionCount, 0);
   assert.equal(detail.draft.funding.latestSubmittedAt, "2026-04-06T12:00:00.000Z");
   assert.equal(detail.versions[0]?.fundingTransactions.length, 1);
   assert.equal(detail.versions[0]?.fundingTransactions[0]?.status, "PENDING");
   assert.equal(detail.versions[0]?.fundingTransactions[0]?.indexedAt, null);
   assert.equal(detail.versions[0]?.fundingTransactions[0]?.indexedBlockNumber, null);
   assert.equal(detail.versions[0]?.fundingTransactions[0]?.indexedExecutionStatus, null);
+  assert.equal(detail.versions[0]?.fundingTransactions[0]?.stalePending, null);
+  assert.equal(detail.versions[0]?.fundingTransactions[0]?.stalePendingAt, null);
+  assert.equal(
+    detail.versions[0]?.fundingTransactions[0]?.stalePendingEvaluation,
+    "INDEXER_CURSOR_MISSING"
+  );
   assert.equal(
     detail.versions[0]?.fundingTransactions[0]?.transactionHash,
     "0x1212121212121212121212121212121212121212121212121212121212121212"
+  );
+});
+
+test("drafts service exposes stale pending funding metadata when the release4 cursor is fresh", async () => {
+  const { draftsService, release4Repositories, repositories, sessionTokenService } =
+    createDraftsService();
+  const actor = await seedAuthenticatedActor(repositories, sessionTokenService);
+  const seeded = await seedDraftVersionScenario(draftsService, repositories, actor);
+
+  await repositories.fundingTransactions.create({
+    chainId: 84532,
+    dealVersionId: seeded.version.version.id,
+    draftDealId: seeded.draft.draft.id,
+    id: "funding-tx-stale-detail",
+    organizationId: "org-1",
+    submittedAt: isoFromNow(-3900),
+    submittedByUserId: actor.userId,
+    submittedWalletAddress: actor.walletAddress,
+    submittedWalletId: actor.walletId,
+    supersededAt: null,
+    supersededByFundingTransactionId: null,
+    transactionHash:
+      "0x6767676767676767676767676767676767676767676767676767676767676767"
+  });
+  await upsertRelease4Cursor(release4Repositories, isoFromNow(-60));
+
+  const detail = await draftsService.getDraft(
+    {
+      draftDealId: seeded.draft.draft.id,
+      organizationId: "org-1"
+    },
+    {
+      cookieHeader: actor.cookieHeader,
+      ipAddress: "127.0.0.1",
+      userAgent: "test-agent"
+    }
+  );
+
+  assert.equal(detail.draft.funding.latestStatus, "PENDING");
+  assert.equal(detail.draft.funding.latestStalePending, true);
+  assert.ok(detail.draft.funding.latestStalePendingAt);
+  assert.equal(detail.draft.funding.latestStalePendingEvaluation, "READY");
+  assert.equal(detail.draft.funding.stalePendingTransactionCount, 1);
+  assert.equal(detail.versions[0]?.fundingTransactions[0]?.status, "PENDING");
+  assert.equal(detail.versions[0]?.fundingTransactions[0]?.stalePending, true);
+  assert.ok(detail.versions[0]?.fundingTransactions[0]?.stalePendingAt);
+  assert.equal(
+    detail.versions[0]?.fundingTransactions[0]?.stalePendingEvaluation,
+    "READY"
   );
 });
 
@@ -1113,6 +1206,9 @@ test("drafts service exposes superseded tracked funding submissions on detail re
   assert.equal(detail.draft.funding.latestStatus, "PENDING");
   assert.equal(detail.versions[0]?.fundingTransactions[0]?.status, "PENDING");
   assert.equal(detail.versions[0]?.fundingTransactions[1]?.status, "SUPERSEDED");
+  assert.equal(detail.versions[0]?.fundingTransactions[1]?.stalePending, false);
+  assert.equal(detail.versions[0]?.fundingTransactions[1]?.stalePendingAt, null);
+  assert.equal(detail.versions[0]?.fundingTransactions[1]?.stalePendingEvaluation, null);
   assert.equal(
     detail.versions[0]?.fundingTransactions[1]?.supersededByFundingTransactionId,
     "funding-tx-5"
@@ -1182,9 +1278,16 @@ test("drafts service exposes failed tracked funding progress from indexed revert
   assert.equal(detail.draft.funding.latestIndexedBlockNumber, "13");
   assert.equal(detail.draft.funding.latestIndexedExecutionStatus, "REVERTED");
   assert.equal(detail.draft.funding.latestStatus, "FAILED");
+  assert.equal(detail.draft.funding.latestStalePending, false);
+  assert.equal(detail.draft.funding.latestStalePendingAt, null);
+  assert.equal(detail.draft.funding.latestStalePendingEvaluation, null);
+  assert.equal(detail.draft.funding.stalePendingTransactionCount, 0);
   assert.equal(detail.versions[0]?.fundingTransactions[0]?.status, "FAILED");
   assert.equal(detail.versions[0]?.fundingTransactions[0]?.agreementAddress, null);
   assert.equal(detail.versions[0]?.fundingTransactions[0]?.indexedAt, "2026-04-06T12:11:00.000Z");
   assert.equal(detail.versions[0]?.fundingTransactions[0]?.indexedBlockNumber, "13");
   assert.equal(detail.versions[0]?.fundingTransactions[0]?.indexedExecutionStatus, "REVERTED");
+  assert.equal(detail.versions[0]?.fundingTransactions[0]?.stalePending, false);
+  assert.equal(detail.versions[0]?.fundingTransactions[0]?.stalePendingAt, null);
+  assert.equal(detail.versions[0]?.fundingTransactions[0]?.stalePendingEvaluation, null);
 });

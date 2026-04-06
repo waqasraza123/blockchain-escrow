@@ -10,6 +10,7 @@ import { AuthenticatedSessionService } from "../src/modules/auth/authenticated-s
 import { buildCanonicalDealId } from "../src/modules/drafts/deal-identity";
 import { DraftsService } from "../src/modules/drafts/drafts.service";
 import { FundingService } from "../src/modules/funding/funding.service";
+import type { FundingReconciliationConfiguration } from "../src/modules/funding/funding.tokens";
 import {
   authConfiguration,
   FakeSessionTokenService,
@@ -21,6 +22,30 @@ import { InMemoryRelease4Repositories } from "./helpers/in-memory-release4-repos
 const counterpartyAccount = privateKeyToAccount(
   "0x8b3a350cf5c34c9194ca7a545d6a76fc4d6f8d4894d3e9d2046df1d5c8d14d14"
 );
+const fundingReconciliationConfiguration: FundingReconciliationConfiguration = {
+  indexerFreshnessTtlSeconds: 300,
+  pendingStaleAfterSeconds: 3600,
+  release4CursorKeyOverride: "release4:base-sepolia"
+};
+
+function isoFromNow(offsetSeconds: number): string {
+  return new Date(Date.now() + offsetSeconds * 1000).toISOString();
+}
+
+async function upsertRelease4Cursor(
+  release4Repositories: InMemoryRelease4Repositories,
+  updatedAt: string
+) {
+  await release4Repositories.chainCursors.upsert({
+    chainId: 84532,
+    cursorKey: fundingReconciliationConfiguration.release4CursorKeyOverride ?? "release4:base-sepolia",
+    lastProcessedBlockHash:
+      "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    lastProcessedBlockNumber: "100",
+    nextBlockNumber: "101",
+    updatedAt
+  });
+}
 
 async function seedOrganizationMembership(
   repositories: InMemoryRelease1Repositories,
@@ -75,12 +100,14 @@ function createServices() {
     draftsService: new DraftsService(
       release1Repositories,
       release4Repositories,
-      authenticatedSessionService
+      authenticatedSessionService,
+      fundingReconciliationConfiguration
     ),
     fundingService: new FundingService(
       release1Repositories,
       release4Repositories,
-      authenticatedSessionService
+      authenticatedSessionService,
+      fundingReconciliationConfiguration
     ),
     release1Repositories,
     release4Repositories,
@@ -448,6 +475,132 @@ test("funding service records and lists pending funding transactions", async () 
   assert.equal(listed.fundingTransactions[0]?.indexedAt, null);
   assert.equal(listed.fundingTransactions[0]?.indexedBlockNumber, null);
   assert.equal(listed.fundingTransactions[0]?.indexedExecutionStatus, null);
+  assert.equal(listed.fundingTransactions[0]?.stalePending, null);
+  assert.equal(listed.fundingTransactions[0]?.stalePendingAt, null);
+  assert.equal(
+    listed.fundingTransactions[0]?.stalePendingEvaluation,
+    "INDEXER_CURSOR_MISSING"
+  );
+});
+
+test("funding service marks pending tracked transactions as not stale when the indexer cursor is fresh", async () => {
+  const seeded = await seedFundingScenario();
+
+  await seeded.services.release1Repositories.fundingTransactions.create({
+    chainId: 84532,
+    dealVersionId: seeded.version.version.id,
+    draftDealId: seeded.draft.draft.id,
+    id: "funding-tx-fresh",
+    organizationId: "org-1",
+    submittedAt: isoFromNow(-1800),
+    submittedByUserId: seeded.actor.userId,
+    submittedWalletAddress: seeded.actor.walletAddress,
+    submittedWalletId: seeded.actor.walletId,
+    supersededAt: null,
+    supersededByFundingTransactionId: null,
+    transactionHash:
+      "0x3131313131313131313131313131313131313131313131313131313131313131"
+  });
+  await upsertRelease4Cursor(seeded.services.release4Repositories, isoFromNow(-60));
+
+  const listed = await seeded.services.fundingService.listFundingTransactions(
+    {
+      dealVersionId: seeded.version.version.id,
+      draftDealId: seeded.draft.draft.id,
+      organizationId: "org-1"
+    },
+    {
+      cookieHeader: seeded.actor.cookieHeader,
+      ipAddress: "127.0.0.1",
+      userAgent: "test-agent"
+    }
+  );
+
+  assert.equal(listed.fundingTransactions[0]?.status, "PENDING");
+  assert.equal(listed.fundingTransactions[0]?.stalePending, false);
+  assert.ok(listed.fundingTransactions[0]?.stalePendingAt);
+  assert.equal(listed.fundingTransactions[0]?.stalePendingEvaluation, "READY");
+});
+
+test("funding service marks pending tracked transactions as stale when the indexer cursor is fresh and the threshold has passed", async () => {
+  const seeded = await seedFundingScenario();
+
+  await seeded.services.release1Repositories.fundingTransactions.create({
+    chainId: 84532,
+    dealVersionId: seeded.version.version.id,
+    draftDealId: seeded.draft.draft.id,
+    id: "funding-tx-stale",
+    organizationId: "org-1",
+    submittedAt: isoFromNow(-3900),
+    submittedByUserId: seeded.actor.userId,
+    submittedWalletAddress: seeded.actor.walletAddress,
+    submittedWalletId: seeded.actor.walletId,
+    supersededAt: null,
+    supersededByFundingTransactionId: null,
+    transactionHash:
+      "0x3232323232323232323232323232323232323232323232323232323232323232"
+  });
+  await upsertRelease4Cursor(seeded.services.release4Repositories, isoFromNow(-60));
+
+  const listed = await seeded.services.fundingService.listFundingTransactions(
+    {
+      dealVersionId: seeded.version.version.id,
+      draftDealId: seeded.draft.draft.id,
+      organizationId: "org-1"
+    },
+    {
+      cookieHeader: seeded.actor.cookieHeader,
+      ipAddress: "127.0.0.1",
+      userAgent: "test-agent"
+    }
+  );
+
+  assert.equal(listed.fundingTransactions[0]?.status, "PENDING");
+  assert.equal(listed.fundingTransactions[0]?.stalePending, true);
+  assert.ok(listed.fundingTransactions[0]?.stalePendingAt);
+  assert.equal(listed.fundingTransactions[0]?.stalePendingEvaluation, "READY");
+});
+
+test("funding service defers stale evaluation when the indexer cursor is stale", async () => {
+  const seeded = await seedFundingScenario();
+
+  await seeded.services.release1Repositories.fundingTransactions.create({
+    chainId: 84532,
+    dealVersionId: seeded.version.version.id,
+    draftDealId: seeded.draft.draft.id,
+    id: "funding-tx-cursor-stale",
+    organizationId: "org-1",
+    submittedAt: isoFromNow(-3900),
+    submittedByUserId: seeded.actor.userId,
+    submittedWalletAddress: seeded.actor.walletAddress,
+    submittedWalletId: seeded.actor.walletId,
+    supersededAt: null,
+    supersededByFundingTransactionId: null,
+    transactionHash:
+      "0x4141414141414141414141414141414141414141414141414141414141414141"
+  });
+  await upsertRelease4Cursor(seeded.services.release4Repositories, isoFromNow(-600));
+
+  const listed = await seeded.services.fundingService.listFundingTransactions(
+    {
+      dealVersionId: seeded.version.version.id,
+      draftDealId: seeded.draft.draft.id,
+      organizationId: "org-1"
+    },
+    {
+      cookieHeader: seeded.actor.cookieHeader,
+      ipAddress: "127.0.0.1",
+      userAgent: "test-agent"
+    }
+  );
+
+  assert.equal(listed.fundingTransactions[0]?.status, "PENDING");
+  assert.equal(listed.fundingTransactions[0]?.stalePending, null);
+  assert.equal(listed.fundingTransactions[0]?.stalePendingAt, null);
+  assert.equal(
+    listed.fundingTransactions[0]?.stalePendingEvaluation,
+    "INDEXER_CURSOR_STALE"
+  );
 });
 
 test("funding service supersedes older unresolved tracked transactions when a replacement is submitted", async () => {
@@ -518,6 +671,9 @@ test("funding service supersedes older unresolved tracked transactions when a re
   assert.equal(listedReplacement?.supersededAt, null);
   assert.equal(listedFirst?.status, "SUPERSEDED");
   assert.ok(listedFirst?.supersededAt);
+  assert.equal(listedFirst?.stalePending, false);
+  assert.equal(listedFirst?.stalePendingAt, null);
+  assert.equal(listedFirst?.stalePendingEvaluation, null);
   assert.equal(
     listedFirst?.supersededByFundingTransactionId,
     replacement.fundingTransaction.id
@@ -616,6 +772,9 @@ test("funding service confirms tracked funding transactions after agreement inde
   assert.equal(listed.fundingTransactions[0]?.indexedAt, null);
   assert.equal(listed.fundingTransactions[0]?.indexedBlockNumber, null);
   assert.equal(listed.fundingTransactions[0]?.indexedExecutionStatus, null);
+  assert.equal(listed.fundingTransactions[0]?.stalePending, false);
+  assert.equal(listed.fundingTransactions[0]?.stalePendingAt, null);
+  assert.equal(listed.fundingTransactions[0]?.stalePendingEvaluation, null);
 
   const draft = await seeded.services.draftsService.getDraft(
     {
@@ -688,6 +847,9 @@ test("funding service marks reverted tracked funding transactions as failed", as
   assert.equal(listed.fundingTransactions[0]?.indexedAt, "2026-04-06T12:05:00.000Z");
   assert.equal(listed.fundingTransactions[0]?.indexedBlockNumber, "11");
   assert.equal(listed.fundingTransactions[0]?.indexedExecutionStatus, "REVERTED");
+  assert.equal(listed.fundingTransactions[0]?.stalePending, false);
+  assert.equal(listed.fundingTransactions[0]?.stalePendingAt, null);
+  assert.equal(listed.fundingTransactions[0]?.stalePendingEvaluation, null);
 });
 
 test("funding service marks indexed successful tracked transactions without matching agreements as mismatched", async () => {
@@ -746,4 +908,7 @@ test("funding service marks indexed successful tracked transactions without matc
   assert.equal(listed.fundingTransactions[0]?.indexedAt, "2026-04-06T12:06:00.000Z");
   assert.equal(listed.fundingTransactions[0]?.indexedBlockNumber, "12");
   assert.equal(listed.fundingTransactions[0]?.indexedExecutionStatus, "SUCCESS");
+  assert.equal(listed.fundingTransactions[0]?.stalePending, false);
+  assert.equal(listed.fundingTransactions[0]?.stalePendingAt, null);
+  assert.equal(listed.fundingTransactions[0]?.stalePendingEvaluation, null);
 });

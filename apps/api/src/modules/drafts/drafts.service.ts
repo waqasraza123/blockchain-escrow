@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 
 import type {
+  ChainCursorRecord,
   CounterpartyRecord,
   CounterpartyDealVersionAcceptanceRecord,
   DealVersionAcceptanceRecord,
@@ -87,8 +88,14 @@ import {
 } from "./deal-identity";
 import {
   buildFundingTransactionObservation,
+  resolveFundingTransactionStalePendingState,
   resolveFundingTransactionState
 } from "../funding/funding-tracking";
+import {
+  FUNDING_RECONCILIATION_CONFIGURATION,
+  type FundingReconciliationConfiguration,
+  resolveFundingReconciliationCursorKey
+} from "../funding/funding.tokens";
 
 function oppositeRole(role: DraftDealPartyRecord["role"]): DraftDealPartyRecord["role"] {
   return role === "BUYER" ? "SELLER" : "BUYER";
@@ -167,6 +174,8 @@ interface DraftProjectionContext {
   fundingTransactions: FundingTransactionRecord[];
   indexedTransactionsByHash: ReadonlyMap<`0x${string}`, IndexedTransactionRecord>;
   linkedAgreement: EscrowAgreementRecord | null;
+  release4ChainCursor: ChainCursorRecord | null;
+  staleEvaluatedAt: string;
 }
 
 @Injectable()
@@ -176,7 +185,9 @@ export class DraftsService {
     private readonly repositories: Release1Repositories,
     @Inject(RELEASE4_REPOSITORIES)
     private readonly release4Repositories: Release4Repositories,
-    private readonly authenticatedSessionService: AuthenticatedSessionService
+    private readonly authenticatedSessionService: AuthenticatedSessionService,
+    @Inject(FUNDING_RECONCILIATION_CONFIGURATION)
+    private readonly fundingReconciliationConfiguration: FundingReconciliationConfiguration
   ) {}
 
   async listDrafts(
@@ -716,7 +727,7 @@ export class DraftsService {
     syncedAt: string
   ): Promise<DraftDealListItem> {
     const syncedDraft = (await this.syncDraftFundingState(draft.id, syncedAt)) ?? draft;
-    const projectionContext = await this.buildDraftProjectionContext(syncedDraft);
+    const projectionContext = await this.buildDraftProjectionContext(syncedDraft, syncedAt);
     const [parties, latestVersion] = await Promise.all([
       this.buildDraftPartySummaries(syncedDraft.id),
       this.repositories.dealVersions.findLatestByDraftDealId(syncedDraft.id)
@@ -732,9 +743,9 @@ export class DraftsService {
   private async buildDraftDetailResponse(
     draft: DraftDealRecord
   ): Promise<DraftDealDetailResponse> {
-    const syncedDraft =
-      (await this.syncDraftFundingState(draft.id, new Date().toISOString())) ?? draft;
-    const projectionContext = await this.buildDraftProjectionContext(syncedDraft);
+    const syncedAt = new Date().toISOString();
+    const syncedDraft = (await this.syncDraftFundingState(draft.id, syncedAt)) ?? draft;
+    const projectionContext = await this.buildDraftProjectionContext(syncedDraft, syncedAt);
     const [parties, versions] = await Promise.all([
       this.buildDraftPartySummaries(syncedDraft.id),
       this.repositories.dealVersions.listByDraftDealId(syncedDraft.id)
@@ -799,7 +810,8 @@ export class DraftsService {
     );
     const files = filesForHash.map(toFileSummary);
     const draftContext =
-      projectionContext ?? (await this.buildDraftProjectionContext(draft));
+      projectionContext ??
+      (await this.buildDraftProjectionContext(draft, new Date().toISOString()));
     const versionFundingTransactions = draftContext.fundingTransactions.filter(
       (transaction) => transaction.dealVersionId === version.id
     );
@@ -822,7 +834,9 @@ export class DraftsService {
           dealVersionHash,
           draftContext.agreementsByCreatedTransactionHash,
           draftContext.indexedTransactionsByHash,
-          draftContext.fundingTransactionsById
+          draftContext.fundingTransactionsById,
+          draftContext.release4ChainCursor,
+          draftContext.staleEvaluatedAt
         )
       ),
       milestones: milestoneSnapshots.map((milestone) =>
@@ -946,15 +960,26 @@ export class DraftsService {
   }
 
   private async buildDraftProjectionContext(
-    draft: DraftDealRecord
+    draft: DraftDealRecord,
+    staleEvaluatedAt: string
   ): Promise<DraftProjectionContext> {
     const chainId = normalizeApiChainId();
     const dealId = buildCanonicalDealId(draft.organizationId, draft.id);
+    const release4CursorKey = resolveFundingReconciliationCursorKey(
+      this.fundingReconciliationConfiguration,
+      chainId
+    );
     const [agreements, fundingTransactions, indexedTransactions] = await Promise.all([
       this.release4Repositories.escrowAgreements.listByChainId(chainId),
       this.repositories.fundingTransactions.listByDraftDealId(draft.id),
       this.release4Repositories.indexedTransactions.listByChainId(chainId)
     ]);
+    const release4ChainCursor = release4CursorKey
+      ? await this.release4Repositories.chainCursors.findByChainIdAndCursorKey(
+          chainId,
+          release4CursorKey
+        )
+      : null;
 
     return {
       agreements,
@@ -973,7 +998,9 @@ export class DraftsService {
           transaction
         ] as const)
       ),
-      linkedAgreement: agreements.find((agreement) => agreement.dealId === dealId) ?? null
+      linkedAgreement: agreements.find((agreement) => agreement.dealId === dealId) ?? null,
+      release4ChainCursor,
+      staleEvaluatedAt
     };
   }
 
@@ -1023,21 +1050,67 @@ export class DraftsService {
       ? projectionContext.indexedTransactionsByHash.get(latestTransaction.transactionHash) ?? null
       : null;
     const latestObservation = buildFundingTransactionObservation(latestIndexedTransaction);
+    const latestStatus = latestTransaction
+      ? this.toDraftLevelFundingTransactionStatus(
+          latestTransaction,
+          projectionContext.dealId,
+          null,
+          projectionContext.agreementsByCreatedTransactionHash,
+          projectionContext.indexedTransactionsByHash
+        )
+      : null;
+    const latestStalePendingState =
+      latestTransaction && latestStatus
+        ? resolveFundingTransactionStalePendingState({
+            currentStatus: latestStatus,
+            evaluatedAt: projectionContext.staleEvaluatedAt,
+            fundingTransaction: latestTransaction,
+            indexerFreshnessTtlSeconds:
+              this.fundingReconciliationConfiguration.indexerFreshnessTtlSeconds,
+            pendingStaleAfterSeconds:
+              this.fundingReconciliationConfiguration.pendingStaleAfterSeconds,
+            release4ChainCursor: projectionContext.release4ChainCursor
+          })
+        : {
+            stalePending: null,
+            stalePendingAt: null,
+            stalePendingEvaluation: null
+          };
+    const stalePendingTransactionCount = projectionContext.fundingTransactions.reduce(
+      (count, transaction) => {
+        const status = this.toDraftLevelFundingTransactionStatus(
+          transaction,
+          projectionContext.dealId,
+          null,
+          projectionContext.agreementsByCreatedTransactionHash,
+          projectionContext.indexedTransactionsByHash
+        );
+        const stalePendingState = resolveFundingTransactionStalePendingState({
+          currentStatus: status,
+          evaluatedAt: projectionContext.staleEvaluatedAt,
+          fundingTransaction: transaction,
+          indexerFreshnessTtlSeconds:
+            this.fundingReconciliationConfiguration.indexerFreshnessTtlSeconds,
+          pendingStaleAfterSeconds:
+            this.fundingReconciliationConfiguration.pendingStaleAfterSeconds,
+          release4ChainCursor: projectionContext.release4ChainCursor
+        });
+
+        return stalePendingState.stalePending === true ? count + 1 : count;
+      },
+      0
+    );
 
     return {
       latestIndexedAt: latestObservation.indexedAt,
       latestIndexedBlockNumber: latestObservation.indexedBlockNumber,
       latestIndexedExecutionStatus: latestObservation.indexedExecutionStatus,
-      latestStatus: latestTransaction
-        ? this.toDraftLevelFundingTransactionStatus(
-            latestTransaction,
-            projectionContext.dealId,
-            null,
-            projectionContext.agreementsByCreatedTransactionHash,
-            projectionContext.indexedTransactionsByHash
-          )
-        : null,
+      latestStalePending: latestStalePendingState.stalePending,
+      latestStalePendingAt: latestStalePendingState.stalePendingAt,
+      latestStalePendingEvaluation: latestStalePendingState.stalePendingEvaluation,
+      latestStatus,
       latestSubmittedAt: latestTransaction?.submittedAt ?? null,
+      stalePendingTransactionCount,
       trackedTransactionCount: projectionContext.fundingTransactions.length
     };
   }
@@ -1065,7 +1138,9 @@ export class DraftsService {
     dealVersionHash: `0x${string}`,
     agreementsByCreatedTransactionHash: ReadonlyMap<`0x${string}`, EscrowAgreementRecord>,
     indexedTransactionsByHash: ReadonlyMap<`0x${string}`, IndexedTransactionRecord>,
-    fundingTransactionsById: ReadonlyMap<string, FundingTransactionRecord>
+    fundingTransactionsById: ReadonlyMap<string, FundingTransactionRecord>,
+    release4ChainCursor: ChainCursorRecord | null,
+    staleEvaluatedAt: string
   ): FundingTransactionSummary {
     const indexedTransaction = indexedTransactionsByHash.get(transaction.transactionHash) ?? null;
     const resolvedState = resolveFundingTransactionState({
@@ -1077,6 +1152,16 @@ export class DraftsService {
         agreementsByCreatedTransactionHash.get(transaction.transactionHash) ?? null
     });
     const observation = buildFundingTransactionObservation(indexedTransaction);
+    const stalePendingState = resolveFundingTransactionStalePendingState({
+      currentStatus: resolvedState.status,
+      evaluatedAt: staleEvaluatedAt,
+      fundingTransaction: transaction,
+      indexerFreshnessTtlSeconds:
+        this.fundingReconciliationConfiguration.indexerFreshnessTtlSeconds,
+      pendingStaleAfterSeconds:
+        this.fundingReconciliationConfiguration.pendingStaleAfterSeconds,
+      release4ChainCursor
+    });
     const supersededByTransaction =
       transaction.supersededByFundingTransactionId
         ? fundingTransactionsById.get(transaction.supersededByFundingTransactionId) ?? null
@@ -1094,6 +1179,9 @@ export class DraftsService {
       indexedExecutionStatus: observation.indexedExecutionStatus,
       matchesTrackedVersion: resolvedState.matchesTrackedVersion,
       organizationId: transaction.organizationId,
+      stalePending: stalePendingState.stalePending,
+      stalePendingAt: stalePendingState.stalePendingAt,
+      stalePendingEvaluation: stalePendingState.stalePendingEvaluation,
       status: resolvedState.status,
       submittedAt: transaction.submittedAt,
       submittedByUserId: transaction.submittedByUserId,

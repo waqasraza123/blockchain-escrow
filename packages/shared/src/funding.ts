@@ -60,6 +60,15 @@ export type FundingTransactionIndexedExecutionStatus = z.infer<
   typeof fundingTransactionIndexedExecutionStatusSchema
 >;
 
+export const fundingTransactionStalePendingEvaluationSchema = z.enum([
+  "READY",
+  "INDEXER_CURSOR_MISSING",
+  "INDEXER_CURSOR_STALE"
+]);
+export type FundingTransactionStalePendingEvaluation = z.infer<
+  typeof fundingTransactionStalePendingEvaluationSchema
+>;
+
 export interface FundingPreparationTransaction {
   data: HexString;
   to: WalletAddress;
@@ -105,6 +114,9 @@ export interface FundingTransactionSummary {
   indexedExecutionStatus: FundingTransactionIndexedExecutionStatus | null;
   matchesTrackedVersion: boolean | null;
   organizationId: EntityId;
+  stalePending: boolean | null;
+  stalePendingAt: IsoTimestamp | null;
+  stalePendingEvaluation: FundingTransactionStalePendingEvaluation | null;
   status: FundingTransactionStatus;
   submittedAt: IsoTimestamp;
   submittedByUserId: EntityId;

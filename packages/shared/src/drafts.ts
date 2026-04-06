@@ -4,6 +4,7 @@ import type { CounterpartySummary } from "./counterparties";
 import type { FileSummary } from "./files";
 import type {
   FundingTransactionIndexedExecutionStatus,
+  FundingTransactionStalePendingEvaluation,
   FundingTransactionStatus,
   FundingTransactionSummary
 } from "./funding";
@@ -117,8 +118,12 @@ export interface DraftDealFundingProgressSummary {
   latestIndexedAt: IsoTimestamp | null;
   latestIndexedBlockNumber: string | null;
   latestIndexedExecutionStatus: FundingTransactionIndexedExecutionStatus | null;
+  latestStalePending: boolean | null;
+  latestStalePendingAt: IsoTimestamp | null;
+  latestStalePendingEvaluation: FundingTransactionStalePendingEvaluation | null;
   latestSubmittedAt: IsoTimestamp | null;
   latestStatus: FundingTransactionStatus | null;
+  stalePendingTransactionCount: number;
   trackedTransactionCount: number;
 }
 

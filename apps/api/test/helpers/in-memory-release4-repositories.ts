@@ -49,12 +49,18 @@ export class InMemoryRelease4Repositories implements Release4Repositories {
     findByChainIdAndCursorKey: async (
       chainId: number,
       cursorKey: string
-    ): Promise<ChainCursorRecord | null> => {
-      void chainId;
-      void cursorKey;
-      return null;
-    },
-    upsert: async (record: ChainCursorRecord) => record
+    ): Promise<ChainCursorRecord | null> =>
+      this.chainCursorStore.find(
+        (record) => record.chainId === chainId && record.cursorKey === cursorKey
+      ) ?? null,
+    upsert: async (record: ChainCursorRecord) => {
+      this.chainCursorStore = this.chainCursorStore.filter(
+        (entry) =>
+          !(entry.chainId === record.chainId && entry.cursorKey === record.cursorKey)
+      );
+      this.chainCursorStore.push(record);
+      return record;
+    }
   };
 
   readonly contractOwnerships = {
@@ -245,6 +251,7 @@ export class InMemoryRelease4Repositories implements Release4Repositories {
   };
 
   private arbitratorRegistryEntriesStore: ArbitratorRegistryEntryRecord[] = [];
+  private chainCursorStore: ChainCursorRecord[] = [];
   private contractOwnershipsStore: ContractOwnershipRecord[] = [];
   private escrowAgreementsStore: EscrowAgreementRecord[] = [];
   private feeVaultStatesStore: FeeVaultStateRecord[] = [];
