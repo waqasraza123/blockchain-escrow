@@ -85,7 +85,10 @@ import {
   counterpartyAcceptanceTypes,
   normalizeApiChainId
 } from "./deal-identity";
-import { resolveFundingTransactionState } from "../funding/funding-tracking";
+import {
+  buildFundingTransactionObservation,
+  resolveFundingTransactionState
+} from "../funding/funding-tracking";
 
 function oppositeRole(role: DraftDealPartyRecord["role"]): DraftDealPartyRecord["role"] {
   return role === "BUYER" ? "SELLER" : "BUYER";
@@ -1016,8 +1019,15 @@ export class DraftsService {
     projectionContext: DraftProjectionContext
   ): DraftDealFundingProgressSummary {
     const latestTransaction = projectionContext.fundingTransactions[0] ?? null;
+    const latestIndexedTransaction = latestTransaction
+      ? projectionContext.indexedTransactionsByHash.get(latestTransaction.transactionHash) ?? null
+      : null;
+    const latestObservation = buildFundingTransactionObservation(latestIndexedTransaction);
 
     return {
+      latestIndexedAt: latestObservation.indexedAt,
+      latestIndexedBlockNumber: latestObservation.indexedBlockNumber,
+      latestIndexedExecutionStatus: latestObservation.indexedExecutionStatus,
       latestStatus: latestTransaction
         ? this.toDraftLevelFundingTransactionStatus(
             latestTransaction,
@@ -1057,14 +1067,16 @@ export class DraftsService {
     indexedTransactionsByHash: ReadonlyMap<`0x${string}`, IndexedTransactionRecord>,
     fundingTransactionsById: ReadonlyMap<string, FundingTransactionRecord>
   ): FundingTransactionSummary {
+    const indexedTransaction = indexedTransactionsByHash.get(transaction.transactionHash) ?? null;
     const resolvedState = resolveFundingTransactionState({
       dealId,
       dealVersionHash,
       fundingTransaction: transaction,
-      indexedTransaction: indexedTransactionsByHash.get(transaction.transactionHash) ?? null,
+      indexedTransaction,
       observedAgreement:
         agreementsByCreatedTransactionHash.get(transaction.transactionHash) ?? null
     });
+    const observation = buildFundingTransactionObservation(indexedTransaction);
     const supersededByTransaction =
       transaction.supersededByFundingTransactionId
         ? fundingTransactionsById.get(transaction.supersededByFundingTransactionId) ?? null
@@ -1077,6 +1089,9 @@ export class DraftsService {
       dealVersionId: transaction.dealVersionId,
       draftDealId: transaction.draftDealId,
       id: transaction.id,
+      indexedAt: observation.indexedAt,
+      indexedBlockNumber: observation.indexedBlockNumber,
+      indexedExecutionStatus: observation.indexedExecutionStatus,
       matchesTrackedVersion: resolvedState.matchesTrackedVersion,
       organizationId: transaction.organizationId,
       status: resolvedState.status,

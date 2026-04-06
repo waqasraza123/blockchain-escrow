@@ -4,17 +4,34 @@ import type {
   IndexedTransactionRecord
 } from "@blockchain-escrow/db";
 import type {
+  FundingTransactionIndexedExecutionStatus,
   FundingTransactionStatus,
   HexString,
   IsoTimestamp,
   WalletAddress
 } from "@blockchain-escrow/shared";
 
+export interface FundingTransactionObservation {
+  indexedAt: IsoTimestamp | null;
+  indexedBlockNumber: string | null;
+  indexedExecutionStatus: FundingTransactionIndexedExecutionStatus | null;
+}
+
 export interface ResolvedFundingTransactionState {
   agreementAddress: WalletAddress | null;
   confirmedAt: IsoTimestamp | null;
   matchesTrackedVersion: boolean | null;
   status: FundingTransactionStatus;
+}
+
+export function buildFundingTransactionObservation(
+  indexedTransaction: IndexedTransactionRecord | null
+): FundingTransactionObservation {
+  return {
+    indexedAt: indexedTransaction?.indexedAt ?? null,
+    indexedBlockNumber: indexedTransaction?.blockNumber ?? null,
+    indexedExecutionStatus: indexedTransaction?.executionStatus ?? null
+  };
 }
 
 export function resolveFundingTransactionState(input: {

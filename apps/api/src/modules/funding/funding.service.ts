@@ -65,7 +65,10 @@ import {
   buildCanonicalDealVersionHash,
   normalizeApiChainId
 } from "../drafts/deal-identity";
-import { resolveFundingTransactionState } from "./funding-tracking";
+import {
+  buildFundingTransactionObservation,
+  resolveFundingTransactionState
+} from "./funding-tracking";
 
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 
@@ -538,14 +541,17 @@ export class FundingService {
     record: FundingTransactionRecord,
     context: FundingComputationContext
   ): FundingTransactionSummary {
+    const indexedTransaction =
+      context.indexedTransactionsByHash.get(record.transactionHash) ?? null;
     const resolvedState = resolveFundingTransactionState({
       dealId: context.dealId,
       dealVersionHash: context.dealVersionHash,
       fundingTransaction: record,
-      indexedTransaction: context.indexedTransactionsByHash.get(record.transactionHash) ?? null,
+      indexedTransaction,
       observedAgreement:
         context.agreementsByCreatedTransactionHash.get(record.transactionHash) ?? null
     });
+    const observation = buildFundingTransactionObservation(indexedTransaction);
     const supersededByTransaction =
       record.supersededByFundingTransactionId
         ? context.fundingTransactionsById.get(record.supersededByFundingTransactionId) ?? null
@@ -558,6 +564,9 @@ export class FundingService {
       dealVersionId: record.dealVersionId,
       draftDealId: record.draftDealId,
       id: record.id,
+      indexedAt: observation.indexedAt,
+      indexedBlockNumber: observation.indexedBlockNumber,
+      indexedExecutionStatus: observation.indexedExecutionStatus,
       matchesTrackedVersion: resolvedState.matchesTrackedVersion,
       organizationId: record.organizationId,
       status: resolvedState.status,

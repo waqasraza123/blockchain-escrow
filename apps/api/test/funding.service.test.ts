@@ -445,6 +445,9 @@ test("funding service records and lists pending funding transactions", async () 
 
   assert.equal(listed.fundingTransactions.length, 1);
   assert.equal(listed.fundingTransactions[0]?.status, "PENDING");
+  assert.equal(listed.fundingTransactions[0]?.indexedAt, null);
+  assert.equal(listed.fundingTransactions[0]?.indexedBlockNumber, null);
+  assert.equal(listed.fundingTransactions[0]?.indexedExecutionStatus, null);
 });
 
 test("funding service supersedes older unresolved tracked transactions when a replacement is submitted", async () => {
@@ -610,6 +613,9 @@ test("funding service confirms tracked funding transactions after agreement inde
     "0x7777777777777777777777777777777777777777"
   );
   assert.equal(listed.fundingTransactions[0]?.matchesTrackedVersion, true);
+  assert.equal(listed.fundingTransactions[0]?.indexedAt, null);
+  assert.equal(listed.fundingTransactions[0]?.indexedBlockNumber, null);
+  assert.equal(listed.fundingTransactions[0]?.indexedExecutionStatus, null);
 
   const draft = await seeded.services.draftsService.getDraft(
     {
@@ -679,6 +685,9 @@ test("funding service marks reverted tracked funding transactions as failed", as
   assert.equal(listed.fundingTransactions[0]?.status, "FAILED");
   assert.equal(listed.fundingTransactions[0]?.agreementAddress, null);
   assert.equal(listed.fundingTransactions[0]?.matchesTrackedVersion, null);
+  assert.equal(listed.fundingTransactions[0]?.indexedAt, "2026-04-06T12:05:00.000Z");
+  assert.equal(listed.fundingTransactions[0]?.indexedBlockNumber, "11");
+  assert.equal(listed.fundingTransactions[0]?.indexedExecutionStatus, "REVERTED");
 });
 
 test("funding service marks indexed successful tracked transactions without matching agreements as mismatched", async () => {
@@ -734,4 +743,7 @@ test("funding service marks indexed successful tracked transactions without matc
   assert.equal(listed.fundingTransactions[0]?.status, "MISMATCHED");
   assert.equal(listed.fundingTransactions[0]?.agreementAddress, null);
   assert.equal(listed.fundingTransactions[0]?.matchesTrackedVersion, false);
+  assert.equal(listed.fundingTransactions[0]?.indexedAt, "2026-04-06T12:06:00.000Z");
+  assert.equal(listed.fundingTransactions[0]?.indexedBlockNumber, "12");
+  assert.equal(listed.fundingTransactions[0]?.indexedExecutionStatus, "SUCCESS");
 });

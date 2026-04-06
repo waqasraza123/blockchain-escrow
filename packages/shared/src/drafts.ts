@@ -3,6 +3,7 @@ import { z } from "zod";
 import type { CounterpartySummary } from "./counterparties";
 import type { FileSummary } from "./files";
 import type {
+  FundingTransactionIndexedExecutionStatus,
   FundingTransactionStatus,
   FundingTransactionSummary
 } from "./funding";
@@ -113,6 +114,9 @@ export interface DraftDealEscrowSummary {
 }
 
 export interface DraftDealFundingProgressSummary {
+  latestIndexedAt: IsoTimestamp | null;
+  latestIndexedBlockNumber: string | null;
+  latestIndexedExecutionStatus: FundingTransactionIndexedExecutionStatus | null;
   latestSubmittedAt: IsoTimestamp | null;
   latestStatus: FundingTransactionStatus | null;
   trackedTransactionCount: number;

@@ -1045,10 +1045,16 @@ test("drafts service exposes tracked funding progress on detail responses", asyn
   );
 
   assert.equal(detail.draft.funding.trackedTransactionCount, 1);
+  assert.equal(detail.draft.funding.latestIndexedAt, null);
+  assert.equal(detail.draft.funding.latestIndexedBlockNumber, null);
+  assert.equal(detail.draft.funding.latestIndexedExecutionStatus, null);
   assert.equal(detail.draft.funding.latestStatus, "PENDING");
   assert.equal(detail.draft.funding.latestSubmittedAt, "2026-04-06T12:00:00.000Z");
   assert.equal(detail.versions[0]?.fundingTransactions.length, 1);
   assert.equal(detail.versions[0]?.fundingTransactions[0]?.status, "PENDING");
+  assert.equal(detail.versions[0]?.fundingTransactions[0]?.indexedAt, null);
+  assert.equal(detail.versions[0]?.fundingTransactions[0]?.indexedBlockNumber, null);
+  assert.equal(detail.versions[0]?.fundingTransactions[0]?.indexedExecutionStatus, null);
   assert.equal(
     detail.versions[0]?.fundingTransactions[0]?.transactionHash,
     "0x1212121212121212121212121212121212121212121212121212121212121212"
@@ -1172,7 +1178,13 @@ test("drafts service exposes failed tracked funding progress from indexed revert
   );
 
   assert.equal(detail.draft.funding.trackedTransactionCount, 1);
+  assert.equal(detail.draft.funding.latestIndexedAt, "2026-04-06T12:11:00.000Z");
+  assert.equal(detail.draft.funding.latestIndexedBlockNumber, "13");
+  assert.equal(detail.draft.funding.latestIndexedExecutionStatus, "REVERTED");
   assert.equal(detail.draft.funding.latestStatus, "FAILED");
   assert.equal(detail.versions[0]?.fundingTransactions[0]?.status, "FAILED");
   assert.equal(detail.versions[0]?.fundingTransactions[0]?.agreementAddress, null);
+  assert.equal(detail.versions[0]?.fundingTransactions[0]?.indexedAt, "2026-04-06T12:11:00.000Z");
+  assert.equal(detail.versions[0]?.fundingTransactions[0]?.indexedBlockNumber, "13");
+  assert.equal(detail.versions[0]?.fundingTransactions[0]?.indexedExecutionStatus, "REVERTED");
 });

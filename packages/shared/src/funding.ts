@@ -52,6 +52,14 @@ export type FundingTransactionStatus = z.infer<
   typeof fundingTransactionStatusSchema
 >;
 
+export const fundingTransactionIndexedExecutionStatusSchema = z.enum([
+  "SUCCESS",
+  "REVERTED"
+]);
+export type FundingTransactionIndexedExecutionStatus = z.infer<
+  typeof fundingTransactionIndexedExecutionStatusSchema
+>;
+
 export interface FundingPreparationTransaction {
   data: HexString;
   to: WalletAddress;
@@ -92,6 +100,9 @@ export interface FundingTransactionSummary {
   dealVersionId: EntityId;
   draftDealId: EntityId;
   id: EntityId;
+  indexedAt: IsoTimestamp | null;
+  indexedBlockNumber: string | null;
+  indexedExecutionStatus: FundingTransactionIndexedExecutionStatus | null;
   matchesTrackedVersion: boolean | null;
   organizationId: EntityId;
   status: FundingTransactionStatus;
