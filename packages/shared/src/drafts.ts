@@ -2,7 +2,17 @@ import { z } from "zod";
 
 import type { CounterpartySummary } from "./counterparties";
 import type { FileSummary } from "./files";
-import type { EntityId, IsoTimestamp, WalletAddress } from "./primitives";
+import type {
+  FundingTransactionStatus,
+  FundingTransactionSummary
+} from "./funding";
+import type {
+  ChainId,
+  EntityId,
+  HexString,
+  IsoTimestamp,
+  WalletAddress
+} from "./primitives";
 
 export const dealStateSchema = z.enum([
   "DRAFT",
@@ -82,6 +92,8 @@ export type CreateDealVersionInput = z.infer<typeof createDealVersionSchema>;
 export interface DraftDealSummary {
   createdAt: IsoTimestamp;
   createdByUserId: EntityId;
+  escrow: DraftDealEscrowSummary | null;
+  funding: DraftDealFundingProgressSummary;
   id: EntityId;
   organizationId: EntityId;
   settlementCurrency: SettlementCurrency;
@@ -90,6 +102,20 @@ export interface DraftDealSummary {
   templateId: EntityId | null;
   title: string;
   updatedAt: IsoTimestamp;
+}
+
+export interface DraftDealEscrowSummary {
+  agreementAddress: WalletAddress;
+  chainId: ChainId;
+  createdAt: IsoTimestamp;
+  dealId: HexString;
+  dealVersionHash: HexString;
+}
+
+export interface DraftDealFundingProgressSummary {
+  latestSubmittedAt: IsoTimestamp | null;
+  latestStatus: FundingTransactionStatus | null;
+  trackedTransactionCount: number;
 }
 
 export interface DraftDealPartySummary {
@@ -140,6 +166,7 @@ export interface DealVersionMilestoneSnapshot {
 export interface DealVersionDetail extends DealVersionSummary {
   bodyMarkdown: string;
   files: FileSummary[];
+  fundingTransactions: FundingTransactionSummary[];
   milestones: DealVersionMilestoneSnapshot[];
   parties: DealVersionPartySnapshot[];
 }

@@ -11,6 +11,7 @@ import type {
   DraftDealRecord,
   EscrowAgreementRecord,
   FileRecord,
+  FundingTransactionRecord,
   OrganizationMemberRecord,
   OrganizationRecord,
   Release1Repositories,
@@ -40,9 +41,12 @@ import {
   type DealVersionPartySnapshot,
   type DealVersionSummary,
   type DraftDealDetailResponse,
+  type DraftDealEscrowSummary,
+  type DraftDealFundingProgressSummary,
   type DraftDealListItem,
   type DraftDealPartySummary,
   type DraftDealSummary,
+  type FundingTransactionSummary,
   type FileSummary,
   type GetCounterpartyDealVersionAcceptanceResponse,
   type ListDealVersionAcceptancesResponse,
@@ -83,21 +87,6 @@ import {
 
 function oppositeRole(role: DraftDealPartyRecord["role"]): DraftDealPartyRecord["role"] {
   return role === "BUYER" ? "SELLER" : "BUYER";
-}
-
-function toDraftSummary(draft: DraftDealRecord): DraftDealSummary {
-  return {
-    createdAt: draft.createdAt,
-    createdByUserId: draft.createdByUserId,
-    id: draft.id,
-    organizationId: draft.organizationId,
-    settlementCurrency: draft.settlementCurrency,
-    state: draft.state,
-    summary: draft.summary,
-    templateId: draft.templateId,
-    title: draft.title,
-    updatedAt: draft.updatedAt
-  };
 }
 
 function toDealVersionSummary(version: DealVersionRecord): DealVersionSummary {
@@ -162,6 +151,14 @@ function toCounterpartyDealVersionAcceptanceSummary(
     signerWalletAddress: acceptance.signerWalletAddress,
     typedData: acceptance.typedData
   };
+}
+
+interface DraftProjectionContext {
+  agreements: EscrowAgreementRecord[];
+  chainId: number;
+  dealId: `0x${string}`;
+  fundingTransactions: FundingTransactionRecord[];
+  linkedAgreement: EscrowAgreementRecord | null;
 }
 
 @Injectable()
@@ -422,7 +419,7 @@ export class DraftsService {
     await this.syncDraftFundingState(draft.id, now);
 
     return {
-      version: await this.buildDealVersionDetail(version)
+      version: await this.buildDealVersionDetail(draft, version)
     };
   }
 
@@ -711,13 +708,14 @@ export class DraftsService {
     syncedAt: string
   ): Promise<DraftDealListItem> {
     const syncedDraft = (await this.syncDraftFundingState(draft.id, syncedAt)) ?? draft;
+    const projectionContext = await this.buildDraftProjectionContext(syncedDraft);
     const [parties, latestVersion] = await Promise.all([
       this.buildDraftPartySummaries(syncedDraft.id),
       this.repositories.dealVersions.findLatestByDraftDealId(syncedDraft.id)
     ]);
 
     return {
-      draft: toDraftSummary(syncedDraft),
+      draft: this.toDraftSummary(syncedDraft, projectionContext),
       latestVersion: latestVersion ? toDealVersionSummary(latestVersion) : null,
       parties
     };
@@ -728,16 +726,19 @@ export class DraftsService {
   ): Promise<DraftDealDetailResponse> {
     const syncedDraft =
       (await this.syncDraftFundingState(draft.id, new Date().toISOString())) ?? draft;
+    const projectionContext = await this.buildDraftProjectionContext(syncedDraft);
     const [parties, versions] = await Promise.all([
       this.buildDraftPartySummaries(syncedDraft.id),
       this.repositories.dealVersions.listByDraftDealId(syncedDraft.id)
     ]);
 
     return {
-      draft: toDraftSummary(syncedDraft),
+      draft: this.toDraftSummary(syncedDraft, projectionContext),
       parties,
       versions: await Promise.all(
-        versions.map((version) => this.buildDealVersionDetail(version))
+        versions.map((version) =>
+          this.buildDealVersionDetail(syncedDraft, version, projectionContext)
+        )
       )
     };
   }
@@ -768,14 +769,16 @@ export class DraftsService {
   }
 
   private async buildDealVersionDetail(
-    version: DealVersionRecord
+    draft: DraftDealRecord,
+    version: DealVersionRecord,
+    projectionContext?: DraftProjectionContext
   ): Promise<DealVersionDetail> {
     const [partySnapshots, milestoneSnapshots, fileLinks] = await Promise.all([
       this.repositories.dealVersionParties.listByDealVersionId(version.id),
       this.repositories.dealVersionMilestones.listByDealVersionId(version.id),
       this.repositories.dealVersionFiles.listByDealVersionId(version.id)
     ]);
-    const files = await Promise.all(
+    const filesForHash = await Promise.all(
       fileLinks.map(async (link) => {
         const file = await this.repositories.files.findById(link.fileId);
 
@@ -783,14 +786,35 @@ export class DraftsService {
           throw new NotFoundException("linked file not found");
         }
 
-        return toFileSummary(file);
+        return file;
       })
+    );
+    const files = filesForHash.map(toFileSummary);
+    const draftContext =
+      projectionContext ?? (await this.buildDraftProjectionContext(draft));
+    const versionFundingTransactions = draftContext.fundingTransactions.filter(
+      (transaction) => transaction.dealVersionId === version.id
+    );
+    const dealVersionHash = buildCanonicalDealVersionHash(
+      draft,
+      version,
+      partySnapshots,
+      milestoneSnapshots,
+      filesForHash
     );
 
     return {
       ...toDealVersionSummary(version),
       bodyMarkdown: version.bodyMarkdown,
       files,
+      fundingTransactions: versionFundingTransactions.map((transaction) =>
+        this.toFundingTransactionSummary(
+          transaction,
+          draftContext.dealId,
+          dealVersionHash,
+          draftContext.agreements
+        )
+      ),
       milestones: milestoneSnapshots.map((milestone) =>
         this.toMilestoneSnapshot(milestone)
       ),
@@ -909,6 +933,161 @@ export class DraftsService {
     }
 
     return counterparty.name;
+  }
+
+  private async buildDraftProjectionContext(
+    draft: DraftDealRecord
+  ): Promise<DraftProjectionContext> {
+    const chainId = normalizeApiChainId();
+    const dealId = buildCanonicalDealId(draft.organizationId, draft.id);
+    const agreements = await this.release4Repositories.escrowAgreements.listByChainId(
+      chainId
+    );
+
+    return {
+      agreements,
+      chainId,
+      dealId,
+      fundingTransactions: await this.repositories.fundingTransactions.listByDraftDealId(
+        draft.id
+      ),
+      linkedAgreement: agreements.find((agreement) => agreement.dealId === dealId) ?? null
+    };
+  }
+
+  private toDraftSummary(
+    draft: DraftDealRecord,
+    projectionContext: DraftProjectionContext
+  ): DraftDealSummary {
+    return {
+      createdAt: draft.createdAt,
+      createdByUserId: draft.createdByUserId,
+      escrow: this.toDraftEscrowSummary(projectionContext),
+      funding: this.toDraftFundingProgressSummary(projectionContext),
+      id: draft.id,
+      organizationId: draft.organizationId,
+      settlementCurrency: draft.settlementCurrency,
+      state: draft.state,
+      summary: draft.summary,
+      templateId: draft.templateId,
+      title: draft.title,
+      updatedAt: draft.updatedAt
+    };
+  }
+
+  private toDraftEscrowSummary(
+    projectionContext: DraftProjectionContext
+  ): DraftDealEscrowSummary | null {
+    const linkedAgreement = projectionContext.linkedAgreement;
+
+    if (!linkedAgreement) {
+      return null;
+    }
+
+    return {
+      agreementAddress: linkedAgreement.agreementAddress,
+      chainId: projectionContext.chainId,
+      createdAt: linkedAgreement.initializedTimestamp,
+      dealId: linkedAgreement.dealId,
+      dealVersionHash: linkedAgreement.dealVersionHash
+    };
+  }
+
+  private toDraftFundingProgressSummary(
+    projectionContext: DraftProjectionContext
+  ): DraftDealFundingProgressSummary {
+    const latestTransaction = projectionContext.fundingTransactions[0] ?? null;
+
+    return {
+      latestStatus: latestTransaction
+        ? this.toDraftLevelFundingTransactionStatus(
+            latestTransaction,
+            projectionContext.dealId,
+            projectionContext.agreements
+          )
+        : null,
+      latestSubmittedAt: latestTransaction?.submittedAt ?? null,
+      trackedTransactionCount: projectionContext.fundingTransactions.length
+    };
+  }
+
+  private toDraftLevelFundingTransactionStatus(
+    transaction: FundingTransactionRecord,
+    dealId: `0x${string}`,
+    agreements: readonly EscrowAgreementRecord[]
+  ): FundingTransactionSummary["status"] {
+    const observedAgreement = agreements.find(
+      (agreement) => agreement.createdTransactionHash === transaction.transactionHash
+    );
+
+    if (!observedAgreement) {
+      return "PENDING";
+    }
+
+    return observedAgreement.dealId === dealId ? "CONFIRMED" : "MISMATCHED";
+  }
+
+  private toFundingTransactionSummary(
+    transaction: FundingTransactionRecord,
+    dealId: `0x${string}`,
+    dealVersionHash: `0x${string}`,
+    agreements: readonly EscrowAgreementRecord[]
+  ): FundingTransactionSummary {
+    const observedAgreement = agreements.find(
+      (agreement) => agreement.createdTransactionHash === transaction.transactionHash
+    );
+
+    if (!observedAgreement) {
+      return {
+        agreementAddress: null,
+        chainId: transaction.chainId,
+        confirmedAt: null,
+        dealVersionId: transaction.dealVersionId,
+        draftDealId: transaction.draftDealId,
+        id: transaction.id,
+        matchesTrackedVersion: null,
+        organizationId: transaction.organizationId,
+        status: "PENDING",
+        submittedAt: transaction.submittedAt,
+        submittedByUserId: transaction.submittedByUserId,
+        submittedWalletAddress: transaction.submittedWalletAddress,
+        transactionHash: transaction.transactionHash
+      };
+    }
+
+    if (observedAgreement.dealId !== dealId) {
+      return {
+        agreementAddress: null,
+        chainId: transaction.chainId,
+        confirmedAt: null,
+        dealVersionId: transaction.dealVersionId,
+        draftDealId: transaction.draftDealId,
+        id: transaction.id,
+        matchesTrackedVersion: false,
+        organizationId: transaction.organizationId,
+        status: "MISMATCHED",
+        submittedAt: transaction.submittedAt,
+        submittedByUserId: transaction.submittedByUserId,
+        submittedWalletAddress: transaction.submittedWalletAddress,
+        transactionHash: transaction.transactionHash
+      };
+    }
+
+    return {
+      agreementAddress: observedAgreement.agreementAddress,
+      chainId: transaction.chainId,
+      confirmedAt: observedAgreement.updatedAt,
+      dealVersionId: transaction.dealVersionId,
+      draftDealId: transaction.draftDealId,
+      id: transaction.id,
+      matchesTrackedVersion: observedAgreement.dealVersionHash === dealVersionHash,
+      organizationId: transaction.organizationId,
+      status: "CONFIRMED",
+      submittedAt: transaction.submittedAt,
+      submittedByUserId: transaction.submittedByUserId,
+      submittedWalletAddress: transaction.submittedWalletAddress,
+      transactionHash: transaction.transactionHash
+    };
   }
 
   private async requireCounterpartyInOrganization(

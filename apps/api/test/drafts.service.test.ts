@@ -322,6 +322,9 @@ test("drafts service creates a draft, links template/counterparty, and lists it"
 
   assert.equal(created.draft.title, "Website Rebuild");
   assert.equal(created.draft.templateId, "template-1");
+  assert.equal(created.draft.escrow, null);
+  assert.equal(created.draft.funding.trackedTransactionCount, 0);
+  assert.equal(created.draft.funding.latestStatus, null);
   assert.equal(created.parties.length, 2);
   assert.equal(created.parties[0]?.role, "BUYER");
   assert.equal(created.parties[1]?.counterpartyId, "counterparty-1");
@@ -338,6 +341,8 @@ test("drafts service creates a draft, links template/counterparty, and lists it"
 
   assert.equal(listed.drafts.length, 1);
   assert.equal(listed.drafts[0]?.latestVersion, null);
+  assert.equal(listed.drafts[0]?.draft.escrow, null);
+  assert.equal(listed.drafts[0]?.draft.funding.trackedTransactionCount, 0);
 });
 
 test("drafts service creates immutable version snapshots with milestones and files", async () => {
@@ -952,6 +957,11 @@ test("drafts service marks a draft active after a linked agreement is indexed", 
   );
 
   assert.equal(detail.draft.state, "ACTIVE");
+  assert.equal(
+    detail.draft.escrow?.agreementAddress,
+    "0x7777777777777777777777777777777777777777"
+  );
+  assert.equal(detail.draft.escrow?.chainId, 84532);
 });
 
 test("drafts service blocks new version snapshots after funding starts", async () => {
@@ -994,7 +1004,49 @@ test("drafts service blocks new version snapshots after funding starts", async (
           ipAddress: "127.0.0.1",
           userAgent: "test-agent"
         }
-      ),
+    ),
     /funding is already in progress/
+  );
+});
+
+test("drafts service exposes tracked funding progress on detail responses", async () => {
+  const { draftsService, repositories, sessionTokenService } = createDraftsService();
+  const actor = await seedAuthenticatedActor(repositories, sessionTokenService);
+  const seeded = await seedDraftVersionScenario(draftsService, repositories, actor);
+
+  await repositories.fundingTransactions.create({
+    chainId: 84532,
+    dealVersionId: seeded.version.version.id,
+    draftDealId: seeded.draft.draft.id,
+    id: "funding-tx-2",
+    organizationId: "org-1",
+    submittedAt: "2026-04-06T12:00:00.000Z",
+    submittedByUserId: actor.userId,
+    submittedWalletAddress: actor.walletAddress,
+    submittedWalletId: actor.walletId,
+    transactionHash:
+      "0x1212121212121212121212121212121212121212121212121212121212121212"
+  });
+
+  const detail = await draftsService.getDraft(
+    {
+      draftDealId: seeded.draft.draft.id,
+      organizationId: "org-1"
+    },
+    {
+      cookieHeader: actor.cookieHeader,
+      ipAddress: "127.0.0.1",
+      userAgent: "test-agent"
+    }
+  );
+
+  assert.equal(detail.draft.funding.trackedTransactionCount, 1);
+  assert.equal(detail.draft.funding.latestStatus, "PENDING");
+  assert.equal(detail.draft.funding.latestSubmittedAt, "2026-04-06T12:00:00.000Z");
+  assert.equal(detail.versions[0]?.fundingTransactions.length, 1);
+  assert.equal(detail.versions[0]?.fundingTransactions[0]?.status, "PENDING");
+  assert.equal(
+    detail.versions[0]?.fundingTransactions[0]?.transactionHash,
+    "0x1212121212121212121212121212121212121212121212121212121212121212"
   );
 });
