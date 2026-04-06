@@ -1050,3 +1050,61 @@ test("drafts service exposes tracked funding progress on detail responses", asyn
     "0x1212121212121212121212121212121212121212121212121212121212121212"
   );
 });
+
+test("drafts service exposes failed tracked funding progress from indexed reverted transactions", async () => {
+  const { draftsService, repositories, release4Repositories, sessionTokenService } =
+    createDraftsService();
+  const actor = await seedAuthenticatedActor(repositories, sessionTokenService);
+  const seeded = await seedDraftVersionScenario(draftsService, repositories, actor);
+  const manifest = getDeploymentManifestByChainId(84532);
+
+  if (!manifest?.contracts.EscrowFactory) {
+    throw new Error("missing base sepolia escrow factory");
+  }
+
+  await repositories.fundingTransactions.create({
+    chainId: 84532,
+    dealVersionId: seeded.version.version.id,
+    draftDealId: seeded.draft.draft.id,
+    id: "funding-tx-3",
+    organizationId: "org-1",
+    submittedAt: "2026-04-06T12:10:00.000Z",
+    submittedByUserId: actor.userId,
+    submittedWalletAddress: actor.walletAddress,
+    submittedWalletId: actor.walletId,
+    transactionHash:
+      "0x3434343434343434343434343434343434343434343434343434343434343434"
+  });
+  await release4Repositories.indexedTransactions.upsertMany([
+    {
+      blockHash:
+        "0xdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      blockNumber: "13",
+      chainId: 84532,
+      executionStatus: "REVERTED",
+      fromAddress: actor.walletAddress,
+      indexedAt: "2026-04-06T12:11:00.000Z",
+      toAddress: manifest.contracts.EscrowFactory.toLowerCase() as `0x${string}`,
+      transactionHash:
+        "0x3434343434343434343434343434343434343434343434343434343434343434",
+      transactionIndex: 0
+    }
+  ]);
+
+  const detail = await draftsService.getDraft(
+    {
+      draftDealId: seeded.draft.draft.id,
+      organizationId: "org-1"
+    },
+    {
+      cookieHeader: actor.cookieHeader,
+      ipAddress: "127.0.0.1",
+      userAgent: "test-agent"
+    }
+  );
+
+  assert.equal(detail.draft.funding.trackedTransactionCount, 1);
+  assert.equal(detail.draft.funding.latestStatus, "FAILED");
+  assert.equal(detail.versions[0]?.fundingTransactions[0]?.status, "FAILED");
+  assert.equal(detail.versions[0]?.fundingTransactions[0]?.agreementAddress, null);
+});

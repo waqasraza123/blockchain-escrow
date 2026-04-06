@@ -1,6 +1,7 @@
 import {
   IndexedContractName as PrismaIndexedContractName,
   IndexedEventName as PrismaIndexedEventName,
+  IndexedTransactionExecutionStatus as PrismaIndexedTransactionExecutionStatus,
   Prisma,
   PrismaClient
 } from "@prisma/client";
@@ -13,6 +14,7 @@ import type {
   FeeVaultStateRecord,
   IndexedBlockRecord,
   IndexedContractEventRecord,
+  IndexedTransactionRecord,
   ProtocolConfigStateRecord,
   TokenAllowlistEntryRecord
 } from "./records";
@@ -108,6 +110,30 @@ function mapIndexedContractEventRecord(record: {
     topics: record.topics as IndexedContractEventRecord["topics"],
     transactionHash:
       record.transactionHash as IndexedContractEventRecord["transactionHash"],
+    transactionIndex: record.transactionIndex
+  };
+}
+
+function mapIndexedTransactionRecord(record: {
+  blockHash: string;
+  blockNumber: bigint;
+  chainId: number;
+  executionStatus: PrismaIndexedTransactionExecutionStatus;
+  fromAddress: string | null;
+  indexedAt: Date;
+  toAddress: string | null;
+  transactionHash: string;
+  transactionIndex: number;
+}): IndexedTransactionRecord {
+  return {
+    blockHash: record.blockHash as IndexedTransactionRecord["blockHash"],
+    blockNumber: toBigIntString(record.blockNumber),
+    chainId: record.chainId,
+    executionStatus: record.executionStatus,
+    fromAddress: record.fromAddress as IndexedTransactionRecord["fromAddress"],
+    indexedAt: toIsoTimestamp(record.indexedAt),
+    toAddress: record.toAddress as IndexedTransactionRecord["toAddress"],
+    transactionHash: record.transactionHash as IndexedTransactionRecord["transactionHash"],
     transactionIndex: record.transactionIndex
   };
 }
@@ -718,6 +744,21 @@ function buildRelease4Repositories(database: DatabaseClient): Release4Repositori
           where: { chainId, blockNumber: { gte: BigInt(fromBlockNumber) } }
         });
       },
+      async findByChainIdAndTransactionHash(chainId, transactionHash) {
+        const record = await database.indexedTransaction.findUnique({
+          where: { chainId_transactionHash: { chainId, transactionHash } }
+        });
+
+        return record ? mapIndexedTransactionRecord(record) : null;
+      },
+      async listByChainId(chainId) {
+        const records = await database.indexedTransaction.findMany({
+          where: { chainId },
+          orderBy: [{ blockNumber: "asc" }, { transactionIndex: "asc" }]
+        });
+
+        return records.map(mapIndexedTransactionRecord);
+      },
       async upsertMany(records) {
         for (const record of records) {
           await database.indexedTransaction.upsert({
@@ -730,6 +771,7 @@ function buildRelease4Repositories(database: DatabaseClient): Release4Repositori
             update: {
               blockHash: record.blockHash,
               blockNumber: BigInt(record.blockNumber),
+              executionStatus: record.executionStatus,
               fromAddress: record.fromAddress,
               indexedAt: toDate(record.indexedAt),
               toAddress: record.toAddress,
@@ -740,6 +782,7 @@ function buildRelease4Repositories(database: DatabaseClient): Release4Repositori
               blockHash: record.blockHash,
               blockNumber: BigInt(record.blockNumber),
               chainId: record.chainId,
+              executionStatus: record.executionStatus,
               fromAddress: record.fromAddress,
               indexedAt: toDate(record.indexedAt),
               toAddress: record.toAddress,

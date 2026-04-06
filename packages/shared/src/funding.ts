@@ -44,6 +44,7 @@ export type CreateFundingTransactionInput = z.infer<
 export const fundingTransactionStatusSchema = z.enum([
   "PENDING",
   "CONFIRMED",
+  "FAILED",
   "MISMATCHED"
 ]);
 export type FundingTransactionStatus = z.infer<

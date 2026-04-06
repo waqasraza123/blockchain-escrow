@@ -157,12 +157,33 @@ export class InMemoryRelease4Repositories implements Release4Repositories {
 
   readonly indexedTransactions = {
     deleteFromBlockNumber: async (chainId: number, fromBlockNumber: string) => {
-      void chainId;
-      void fromBlockNumber;
+      this.indexedTransactionsStore = this.indexedTransactionsStore.filter(
+        (record) =>
+          !(
+            record.chainId === chainId &&
+            BigInt(record.blockNumber) >= BigInt(fromBlockNumber)
+          )
+      );
     },
+    findByChainIdAndTransactionHash: async (chainId: number, transactionHash: string) =>
+      this.indexedTransactionsStore.find(
+        (record) =>
+          record.chainId === chainId && record.transactionHash === transactionHash
+      ) ?? null,
+    listByChainId: async (chainId: number) =>
+      this.indexedTransactionsStore.filter((record) => record.chainId === chainId),
     upsertMany: async (records: IndexedTransactionRecord[]) => {
-      void records;
-    }
+      for (const record of records) {
+        this.indexedTransactionsStore = this.indexedTransactionsStore.filter(
+          (entry) =>
+            !(
+              entry.chainId === record.chainId &&
+              entry.transactionHash === record.transactionHash
+            )
+        );
+        this.indexedTransactionsStore.push(record);
+      }
+    },
   };
 
   readonly protocolConfigStates = {
@@ -227,6 +248,7 @@ export class InMemoryRelease4Repositories implements Release4Repositories {
   private contractOwnershipsStore: ContractOwnershipRecord[] = [];
   private escrowAgreementsStore: EscrowAgreementRecord[] = [];
   private feeVaultStatesStore: FeeVaultStateRecord[] = [];
+  private indexedTransactionsStore: IndexedTransactionRecord[] = [];
   private protocolConfigStatesStore: ProtocolConfigStateRecord[] = [];
   private tokenAllowlistEntriesStore: TokenAllowlistEntryRecord[] = [];
 }

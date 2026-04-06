@@ -53,6 +53,7 @@ export interface IndexedTransactionSummary {
   blockHash: HexString;
   blockNumber: string;
   chainId: ChainId;
+  executionStatus: "SUCCESS" | "REVERTED";
   fromAddress: WalletAddress | null;
   indexedAt: IsoTimestamp;
   toAddress: WalletAddress | null;

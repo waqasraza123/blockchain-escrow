@@ -247,6 +247,11 @@ export interface IndexedBlockRepository {
 
 export interface IndexedTransactionRepository {
   deleteFromBlockNumber(chainId: ChainId, fromBlockNumber: string): Promise<void>;
+  findByChainIdAndTransactionHash(
+    chainId: ChainId,
+    transactionHash: HexString
+  ): Promise<IndexedTransactionRecord | null>;
+  listByChainId(chainId: ChainId): Promise<IndexedTransactionRecord[]>;
   upsertMany(records: IndexedTransactionRecord[]): Promise<void>;
 }
 

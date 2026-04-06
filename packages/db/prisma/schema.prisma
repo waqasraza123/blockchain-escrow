@@ -130,6 +130,11 @@ enum IndexedEventName {
   AgreementInitialized
 }
 
+enum IndexedTransactionExecutionStatus {
+  SUCCESS
+  REVERTED
+}
+
 model User {
   id                         String                 @id @db.Text
   createdAt                  DateTime               @db.Timestamptz(3)
@@ -590,6 +595,7 @@ model IndexedTransaction {
   blockHash        String    @db.Text
   transactionHash  String    @db.Text
   transactionIndex Int
+  executionStatus  IndexedTransactionExecutionStatus
   fromAddress      String?   @db.Text
   toAddress        String?   @db.Text
   indexedAt        DateTime  @db.Timestamptz(3)

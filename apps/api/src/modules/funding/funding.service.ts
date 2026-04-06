@@ -14,6 +14,7 @@ import type {
   EscrowAgreementRecord,
   FileRecord,
   FundingTransactionRecord,
+  IndexedTransactionRecord,
   OrganizationMemberRecord,
   OrganizationRecord,
   Release1Repositories,
@@ -64,6 +65,7 @@ import {
   buildCanonicalDealVersionHash,
   normalizeApiChainId
 } from "../drafts/deal-identity";
+import { resolveFundingTransactionState } from "./funding-tracking";
 
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 
@@ -80,11 +82,13 @@ interface FundingComputationContext extends FundingAccessContext {
     ReturnType<Release1Repositories["dealVersionAcceptances"]["listByDealVersionId"]>
   >;
   agreements: EscrowAgreementRecord[];
+  agreementsByCreatedTransactionHash: ReadonlyMap<`0x${string}`, EscrowAgreementRecord>;
   chainId: number;
   dealId: `0x${string}`;
   dealVersionHash: `0x${string}`;
   draftParties: DraftDealPartyRecord[];
   files: FileRecord[];
+  indexedTransactionsByHash: ReadonlyMap<`0x${string}`, IndexedTransactionRecord>;
   latestVersion: DealVersionRecord | null;
   linkedAgreement: EscrowAgreementRecord | null;
   manifest: NonNullable<ReturnType<typeof getDeploymentManifestByChainId>>;
@@ -288,20 +292,30 @@ export class FundingService {
       milestones,
       files
     );
-    const agreements = await this.release4Repositories.escrowAgreements.listByChainId(
-      chainId
-    );
+    const [agreements, indexedTransactions] = await Promise.all([
+      this.release4Repositories.escrowAgreements.listByChainId(chainId),
+      this.release4Repositories.indexedTransactions.listByChainId(chainId)
+    ]);
     const linkedAgreement = agreements.find((agreement) => agreement.dealId === dealId) ?? null;
 
     return {
       ...access,
       acceptances,
       agreements,
+      agreementsByCreatedTransactionHash: new Map(
+        agreements.map((agreement) => [agreement.createdTransactionHash, agreement] as const)
+      ),
       chainId,
       dealId,
       dealVersionHash,
       draftParties,
       files,
+      indexedTransactionsByHash: new Map(
+        indexedTransactions.map((transaction) => [
+          transaction.transactionHash,
+          transaction
+        ] as const)
+      ),
       latestVersion,
       linkedAgreement,
       manifest,
@@ -507,57 +521,24 @@ export class FundingService {
     record: FundingTransactionRecord,
     context: FundingComputationContext
   ): FundingTransactionSummary {
-    const observedAgreement =
-      context.agreements.find(
-        (agreement) => agreement.createdTransactionHash === record.transactionHash
-      ) ?? null;
-
-    if (observedAgreement && observedAgreement.dealId === context.dealId) {
-      return {
-        agreementAddress: observedAgreement.agreementAddress,
-        chainId: record.chainId,
-        confirmedAt: observedAgreement.updatedAt,
-        dealVersionId: record.dealVersionId,
-        draftDealId: record.draftDealId,
-        id: record.id,
-        matchesTrackedVersion: observedAgreement.dealVersionHash === context.dealVersionHash,
-        organizationId: record.organizationId,
-        status: "CONFIRMED",
-        submittedAt: record.submittedAt,
-        submittedByUserId: record.submittedByUserId,
-        submittedWalletAddress: record.submittedWalletAddress,
-        transactionHash: record.transactionHash
-      };
-    }
-
-    if (observedAgreement) {
-      return {
-        agreementAddress: null,
-        chainId: record.chainId,
-        confirmedAt: null,
-        dealVersionId: record.dealVersionId,
-        draftDealId: record.draftDealId,
-        id: record.id,
-        matchesTrackedVersion: false,
-        organizationId: record.organizationId,
-        status: "MISMATCHED",
-        submittedAt: record.submittedAt,
-        submittedByUserId: record.submittedByUserId,
-        submittedWalletAddress: record.submittedWalletAddress,
-        transactionHash: record.transactionHash
-      };
-    }
+    const resolvedState = resolveFundingTransactionState({
+      dealId: context.dealId,
+      dealVersionHash: context.dealVersionHash,
+      indexedTransaction: context.indexedTransactionsByHash.get(record.transactionHash) ?? null,
+      observedAgreement:
+        context.agreementsByCreatedTransactionHash.get(record.transactionHash) ?? null
+    });
 
     return {
-      agreementAddress: null,
+      agreementAddress: resolvedState.agreementAddress,
       chainId: record.chainId,
-      confirmedAt: null,
+      confirmedAt: resolvedState.confirmedAt,
       dealVersionId: record.dealVersionId,
       draftDealId: record.draftDealId,
       id: record.id,
-      matchesTrackedVersion: null,
+      matchesTrackedVersion: resolvedState.matchesTrackedVersion,
       organizationId: record.organizationId,
-      status: "PENDING",
+      status: resolvedState.status,
       submittedAt: record.submittedAt,
       submittedByUserId: record.submittedByUserId,
       submittedWalletAddress: record.submittedWalletAddress,

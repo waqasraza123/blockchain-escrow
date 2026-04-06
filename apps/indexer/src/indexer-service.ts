@@ -283,7 +283,11 @@ export class IndexerService {
     const allEvents = [...decodedBaseEvents, ...agreementInitializedEvents].sort(
       sortIndexedEvents
     );
-    const transactionRecords = await this.fetchTransactionRecords(allEvents, indexedAt);
+    const transactionRecords = await this.fetchTransactionRecords(
+      fromBlockNumber,
+      toBlockNumber,
+      indexedAt
+    );
     const lastBlock = blockRecords.at(-1);
 
     if (!lastBlock) {
@@ -374,26 +378,79 @@ export class IndexerService {
   }
 
   private async fetchTransactionRecords(
-    events: readonly IndexedContractEventSummary[],
+    fromBlockNumber: bigint,
+    toBlockNumber: bigint,
     indexedAt: string
   ): Promise<IndexedTransactionSummary[]> {
-    const uniqueHashes = [...new Set(events.map((event) => event.transactionHash))];
+    const blockNumbers: bigint[] = [];
 
-    const transactions = await Promise.all(
-      uniqueHashes.map((hash) => this.client.getTransaction({ hash }))
+    for (let current = fromBlockNumber; current <= toBlockNumber; current += 1n) {
+      blockNumbers.push(current);
+    }
+
+    const blocks = await Promise.all(
+      blockNumbers.map((blockNumber) =>
+        this.client.getBlock({
+          blockNumber,
+          includeTransactions: true
+        })
+      )
+    );
+    const trackedTransactions = new Map<HexString, Transaction>();
+
+    for (const block of blocks) {
+      for (const transaction of block.transactions) {
+        if (typeof transaction === "string") {
+          continue;
+        }
+
+        const normalizedHash = normalizeHex(transaction.hash);
+        const normalizedToAddress = transaction.to
+          ? normalizeAddress(transaction.to)
+          : null;
+
+        if (
+          !normalizedToAddress ||
+          !this.trackedContracts.baseAddresses.includes(normalizedToAddress)
+        ) {
+          continue;
+        }
+
+        trackedTransactions.set(normalizedHash, transaction);
+      }
+    }
+
+    const receipts = await Promise.all(
+      [...trackedTransactions.keys()].map((hash) =>
+        this.client.getTransactionReceipt({ hash })
+      )
+    );
+    const executionStatusByHash = new Map(
+      receipts.map((receipt) => [
+        normalizeHex(receipt.transactionHash),
+        receipt.status === "reverted" ? "REVERTED" : "SUCCESS"
+      ] as const)
     );
 
-    return transactions.map((transaction) => this.mapTransactionRecord(transaction, indexedAt));
+    return [...trackedTransactions.values()].map((transaction) =>
+      this.mapTransactionRecord(
+        transaction,
+        indexedAt,
+        executionStatusByHash.get(normalizeHex(transaction.hash)) ?? "SUCCESS"
+      )
+    );
   }
 
   private mapTransactionRecord(
     transaction: Transaction,
-    indexedAt: string
+    indexedAt: string,
+    executionStatus: IndexedTransactionSummary["executionStatus"]
   ): IndexedTransactionSummary {
     return {
       blockHash: requireBlockHash(transaction.blockHash, "transaction block hash"),
       blockNumber: (transaction.blockNumber ?? 0n).toString(),
       chainId: this.config.chainId,
+      executionStatus,
       fromAddress: normalizeAddress(transaction.from),
       indexedAt,
       toAddress: transaction.to ? normalizeAddress(transaction.to) : null,

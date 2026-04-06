@@ -159,12 +159,29 @@ class InMemoryRelease4Repositories implements Release4Repositories {
 
   readonly indexedTransactions = {
     deleteFromBlockNumber: async (chainId: number, fromBlockNumber: string) => {
-      void chainId;
-      void fromBlockNumber;
+      for (const [key, value] of this.indexedTransactionsStore.entries()) {
+        if (
+          value.chainId === chainId &&
+          BigInt(value.blockNumber) >= BigInt(fromBlockNumber)
+        ) {
+          this.indexedTransactionsStore.delete(key);
+        }
+      }
     },
+    findByChainIdAndTransactionHash: async (chainId: number, transactionHash: string) =>
+      this.indexedTransactionsStore.get(`${chainId}:${transactionHash}`) ?? null,
+    listByChainId: async (chainId: number) =>
+      [...this.indexedTransactionsStore.values()].filter(
+        (record) => record.chainId === chainId
+      ),
     upsertMany: async (records: IndexedTransactionRecord[]) => {
-      void records;
-    }
+      for (const record of records) {
+        this.indexedTransactionsStore.set(
+          `${record.chainId}:${record.transactionHash}`,
+          record
+        );
+      }
+    },
   };
 
   readonly protocolConfigStates = {
@@ -228,6 +245,7 @@ class InMemoryRelease4Repositories implements Release4Repositories {
   private readonly contractOwnershipsStore = new Map<string, ContractOwnershipRecord>();
   private readonly escrowAgreementsStore = new Map<string, EscrowAgreementRecord>();
   private readonly feeVaultStatesStore = new Map<string, FeeVaultStateRecord>();
+  private readonly indexedTransactionsStore = new Map<string, IndexedTransactionRecord>();
   private readonly protocolConfigStatesStore = new Map<string, ProtocolConfigStateRecord>();
   private readonly tokenAllowlistEntriesStore = new Map<string, TokenAllowlistEntryRecord>();
 }

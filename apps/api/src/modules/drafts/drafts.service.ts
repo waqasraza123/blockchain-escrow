@@ -12,6 +12,7 @@ import type {
   EscrowAgreementRecord,
   FileRecord,
   FundingTransactionRecord,
+  IndexedTransactionRecord,
   OrganizationMemberRecord,
   OrganizationRecord,
   Release1Repositories,
@@ -84,6 +85,7 @@ import {
   counterpartyAcceptanceTypes,
   normalizeApiChainId
 } from "./deal-identity";
+import { resolveFundingTransactionState } from "../funding/funding-tracking";
 
 function oppositeRole(role: DraftDealPartyRecord["role"]): DraftDealPartyRecord["role"] {
   return role === "BUYER" ? "SELLER" : "BUYER";
@@ -155,9 +157,11 @@ function toCounterpartyDealVersionAcceptanceSummary(
 
 interface DraftProjectionContext {
   agreements: EscrowAgreementRecord[];
+  agreementsByCreatedTransactionHash: ReadonlyMap<`0x${string}`, EscrowAgreementRecord>;
   chainId: number;
   dealId: `0x${string}`;
   fundingTransactions: FundingTransactionRecord[];
+  indexedTransactionsByHash: ReadonlyMap<`0x${string}`, IndexedTransactionRecord>;
   linkedAgreement: EscrowAgreementRecord | null;
 }
 
@@ -812,7 +816,8 @@ export class DraftsService {
           transaction,
           draftContext.dealId,
           dealVersionHash,
-          draftContext.agreements
+          draftContext.agreementsByCreatedTransactionHash,
+          draftContext.indexedTransactionsByHash
         )
       ),
       milestones: milestoneSnapshots.map((milestone) =>
@@ -940,16 +945,25 @@ export class DraftsService {
   ): Promise<DraftProjectionContext> {
     const chainId = normalizeApiChainId();
     const dealId = buildCanonicalDealId(draft.organizationId, draft.id);
-    const agreements = await this.release4Repositories.escrowAgreements.listByChainId(
-      chainId
-    );
+    const [agreements, fundingTransactions, indexedTransactions] = await Promise.all([
+      this.release4Repositories.escrowAgreements.listByChainId(chainId),
+      this.repositories.fundingTransactions.listByDraftDealId(draft.id),
+      this.release4Repositories.indexedTransactions.listByChainId(chainId)
+    ]);
 
     return {
       agreements,
+      agreementsByCreatedTransactionHash: new Map(
+        agreements.map((agreement) => [agreement.createdTransactionHash, agreement] as const)
+      ),
       chainId,
       dealId,
-      fundingTransactions: await this.repositories.fundingTransactions.listByDraftDealId(
-        draft.id
+      fundingTransactions,
+      indexedTransactionsByHash: new Map(
+        indexedTransactions.map((transaction) => [
+          transaction.transactionHash,
+          transaction
+        ] as const)
       ),
       linkedAgreement: agreements.find((agreement) => agreement.dealId === dealId) ?? null
     };
@@ -1003,7 +1017,9 @@ export class DraftsService {
         ? this.toDraftLevelFundingTransactionStatus(
             latestTransaction,
             projectionContext.dealId,
-            projectionContext.agreements
+            null,
+            projectionContext.agreementsByCreatedTransactionHash,
+            projectionContext.indexedTransactionsByHash
           )
         : null,
       latestSubmittedAt: latestTransaction?.submittedAt ?? null,
@@ -1014,75 +1030,44 @@ export class DraftsService {
   private toDraftLevelFundingTransactionStatus(
     transaction: FundingTransactionRecord,
     dealId: `0x${string}`,
-    agreements: readonly EscrowAgreementRecord[]
+    dealVersionHash: `0x${string}` | null,
+    agreementsByCreatedTransactionHash: ReadonlyMap<`0x${string}`, EscrowAgreementRecord>,
+    indexedTransactionsByHash: ReadonlyMap<`0x${string}`, IndexedTransactionRecord>
   ): FundingTransactionSummary["status"] {
-    const observedAgreement = agreements.find(
-      (agreement) => agreement.createdTransactionHash === transaction.transactionHash
-    );
-
-    if (!observedAgreement) {
-      return "PENDING";
-    }
-
-    return observedAgreement.dealId === dealId ? "CONFIRMED" : "MISMATCHED";
+    return resolveFundingTransactionState({
+      dealId,
+      dealVersionHash,
+      indexedTransaction: indexedTransactionsByHash.get(transaction.transactionHash) ?? null,
+      observedAgreement:
+        agreementsByCreatedTransactionHash.get(transaction.transactionHash) ?? null
+    }).status;
   }
 
   private toFundingTransactionSummary(
     transaction: FundingTransactionRecord,
     dealId: `0x${string}`,
     dealVersionHash: `0x${string}`,
-    agreements: readonly EscrowAgreementRecord[]
+    agreementsByCreatedTransactionHash: ReadonlyMap<`0x${string}`, EscrowAgreementRecord>,
+    indexedTransactionsByHash: ReadonlyMap<`0x${string}`, IndexedTransactionRecord>
   ): FundingTransactionSummary {
-    const observedAgreement = agreements.find(
-      (agreement) => agreement.createdTransactionHash === transaction.transactionHash
-    );
-
-    if (!observedAgreement) {
-      return {
-        agreementAddress: null,
-        chainId: transaction.chainId,
-        confirmedAt: null,
-        dealVersionId: transaction.dealVersionId,
-        draftDealId: transaction.draftDealId,
-        id: transaction.id,
-        matchesTrackedVersion: null,
-        organizationId: transaction.organizationId,
-        status: "PENDING",
-        submittedAt: transaction.submittedAt,
-        submittedByUserId: transaction.submittedByUserId,
-        submittedWalletAddress: transaction.submittedWalletAddress,
-        transactionHash: transaction.transactionHash
-      };
-    }
-
-    if (observedAgreement.dealId !== dealId) {
-      return {
-        agreementAddress: null,
-        chainId: transaction.chainId,
-        confirmedAt: null,
-        dealVersionId: transaction.dealVersionId,
-        draftDealId: transaction.draftDealId,
-        id: transaction.id,
-        matchesTrackedVersion: false,
-        organizationId: transaction.organizationId,
-        status: "MISMATCHED",
-        submittedAt: transaction.submittedAt,
-        submittedByUserId: transaction.submittedByUserId,
-        submittedWalletAddress: transaction.submittedWalletAddress,
-        transactionHash: transaction.transactionHash
-      };
-    }
+    const resolvedState = resolveFundingTransactionState({
+      dealId,
+      dealVersionHash,
+      indexedTransaction: indexedTransactionsByHash.get(transaction.transactionHash) ?? null,
+      observedAgreement:
+        agreementsByCreatedTransactionHash.get(transaction.transactionHash) ?? null
+    });
 
     return {
-      agreementAddress: observedAgreement.agreementAddress,
+      agreementAddress: resolvedState.agreementAddress,
       chainId: transaction.chainId,
-      confirmedAt: observedAgreement.updatedAt,
+      confirmedAt: resolvedState.confirmedAt,
       dealVersionId: transaction.dealVersionId,
       draftDealId: transaction.draftDealId,
       id: transaction.id,
-      matchesTrackedVersion: observedAgreement.dealVersionHash === dealVersionHash,
+      matchesTrackedVersion: resolvedState.matchesTrackedVersion,
       organizationId: transaction.organizationId,
-      status: "CONFIRMED",
+      status: resolvedState.status,
       submittedAt: transaction.submittedAt,
       submittedByUserId: transaction.submittedByUserId,
       submittedWalletAddress: transaction.submittedWalletAddress,

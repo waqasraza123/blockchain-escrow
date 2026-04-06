@@ -547,3 +547,113 @@ test("funding service confirms tracked funding transactions after agreement inde
 
   assert.equal(draft.draft.state, "ACTIVE");
 });
+
+test("funding service marks reverted tracked funding transactions as failed", async () => {
+  const seeded = await seedFundingScenario();
+
+  await createCounterpartyAcceptance(seeded);
+
+  const created = await seeded.services.fundingService.createFundingTransaction(
+    {
+      dealVersionId: seeded.version.version.id,
+      draftDealId: seeded.draft.draft.id,
+      organizationId: "org-1"
+    },
+    {
+      transactionHash:
+        "0x4444444444444444444444444444444444444444444444444444444444444444"
+    },
+    {
+      cookieHeader: seeded.actor.cookieHeader,
+      ipAddress: "127.0.0.1",
+      userAgent: "test-agent"
+    }
+  );
+
+  await seeded.services.release4Repositories.indexedTransactions.upsertMany([
+    {
+      blockHash:
+        "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      blockNumber: "11",
+      chainId: 84532,
+      executionStatus: "REVERTED",
+      fromAddress: seeded.actor.walletAddress,
+      indexedAt: "2026-04-06T12:05:00.000Z",
+      toAddress: seeded.manifest.contracts.EscrowFactory!.toLowerCase() as `0x${string}`,
+      transactionHash: created.fundingTransaction.transactionHash,
+      transactionIndex: 0
+    }
+  ]);
+
+  const listed = await seeded.services.fundingService.listFundingTransactions(
+    {
+      dealVersionId: seeded.version.version.id,
+      draftDealId: seeded.draft.draft.id,
+      organizationId: "org-1"
+    },
+    {
+      cookieHeader: seeded.actor.cookieHeader,
+      ipAddress: "127.0.0.1",
+      userAgent: "test-agent"
+    }
+  );
+
+  assert.equal(listed.fundingTransactions[0]?.status, "FAILED");
+  assert.equal(listed.fundingTransactions[0]?.agreementAddress, null);
+  assert.equal(listed.fundingTransactions[0]?.matchesTrackedVersion, null);
+});
+
+test("funding service marks indexed successful tracked transactions without matching agreements as mismatched", async () => {
+  const seeded = await seedFundingScenario();
+
+  await createCounterpartyAcceptance(seeded);
+
+  const created = await seeded.services.fundingService.createFundingTransaction(
+    {
+      dealVersionId: seeded.version.version.id,
+      draftDealId: seeded.draft.draft.id,
+      organizationId: "org-1"
+    },
+    {
+      transactionHash:
+        "0x5555555555555555555555555555555555555555555555555555555555555555"
+    },
+    {
+      cookieHeader: seeded.actor.cookieHeader,
+      ipAddress: "127.0.0.1",
+      userAgent: "test-agent"
+    }
+  );
+
+  await seeded.services.release4Repositories.indexedTransactions.upsertMany([
+    {
+      blockHash:
+        "0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      blockNumber: "12",
+      chainId: 84532,
+      executionStatus: "SUCCESS",
+      fromAddress: seeded.actor.walletAddress,
+      indexedAt: "2026-04-06T12:06:00.000Z",
+      toAddress: seeded.manifest.contracts.EscrowFactory!.toLowerCase() as `0x${string}`,
+      transactionHash: created.fundingTransaction.transactionHash,
+      transactionIndex: 0
+    }
+  ]);
+
+  const listed = await seeded.services.fundingService.listFundingTransactions(
+    {
+      dealVersionId: seeded.version.version.id,
+      draftDealId: seeded.draft.draft.id,
+      organizationId: "org-1"
+    },
+    {
+      cookieHeader: seeded.actor.cookieHeader,
+      ipAddress: "127.0.0.1",
+      userAgent: "test-agent"
+    }
+  );
+
+  assert.equal(listed.fundingTransactions[0]?.status, "MISMATCHED");
+  assert.equal(listed.fundingTransactions[0]?.agreementAddress, null);
+  assert.equal(listed.fundingTransactions[0]?.matchesTrackedVersion, false);
+});
