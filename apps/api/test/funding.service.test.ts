@@ -9,6 +9,8 @@ import { privateKeyToAccount } from "viem/accounts";
 import { AuthenticatedSessionService } from "../src/modules/auth/authenticated-session.service";
 import { buildCanonicalDealId } from "../src/modules/drafts/deal-identity";
 import { DraftsService } from "../src/modules/drafts/drafts.service";
+import type { FundingChainReader } from "../src/modules/funding/funding-chain-reader";
+import { createUnavailableFundingChainReader } from "../src/modules/funding/funding-chain-reader";
 import { FundingService } from "../src/modules/funding/funding.service";
 import type { FundingReconciliationConfiguration } from "../src/modules/funding/funding.tokens";
 import {
@@ -30,6 +32,43 @@ const fundingReconciliationConfiguration: FundingReconciliationConfiguration = {
 
 function isoFromNow(offsetSeconds: number): string {
   return new Date(Date.now() + offsetSeconds * 1000).toISOString();
+}
+
+class StaticFundingChainReader implements FundingChainReader {
+  constructor(private readonly allowance: bigint | null) {}
+
+  async readErc20Allowance(): ReturnType<FundingChainReader["readErc20Allowance"]> {
+    if (this.allowance == null) {
+      return { status: "UNAVAILABLE" };
+    }
+
+    return {
+      allowance: this.allowance,
+      status: "AVAILABLE"
+    };
+  }
+}
+
+async function withContractVersion<T>(
+  chainId: number,
+  contractVersion: number,
+  run: () => Promise<T>
+): Promise<T> {
+  const manifest = getDeploymentManifestByChainId(chainId);
+
+  if (!manifest) {
+    throw new Error(`missing manifest for chain ${chainId}`);
+  }
+
+  const mutableManifest = manifest as typeof manifest & { contractVersion: number };
+  const previousVersion = mutableManifest.contractVersion;
+  mutableManifest.contractVersion = contractVersion;
+
+  try {
+    return await run();
+  } finally {
+    mutableManifest.contractVersion = previousVersion;
+  }
 }
 
 async function upsertRelease4Cursor(
@@ -86,7 +125,9 @@ async function seedOrganizationMembership(
   }
 }
 
-function createServices() {
+function createServices(
+  fundingChainReader: FundingChainReader = createUnavailableFundingChainReader()
+) {
   const release1Repositories = new InMemoryRelease1Repositories();
   const release4Repositories = new InMemoryRelease4Repositories();
   const sessionTokenService = new FakeSessionTokenService();
@@ -107,7 +148,8 @@ function createServices() {
       release1Repositories,
       release4Repositories,
       authenticatedSessionService,
-      fundingReconciliationConfiguration
+      fundingReconciliationConfiguration,
+      fundingChainReader
     ),
     release1Repositories,
     release4Repositories,
@@ -115,8 +157,10 @@ function createServices() {
   };
 }
 
-async function seedFundingScenario() {
-  const services = createServices();
+async function seedFundingScenario(
+  fundingChainReader?: FundingChainReader
+) {
+  const services = createServices(fundingChainReader);
   const actor = await seedAuthenticatedActor(
     services.release1Repositories,
     services.sessionTokenService
@@ -354,6 +398,10 @@ test("funding service returns a ready preparation when projections and both acce
   );
   assert.equal(result.preparation.totalAmountMinor, "3500000");
   assert.equal(result.preparation.milestoneCount, 2);
+  assert.equal(result.preparation.createAgreementFunctionName, "createAgreement");
+  assert.equal(result.preparation.allowanceTargetAddress, null);
+  assert.equal(result.preparation.buyerAllowanceMinor, null);
+  assert.equal(result.preparation.requiredBuyerAllowanceMinor, null);
   assert.equal(
     result.preparation.createAgreementTransaction?.to,
     manifest.contracts.EscrowFactory!.toLowerCase()
@@ -364,6 +412,65 @@ test("funding service returns a ready preparation when projections and both acce
     result.preparation.predictedAgreementAddress ?? "",
     /^0x[a-f0-9]{40}$/
   );
+});
+
+test("funding service switches to create-and-fund preparation with live allowance on v2 deployments", async () => {
+  await withContractVersion(84532, 2, async () => {
+    const seeded = await seedFundingScenario(new StaticFundingChainReader(3_500_000n));
+
+    await createCounterpartyAcceptance(seeded);
+
+    const result = await seeded.services.fundingService.getFundingPreparation(
+      {
+        dealVersionId: seeded.version.version.id,
+        draftDealId: seeded.draft.draft.id,
+        organizationId: "org-1"
+      },
+      {
+        cookieHeader: seeded.actor.cookieHeader,
+        ipAddress: "127.0.0.1",
+        userAgent: "test-agent"
+      }
+    );
+
+    assert.equal(result.preparation.ready, true);
+    assert.equal(
+      result.preparation.createAgreementFunctionName,
+      "createAndFundAgreement"
+    );
+    assert.equal(
+      result.preparation.allowanceTargetAddress,
+      result.preparation.predictedAgreementAddress
+    );
+    assert.equal(result.preparation.buyerAllowanceMinor, "3500000");
+    assert.equal(result.preparation.requiredBuyerAllowanceMinor, "3500000");
+  });
+});
+
+test("funding service blocks v2 funding when live buyer allowance is insufficient", async () => {
+  await withContractVersion(84532, 2, async () => {
+    const seeded = await seedFundingScenario(new StaticFundingChainReader(1_000_000n));
+
+    await createCounterpartyAcceptance(seeded);
+
+    const result = await seeded.services.fundingService.getFundingPreparation(
+      {
+        dealVersionId: seeded.version.version.id,
+        draftDealId: seeded.draft.draft.id,
+        organizationId: "org-1"
+      },
+      {
+        cookieHeader: seeded.actor.cookieHeader,
+        ipAddress: "127.0.0.1",
+        userAgent: "test-agent"
+      }
+    );
+
+    assert.equal(result.preparation.ready, false);
+    assert.ok(result.preparation.blockers.includes("BUYER_ALLOWANCE_INSUFFICIENT"));
+    assert.equal(result.preparation.buyerAllowanceMinor, "1000000");
+    assert.equal(result.preparation.requiredBuyerAllowanceMinor, "3500000");
+  });
 });
 
 test("funding service reports blockers when the draft counterparty wallet is missing", async () => {
@@ -684,7 +791,7 @@ test("funding service supersedes older unresolved tracked transactions when a re
   );
 });
 
-test("funding service confirms tracked funding transactions after agreement indexing and activates the draft", async () => {
+test("funding service confirms tracked funding transactions after agreement indexing without mutating draft state on read", async () => {
   const seeded = await seedFundingScenario();
 
   await createCounterpartyAcceptance(seeded);
@@ -734,6 +841,13 @@ test("funding service confirms tracked funding transactions after agreement inde
     dealVersionHash: preparation.preparation.dealVersionHash,
     factoryAddress: seeded.manifest.contracts.EscrowFactory!.toLowerCase() as `0x${string}`,
     feeVaultAddress: seeded.manifest.contracts.FeeVault!.toLowerCase() as `0x${string}`,
+    funded: false,
+    fundedAt: null,
+    fundedBlockHash: null,
+    fundedBlockNumber: null,
+    fundedLogIndex: null,
+    fundedPayerAddress: null,
+    fundedTransactionHash: null,
     initializedBlockHash:
       "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     initializedBlockNumber: "10",
@@ -788,7 +902,159 @@ test("funding service confirms tracked funding transactions after agreement inde
     }
   );
 
-  assert.equal(draft.draft.state, "ACTIVE");
+  assert.equal(draft.draft.state, "AWAITING_FUNDING");
+  assert.equal(
+    draft.draft.escrow?.agreementAddress,
+    "0x7777777777777777777777777777777777777777"
+  );
+});
+
+test("funding service requires the funded projection before confirming v2 funding transactions", async () => {
+  await withContractVersion(84532, 2, async () => {
+    const seeded = await seedFundingScenario(new StaticFundingChainReader(3_500_000n));
+
+    await createCounterpartyAcceptance(seeded);
+
+    const preparation = await seeded.services.fundingService.getFundingPreparation(
+      {
+        dealVersionId: seeded.version.version.id,
+        draftDealId: seeded.draft.draft.id,
+        organizationId: "org-1"
+      },
+      {
+        cookieHeader: seeded.actor.cookieHeader,
+        ipAddress: "127.0.0.1",
+        userAgent: "test-agent"
+      }
+    );
+
+    const trackedTransaction =
+      await seeded.services.fundingService.createFundingTransaction(
+        {
+          dealVersionId: seeded.version.version.id,
+          draftDealId: seeded.draft.draft.id,
+          organizationId: "org-1"
+        },
+        {
+          transactionHash:
+            "0x9898989898989898989898989898989898989898989898989898989898989898"
+        },
+        {
+          cookieHeader: seeded.actor.cookieHeader,
+          ipAddress: "127.0.0.1",
+          userAgent: "test-agent"
+        }
+      );
+
+    await seeded.services.release4Repositories.escrowAgreements.upsert({
+      agreementAddress: "0x7878787878787878787878787878787878787878",
+      arbitratorAddress: null,
+      buyerAddress: seeded.actor.walletAddress,
+      chainId: 84532,
+      createdBlockHash:
+        "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      createdBlockNumber: "10",
+      createdLogIndex: 0,
+      createdTransactionHash: trackedTransaction.fundingTransaction.transactionHash,
+      dealId: buildCanonicalDealId("org-1", seeded.draft.draft.id),
+      dealVersionHash: preparation.preparation.dealVersionHash,
+      factoryAddress: seeded.manifest.contracts.EscrowFactory!.toLowerCase() as `0x${string}`,
+      feeVaultAddress: seeded.manifest.contracts.FeeVault!.toLowerCase() as `0x${string}`,
+      funded: false,
+      fundedAt: null,
+      fundedBlockHash: null,
+      fundedBlockNumber: null,
+      fundedLogIndex: null,
+      fundedPayerAddress: null,
+      fundedTransactionHash: null,
+      initializedBlockHash:
+        "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      initializedBlockNumber: "10",
+      initializedLogIndex: 1,
+      initializedTimestamp: new Date().toISOString(),
+      initializedTransactionHash: trackedTransaction.fundingTransaction.transactionHash,
+      milestoneCount: 2,
+      protocolConfigAddress:
+        seeded.manifest.contracts.ProtocolConfig!.toLowerCase() as `0x${string}`,
+      protocolFeeBps: seeded.manifest.protocolFeeBps,
+      sellerAddress: counterpartyAccount.address.toLowerCase() as `0x${string}`,
+      settlementTokenAddress: seeded.manifest.usdcToken!.toLowerCase() as `0x${string}`,
+      totalAmount: "3500000",
+      updatedAt: new Date().toISOString()
+    });
+
+    let listed = await seeded.services.fundingService.listFundingTransactions(
+      {
+        dealVersionId: seeded.version.version.id,
+        draftDealId: seeded.draft.draft.id,
+        organizationId: "org-1"
+      },
+      {
+        cookieHeader: seeded.actor.cookieHeader,
+        ipAddress: "127.0.0.1",
+        userAgent: "test-agent"
+      }
+    );
+
+    assert.equal(listed.fundingTransactions[0]?.status, "MISMATCHED");
+
+    await seeded.services.release4Repositories.escrowAgreements.upsert({
+      agreementAddress: "0x7878787878787878787878787878787878787878",
+      arbitratorAddress: null,
+      buyerAddress: seeded.actor.walletAddress,
+      chainId: 84532,
+      createdBlockHash:
+        "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      createdBlockNumber: "10",
+      createdLogIndex: 0,
+      createdTransactionHash: trackedTransaction.fundingTransaction.transactionHash,
+      dealId: buildCanonicalDealId("org-1", seeded.draft.draft.id),
+      dealVersionHash: preparation.preparation.dealVersionHash,
+      factoryAddress: seeded.manifest.contracts.EscrowFactory!.toLowerCase() as `0x${string}`,
+      feeVaultAddress: seeded.manifest.contracts.FeeVault!.toLowerCase() as `0x${string}`,
+      funded: true,
+      fundedAt: "2026-04-06T12:08:00.000Z",
+      fundedBlockHash:
+        "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      fundedBlockNumber: "10",
+      fundedLogIndex: 2,
+      fundedPayerAddress: seeded.actor.walletAddress,
+      fundedTransactionHash: trackedTransaction.fundingTransaction.transactionHash,
+      initializedBlockHash:
+        "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      initializedBlockNumber: "10",
+      initializedLogIndex: 1,
+      initializedTimestamp: "2026-04-06T12:07:00.000Z",
+      initializedTransactionHash: trackedTransaction.fundingTransaction.transactionHash,
+      milestoneCount: 2,
+      protocolConfigAddress:
+        seeded.manifest.contracts.ProtocolConfig!.toLowerCase() as `0x${string}`,
+      protocolFeeBps: seeded.manifest.protocolFeeBps,
+      sellerAddress: counterpartyAccount.address.toLowerCase() as `0x${string}`,
+      settlementTokenAddress: seeded.manifest.usdcToken!.toLowerCase() as `0x${string}`,
+      totalAmount: "3500000",
+      updatedAt: "2026-04-06T12:08:00.000Z"
+    });
+
+    listed = await seeded.services.fundingService.listFundingTransactions(
+      {
+        dealVersionId: seeded.version.version.id,
+        draftDealId: seeded.draft.draft.id,
+        organizationId: "org-1"
+      },
+      {
+        cookieHeader: seeded.actor.cookieHeader,
+        ipAddress: "127.0.0.1",
+        userAgent: "test-agent"
+      }
+    );
+
+    assert.equal(listed.fundingTransactions[0]?.status, "CONFIRMED");
+    assert.equal(
+      listed.fundingTransactions[0]?.confirmedAt,
+      "2026-04-06T12:08:00.000Z"
+    );
+  });
 });
 
 test("funding service marks reverted tracked funding transactions as failed", async () => {

@@ -289,6 +289,13 @@ async function applyAgreementCreatedEvent(
     dealVersionHash: requireString(event.data, "dealVersionHash") as `0x${string}`,
     factoryAddress: requireString(initializedEvent.data, "factory") as WalletAddress,
     feeVaultAddress: requireString(initializedEvent.data, "feeVault") as WalletAddress,
+    funded: false,
+    fundedAt: null,
+    fundedBlockHash: null,
+    fundedBlockNumber: null,
+    fundedLogIndex: null,
+    fundedPayerAddress: null,
+    fundedTransactionHash: null,
     initializedBlockHash: initializedEvent.blockHash,
     initializedBlockNumber: initializedEvent.blockNumber,
     initializedLogIndex: initializedEvent.logIndex,
@@ -300,6 +307,34 @@ async function applyAgreementCreatedEvent(
     sellerAddress: requireString(event.data, "seller") as WalletAddress,
     settlementTokenAddress: requireString(event.data, "settlementToken") as WalletAddress,
     totalAmount: requireString(event.data, "totalAmount"),
+    updatedAt: toEventTime(event)
+  });
+}
+
+async function applyAgreementFundedEvent(
+  repositories: Release4Repositories,
+  event: IndexedContractEventSummary
+): Promise<void> {
+  const existing = await repositories.escrowAgreements.findByChainIdAndAddress(
+    event.chainId,
+    event.contractAddress
+  );
+
+  if (!existing) {
+    throw new Error(
+      `Missing EscrowAgreement projection for funded event at ${event.contractAddress}`
+    );
+  }
+
+  await repositories.escrowAgreements.upsert({
+    ...existing,
+    funded: true,
+    fundedAt: toEventTime(event),
+    fundedBlockHash: event.blockHash,
+    fundedBlockNumber: event.blockNumber,
+    fundedLogIndex: event.logIndex,
+    fundedPayerAddress: requireString(event.data, "payer") as WalletAddress,
+    fundedTransactionHash: event.transactionHash,
     updatedAt: toEventTime(event)
   });
 }
@@ -373,6 +408,9 @@ export async function applyIndexedEvents(
           event,
           initializedEventLookup
         );
+        break;
+      case "AgreementFunded":
+        await applyAgreementFundedEvent(repositories, event);
         break;
       case "AgreementInitialized":
       case "NativeFeesWithdrawn":

@@ -153,6 +153,7 @@ export interface DraftDealRepository {
   create(record: DraftDealRecord): Promise<DraftDealRecord>;
   findById(id: EntityId): Promise<DraftDealRecord | null>;
   listByOrganizationId(organizationId: EntityId): Promise<DraftDealRecord[]>;
+  listByStates(states: DraftDealRecord["state"][]): Promise<DraftDealRecord[]>;
   updateState(
     id: EntityId,
     state: DraftDealRecord["state"],

@@ -172,7 +172,7 @@ export function decodeTrackedContractLog(
   );
 }
 
-export function decodeAgreementInitializedEventsFromReceipt(
+export function decodeAgreementReceiptEventsFromReceipt(
   chainId: number,
   receipt: TransactionReceipt,
   agreementAddresses: ReadonlySet<WalletAddress>,
@@ -191,5 +191,9 @@ export function decodeAgreementInitializedEventsFromReceipt(
         indexedAt
       )
     )
-    .filter((event) => event.eventName === "AgreementInitialized");
+    .filter(
+      (event) =>
+        event.eventName === "AgreementInitialized" ||
+        event.eventName === "AgreementFunded"
+    );
 }

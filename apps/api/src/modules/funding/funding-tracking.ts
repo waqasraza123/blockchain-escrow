@@ -107,19 +107,33 @@ export function resolveFundingTransactionState(input: {
   fundingTransaction: FundingTransactionRecord;
   indexedTransaction: IndexedTransactionRecord | null;
   observedAgreement: EscrowAgreementRecord | null;
+  requiresFundedAgreement?: boolean;
 }): ResolvedFundingTransactionState {
   const {
     dealId,
     dealVersionHash,
     fundingTransaction,
     indexedTransaction,
-    observedAgreement
+    observedAgreement,
+    requiresFundedAgreement = false
   } = input;
 
   if (observedAgreement && observedAgreement.dealId === dealId) {
+    if (requiresFundedAgreement && !observedAgreement.funded) {
+      return {
+        agreementAddress: null,
+        confirmedAt: null,
+        matchesTrackedVersion: false,
+        status: "MISMATCHED"
+      };
+    }
+
     return {
       agreementAddress: observedAgreement.agreementAddress,
-      confirmedAt: observedAgreement.updatedAt,
+      confirmedAt:
+        (requiresFundedAgreement
+          ? observedAgreement.fundedAt
+          : observedAgreement.updatedAt) ?? observedAgreement.updatedAt,
       matchesTrackedVersion: dealVersionHash
         ? observedAgreement.dealVersionHash === dealVersionHash
         : null,

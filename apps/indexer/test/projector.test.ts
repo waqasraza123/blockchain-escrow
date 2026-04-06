@@ -397,6 +397,27 @@ test("applyIndexedEvents builds protocol and agreement projections from replayab
       transactionHash:
         "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa0001",
       transactionIndex: 1
+    }),
+    createIndexedEvent({
+      blockHash: "0xbbbbccccddddeeeeffff0000111122223333444455556666777788889999aaaa",
+      blockNumber: "101",
+      contractAddress: "0x43292d7fac721139157c69effd18afc6739815f6",
+      contractName: "EscrowAgreement",
+      data: {
+        amount: "1000",
+        dealId: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        dealVersionHash:
+          "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        payer: "0x1111111111111111111111111111111111111111",
+        settlementToken: "0x036cbd53842c5426634e7929541ec2318f3dcf7e"
+      },
+      eventName: "AgreementFunded",
+      logIndex: 2,
+      topic0: "0x04",
+      topics: ["0x04"],
+      transactionHash:
+        "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa0001",
+      transactionIndex: 1
     })
   ];
 
@@ -432,6 +453,16 @@ test("applyIndexedEvents builds protocol and agreement projections from replayab
   );
   assert.equal(agreements[0]?.protocolFeeBps, 0);
   assert.equal(agreements[0]?.arbitratorAddress, null);
+  assert.equal(agreements[0]?.funded, true);
+  assert.equal(agreements[0]?.fundedBlockNumber, "101");
+  assert.equal(
+    agreements[0]?.fundedTransactionHash,
+    "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa0001"
+  );
+  assert.equal(
+    agreements[0]?.fundedPayerAddress,
+    "0x1111111111111111111111111111111111111111"
+  );
 });
 
 test("resetRelease4Projections clears derived state and replay rebuilds it", async () => {

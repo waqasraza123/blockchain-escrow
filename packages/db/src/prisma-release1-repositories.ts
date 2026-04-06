@@ -979,6 +979,19 @@ export class PrismaDraftDealRepository implements DraftDealRepository {
     return records.map(mapDraftDealRecord);
   }
 
+  async listByStates(states: DraftDealRecord["state"][]): Promise<DraftDealRecord[]> {
+    const records = await this.prisma.draftDeal.findMany({
+      where: {
+        state: {
+          in: states
+        }
+      },
+      orderBy: [{ updatedAt: "asc" }, { id: "asc" }]
+    });
+
+    return records.map(mapDraftDealRecord);
+  }
+
   async updateState(
     id: string,
     state: DraftDealRecord["state"],

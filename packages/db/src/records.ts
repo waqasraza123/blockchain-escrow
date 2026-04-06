@@ -380,6 +380,13 @@ export interface EscrowAgreementRecord {
   dealVersionHash: HexString;
   factoryAddress: WalletAddress;
   feeVaultAddress: WalletAddress;
+  funded: boolean;
+  fundedAt: IsoTimestamp | null;
+  fundedBlockHash: HexString | null;
+  fundedBlockNumber: string | null;
+  fundedLogIndex: number | null;
+  fundedPayerAddress: WalletAddress | null;
+  fundedTransactionHash: HexString | null;
   initializedBlockHash: HexString;
   initializedBlockNumber: string;
   initializedLogIndex: number;

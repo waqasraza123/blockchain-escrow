@@ -33,6 +33,28 @@ function isoFromNow(offsetSeconds: number): string {
   return new Date(Date.now() + offsetSeconds * 1000).toISOString();
 }
 
+async function withContractVersion<T>(
+  chainId: number,
+  contractVersion: number,
+  run: () => Promise<T>
+): Promise<T> {
+  const manifest = getDeploymentManifestByChainId(chainId);
+
+  if (!manifest) {
+    throw new Error(`missing manifest for chain ${chainId}`);
+  }
+
+  const mutableManifest = manifest as typeof manifest & { contractVersion: number };
+  const previousVersion = mutableManifest.contractVersion;
+  mutableManifest.contractVersion = contractVersion;
+
+  try {
+    return await run();
+  } finally {
+    mutableManifest.contractVersion = previousVersion;
+  }
+}
+
 async function upsertRelease4Cursor(
   release4Repositories: InMemoryRelease4Repositories,
   updatedAt: string
@@ -933,7 +955,7 @@ test("drafts service enforces organization scoping for version acceptances", asy
   );
 });
 
-test("drafts service marks a draft active after a linked agreement is indexed", async () => {
+test("drafts service exposes indexed escrow linkage without mutating draft state on read", async () => {
   const { draftsService, release4Repositories, repositories, sessionTokenService } =
     createDraftsService();
   const actor = await seedAuthenticatedActor(repositories, sessionTokenService);
@@ -958,6 +980,13 @@ test("drafts service marks a draft active after a linked agreement is indexed", 
       "0x1111111111111111111111111111111111111111111111111111111111111111",
     factoryAddress: manifest.contracts.EscrowFactory!.toLowerCase() as `0x${string}`,
     feeVaultAddress: manifest.contracts.FeeVault!.toLowerCase() as `0x${string}`,
+    funded: false,
+    fundedAt: null,
+    fundedBlockHash: null,
+    fundedBlockNumber: null,
+    fundedLogIndex: null,
+    fundedPayerAddress: null,
+    fundedTransactionHash: null,
     initializedBlockHash:
       "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     initializedBlockNumber: "10",
@@ -987,12 +1016,142 @@ test("drafts service marks a draft active after a linked agreement is indexed", 
     }
   );
 
-  assert.equal(detail.draft.state, "ACTIVE");
   assert.equal(
     detail.draft.escrow?.agreementAddress,
     "0x7777777777777777777777777777777777777777"
   );
   assert.equal(detail.draft.escrow?.chainId, 84532);
+  assert.equal(detail.draft.state, seeded.draft.draft.state);
+});
+
+test("drafts service exposes funded escrow linkage on v2 deployments without mutating draft state on read", async () => {
+  await withContractVersion(84532, 2, async () => {
+    const { draftsService, release4Repositories, repositories, sessionTokenService } =
+      createDraftsService();
+    const actor = await seedAuthenticatedActor(repositories, sessionTokenService);
+    const seeded = await seedDraftVersionScenario(draftsService, repositories, actor);
+    const manifest = getDeploymentManifestByChainId(84532);
+
+    assert.ok(manifest, "missing base sepolia manifest");
+
+    await release4Repositories.escrowAgreements.upsert({
+      agreementAddress: "0x8888888888888888888888888888888888888888",
+      arbitratorAddress: null,
+      buyerAddress: actor.walletAddress,
+      chainId: 84532,
+      createdBlockHash:
+        "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      createdBlockNumber: "10",
+      createdLogIndex: 0,
+      createdTransactionHash:
+        "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      dealId: buildCanonicalDealId("org-1", seeded.draft.draft.id),
+      dealVersionHash:
+        "0x1111111111111111111111111111111111111111111111111111111111111111",
+      factoryAddress: manifest.contracts.EscrowFactory!.toLowerCase() as `0x${string}`,
+      feeVaultAddress: manifest.contracts.FeeVault!.toLowerCase() as `0x${string}`,
+      funded: false,
+      fundedAt: null,
+      fundedBlockHash: null,
+      fundedBlockNumber: null,
+      fundedLogIndex: null,
+      fundedPayerAddress: null,
+      fundedTransactionHash: null,
+      initializedBlockHash:
+        "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      initializedBlockNumber: "10",
+      initializedLogIndex: 1,
+      initializedTimestamp: "2026-04-06T12:07:00.000Z",
+      initializedTransactionHash:
+        "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      milestoneCount: 1,
+      protocolConfigAddress:
+        manifest.contracts.ProtocolConfig!.toLowerCase() as `0x${string}`,
+      protocolFeeBps: manifest.protocolFeeBps,
+      sellerAddress: counterpartyAccount.address.toLowerCase() as `0x${string}`,
+      settlementTokenAddress: manifest.usdcToken!.toLowerCase() as `0x${string}`,
+      totalAmount: "1000000",
+      updatedAt: "2026-04-06T12:07:00.000Z"
+    });
+
+    let detail = await draftsService.getDraft(
+      {
+        draftDealId: seeded.draft.draft.id,
+        organizationId: "org-1"
+      },
+      {
+        cookieHeader: actor.cookieHeader,
+        ipAddress: "127.0.0.1",
+        userAgent: "test-agent"
+      }
+    );
+
+    assert.notEqual(detail.draft.state, "ACTIVE");
+    assert.equal(
+      detail.draft.escrow?.agreementAddress,
+      "0x8888888888888888888888888888888888888888"
+    );
+
+    await release4Repositories.escrowAgreements.upsert({
+      agreementAddress: "0x8888888888888888888888888888888888888888",
+      arbitratorAddress: null,
+      buyerAddress: actor.walletAddress,
+      chainId: 84532,
+      createdBlockHash:
+        "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      createdBlockNumber: "10",
+      createdLogIndex: 0,
+      createdTransactionHash:
+        "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      dealId: buildCanonicalDealId("org-1", seeded.draft.draft.id),
+      dealVersionHash:
+        "0x1111111111111111111111111111111111111111111111111111111111111111",
+      factoryAddress: manifest.contracts.EscrowFactory!.toLowerCase() as `0x${string}`,
+      feeVaultAddress: manifest.contracts.FeeVault!.toLowerCase() as `0x${string}`,
+      funded: true,
+      fundedAt: "2026-04-06T12:08:00.000Z",
+      fundedBlockHash:
+        "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      fundedBlockNumber: "10",
+      fundedLogIndex: 2,
+      fundedPayerAddress: actor.walletAddress,
+      fundedTransactionHash:
+        "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      initializedBlockHash:
+        "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      initializedBlockNumber: "10",
+      initializedLogIndex: 1,
+      initializedTimestamp: "2026-04-06T12:07:00.000Z",
+      initializedTransactionHash:
+        "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      milestoneCount: 1,
+      protocolConfigAddress:
+        manifest.contracts.ProtocolConfig!.toLowerCase() as `0x${string}`,
+      protocolFeeBps: manifest.protocolFeeBps,
+      sellerAddress: counterpartyAccount.address.toLowerCase() as `0x${string}`,
+      settlementTokenAddress: manifest.usdcToken!.toLowerCase() as `0x${string}`,
+      totalAmount: "1000000",
+      updatedAt: "2026-04-06T12:08:00.000Z"
+    });
+
+    detail = await draftsService.getDraft(
+      {
+        draftDealId: seeded.draft.draft.id,
+        organizationId: "org-1"
+      },
+      {
+        cookieHeader: actor.cookieHeader,
+        ipAddress: "127.0.0.1",
+        userAgent: "test-agent"
+      }
+    );
+
+    assert.notEqual(detail.draft.state, "ACTIVE");
+    assert.equal(
+      detail.draft.escrow?.agreementAddress,
+      "0x8888888888888888888888888888888888888888"
+    );
+  });
 });
 
 test("drafts service blocks new version snapshots after funding starts", async () => {

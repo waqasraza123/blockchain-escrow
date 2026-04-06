@@ -2,6 +2,10 @@ import { Module } from "@nestjs/common";
 
 import { AuthModule } from "../auth/auth.module";
 import { FundingController } from "./funding.controller";
+import {
+  FUNDING_CHAIN_READER,
+  loadFundingChainReader
+} from "./funding-chain-reader";
 import { FundingService } from "./funding.service";
 import {
   FUNDING_RECONCILIATION_CONFIGURATION,
@@ -16,6 +20,10 @@ import {
     {
       provide: FUNDING_RECONCILIATION_CONFIGURATION,
       useFactory: loadFundingReconciliationConfiguration
+    },
+    {
+      provide: FUNDING_CHAIN_READER,
+      useFactory: loadFundingChainReader
     }
   ],
   exports: [FUNDING_RECONCILIATION_CONFIGURATION]

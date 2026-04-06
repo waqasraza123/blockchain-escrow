@@ -14,6 +14,8 @@ export type FundingPreparationParams = z.infer<
 export const fundingPreparationBlockerSchema = z.enum([
   "AGREEMENT_ALREADY_CREATED",
   "ARBITRATOR_REGISTRY_NOT_CONFIGURED",
+  "BUYER_ALLOWANCE_INSUFFICIENT",
+  "BUYER_ALLOWANCE_UNAVAILABLE",
   "COUNTERPARTY_ACCEPTANCE_MISSING",
   "COUNTERPARTY_WALLET_MISSING",
   "CREATE_ESCROW_PAUSED",
@@ -75,13 +77,24 @@ export interface FundingPreparationTransaction {
   value: "0";
 }
 
+export const fundingPreparationTransactionFunctionSchema = z.enum([
+  "createAgreement",
+  "createAndFundAgreement"
+]);
+export type FundingPreparationTransactionFunction = z.infer<
+  typeof fundingPreparationTransactionFunctionSchema
+>;
+
 export interface FundingPreparationSummary {
   agreementImplementationAddress: WalletAddress | null;
+  allowanceTargetAddress: WalletAddress | null;
   arbitratorAddress: WalletAddress | null;
   blockers: FundingPreparationBlocker[];
+  buyerAllowanceMinor: string | null;
   buyerAddress: WalletAddress | null;
   chainId: ChainId;
   counterpartyWalletAddress: WalletAddress | null;
+  createAgreementFunctionName: FundingPreparationTransactionFunction | null;
   createAgreementTransaction: FundingPreparationTransaction | null;
   dealId: HexString;
   dealVersionHash: HexString;
@@ -93,6 +106,7 @@ export interface FundingPreparationSummary {
   predictedAgreementAddress: WalletAddress | null;
   protocolConfigAddress: WalletAddress | null;
   ready: boolean;
+  requiredBuyerAllowanceMinor: string | null;
   sellerAddress: WalletAddress | null;
   settlementTokenAddress: WalletAddress | null;
   totalAmountMinor: string;

@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 
 import {
+  deploymentSupportsCreateAndFund,
   getContractArtifact,
   getDeploymentManifestByChainId
 } from "@blockchain-escrow/contracts-sdk";
@@ -67,6 +68,10 @@ import {
   resolveFundingReconciliationCursorKey
 } from "./funding.tokens";
 import {
+  FUNDING_CHAIN_READER,
+  type FundingChainReader
+} from "./funding-chain-reader";
+import {
   buildCanonicalDealId,
   buildCanonicalDealVersionHash,
   normalizeApiChainId
@@ -92,7 +97,7 @@ interface FundingComputationContext extends FundingAccessContext {
     ReturnType<Release1Repositories["dealVersionAcceptances"]["listByDealVersionId"]>
   >;
   agreements: EscrowAgreementRecord[];
-  agreementsByCreatedTransactionHash: ReadonlyMap<`0x${string}`, EscrowAgreementRecord>;
+  agreementsByObservedTransactionHash: ReadonlyMap<`0x${string}`, EscrowAgreementRecord>;
   chainId: number;
   dealId: `0x${string}`;
   dealVersionHash: `0x${string}`;
@@ -132,7 +137,9 @@ export class FundingService {
     private readonly release4Repositories: Release4Repositories,
     private readonly authenticatedSessionService: AuthenticatedSessionService,
     @Inject(FUNDING_RECONCILIATION_CONFIGURATION)
-    private readonly fundingReconciliationConfiguration: FundingReconciliationConfiguration
+    private readonly fundingReconciliationConfiguration: FundingReconciliationConfiguration,
+    @Inject(FUNDING_CHAIN_READER)
+    private readonly fundingChainReader: FundingChainReader
   ) {}
 
   async getFundingPreparation(
@@ -152,8 +159,6 @@ export class FundingService {
       requestMetadata
     );
     const context = await this.buildFundingContext(access, new Date().toISOString());
-
-    await this.syncDraftActivation(access.draft, context.linkedAgreement, new Date().toISOString());
 
     return {
       preparation: await this.buildFundingPreparationSummary(context)
@@ -188,7 +193,6 @@ export class FundingService {
     const preparation = await this.buildFundingPreparationSummary(context);
 
     if (context.linkedAgreement) {
-      await this.syncDraftActivation(access.draft, context.linkedAgreement, new Date().toISOString());
       throw new ConflictException("agreement already created for draft deal");
     }
 
@@ -277,8 +281,6 @@ export class FundingService {
     );
     const context = await this.buildFundingContext(access, new Date().toISOString());
 
-    await this.syncDraftActivation(access.draft, context.linkedAgreement, new Date().toISOString());
-
     const fundingTransactions =
       await this.release1Repositories.fundingTransactions.listByDealVersionId(
         access.version.id
@@ -341,8 +343,18 @@ export class FundingService {
       ...access,
       acceptances,
       agreements,
-      agreementsByCreatedTransactionHash: new Map(
-        agreements.map((agreement) => [agreement.createdTransactionHash, agreement] as const)
+      agreementsByObservedTransactionHash: new Map(
+        agreements.flatMap((agreement) => {
+          const entries: [`0x${string}`, EscrowAgreementRecord][] = [
+            [agreement.createdTransactionHash, agreement]
+          ];
+
+          if (agreement.fundedTransactionHash) {
+            entries.push([agreement.fundedTransactionHash, agreement]);
+          }
+
+          return entries;
+        })
       ),
       chainId,
       dealId,
@@ -372,6 +384,8 @@ export class FundingService {
     context: FundingComputationContext
   ): Promise<FundingPreparationSummary> {
     const blockers: FundingPreparationBlocker[] = [];
+    const supportsCreateAndFund = deploymentSupportsCreateAndFund(context.manifest);
+    const totalAmountMinor = sumMilestones(context.milestones);
 
     if (!context.latestVersion || context.latestVersion.id !== context.version.id) {
       blockers.push("VERSION_NOT_LATEST");
@@ -507,6 +521,39 @@ export class FundingService {
           })
         : null;
 
+    let buyerAllowanceMinor: string | null = null;
+    let requiredBuyerAllowanceMinor: string | null = null;
+    const allowanceTargetAddress =
+      supportsCreateAndFund && predictedAgreementAddress
+        ? normalizeAddress(predictedAgreementAddress)
+        : null;
+
+    if (
+      supportsCreateAndFund &&
+      settlementTokenAddress &&
+      versionPartyAddresses.buyerAddress &&
+      allowanceTargetAddress
+    ) {
+      requiredBuyerAllowanceMinor = totalAmountMinor;
+
+      const allowanceResult = await this.fundingChainReader.readErc20Allowance({
+        chainId: context.chainId,
+        ownerAddress: versionPartyAddresses.buyerAddress,
+        spenderAddress: allowanceTargetAddress,
+        tokenAddress: settlementTokenAddress
+      });
+
+      if (allowanceResult.status === "AVAILABLE") {
+        buyerAllowanceMinor = allowanceResult.allowance.toString();
+
+        if (allowanceResult.allowance < BigInt(totalAmountMinor)) {
+          blockers.push("BUYER_ALLOWANCE_INSUFFICIENT");
+        }
+      } else {
+        blockers.push("BUYER_ALLOWANCE_UNAVAILABLE");
+      }
+    }
+
     const createAgreementTransaction =
       factoryAddress &&
       protocolConfigAddress &&
@@ -516,7 +563,9 @@ export class FundingService {
         ? {
             data: encodeFunctionData({
               abi: getContractArtifact("EscrowFactory").abi as Abi,
-              functionName: "createAgreement",
+              functionName: supportsCreateAndFund
+                ? "createAndFundAgreement"
+                : "createAgreement",
               args: [
                 {
                   arbitrator: ZERO_ADDRESS,
@@ -526,7 +575,7 @@ export class FundingService {
                   milestoneCount: context.milestones.length,
                   seller: versionPartyAddresses.sellerAddress,
                   settlementToken: settlementTokenAddress,
-                  totalAmount: BigInt(sumMilestones(context.milestones))
+                  totalAmount: BigInt(totalAmountMinor)
                 }
               ]
             }) as `0x${string}`,
@@ -537,11 +586,18 @@ export class FundingService {
 
     return {
       agreementImplementationAddress,
+      allowanceTargetAddress,
       arbitratorAddress: ZERO_ADDRESS as `0x${string}`,
       blockers: [...new Set(blockers)],
+      buyerAllowanceMinor,
       buyerAddress: versionPartyAddresses.buyerAddress,
       chainId: context.chainId,
       counterpartyWalletAddress,
+      createAgreementFunctionName: createAgreementTransaction
+        ? supportsCreateAndFund
+          ? "createAndFundAgreement"
+          : "createAgreement"
+        : null,
       createAgreementTransaction,
       dealId: context.dealId,
       dealVersionHash: context.dealVersionHash,
@@ -555,9 +611,10 @@ export class FundingService {
         : null,
       protocolConfigAddress,
       ready: blockers.length === 0,
+      requiredBuyerAllowanceMinor,
       sellerAddress: versionPartyAddresses.sellerAddress,
       settlementTokenAddress,
-      totalAmountMinor: sumMilestones(context.milestones)
+      totalAmountMinor
     };
   }
 
@@ -573,7 +630,8 @@ export class FundingService {
       fundingTransaction: record,
       indexedTransaction,
       observedAgreement:
-        context.agreementsByCreatedTransactionHash.get(record.transactionHash) ?? null
+        context.agreementsByObservedTransactionHash.get(record.transactionHash) ?? null,
+      requiresFundedAgreement: deploymentSupportsCreateAndFund(context.manifest)
     });
     const observation = buildFundingTransactionObservation(indexedTransaction);
     const stalePendingState = resolveFundingTransactionStalePendingState({
@@ -633,8 +691,10 @@ export class FundingService {
         indexedTransaction:
           context.indexedTransactionsByHash.get(trackedTransaction.transactionHash) ?? null,
         observedAgreement:
-          context.agreementsByCreatedTransactionHash.get(trackedTransaction.transactionHash) ??
-          null
+          context.agreementsByObservedTransactionHash.get(
+            trackedTransaction.transactionHash
+          ) ?? null,
+        requiresFundedAgreement: deploymentSupportsCreateAndFund(context.manifest)
       }).status;
 
       if (status !== "PENDING") {
@@ -669,17 +729,6 @@ export class FundingService {
 
     return supersededTransactions;
   }
-
-  private async syncDraftActivation(
-    draft: DraftDealRecord,
-    linkedAgreement: EscrowAgreementRecord | null,
-    updatedAt: string
-  ): Promise<void> {
-    if (linkedAgreement && draft.state !== "ACTIVE") {
-      await this.release1Repositories.draftDeals.updateState(draft.id, "ACTIVE", updatedAt);
-    }
-  }
-
   private requireSingleDraftCounterpartyParty(
     parties: readonly DraftDealPartyRecord[]
   ): DraftDealPartyRecord {

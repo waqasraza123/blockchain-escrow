@@ -25,7 +25,7 @@ import {
 
 import type { IndexerConfig } from "./config";
 import {
-  decodeAgreementInitializedEventsFromReceipt,
+  decodeAgreementReceiptEventsFromReceipt,
   decodeTrackedContractLog,
   getTrackedContracts,
   type TrackedContracts
@@ -313,13 +313,13 @@ export class IndexerService {
       })
       .sort(sortIndexedEvents);
 
-    const agreementInitializedEvents = await this.fetchAgreementInitializedEvents(
+    const agreementReceiptEvents = await this.fetchAgreementReceiptEvents(
       decodedBaseEvents,
       blockTimestampByNumber,
       indexedAt
     );
 
-    const allEvents = [...decodedBaseEvents, ...agreementInitializedEvents].sort(
+    const allEvents = [...decodedBaseEvents, ...agreementReceiptEvents].sort(
       sortIndexedEvents
     );
     const transactionRecords = await this.fetchTransactionRecords(
@@ -349,7 +349,7 @@ export class IndexerService {
     });
   }
 
-  private async fetchAgreementInitializedEvents(
+  private async fetchAgreementReceiptEvents(
     baseEvents: readonly IndexedContractEventSummary[],
     blockTimestampByNumber: ReadonlyMap<string, string>,
     indexedAt: string
@@ -374,7 +374,7 @@ export class IndexerService {
           );
         }
 
-        return decodeAgreementInitializedEventsFromReceipt(
+        return decodeAgreementReceiptEventsFromReceipt(
           this.config.chainId,
           receipt,
           new Set([agreementAddress]),
@@ -384,13 +384,13 @@ export class IndexerService {
       }
     );
 
-    const agreementInitializedEvents: IndexedContractEventSummary[] = [];
+    const agreementReceiptEvents: IndexedContractEventSummary[] = [];
 
     for (const receiptEvents of decodedReceiptEvents) {
-      agreementInitializedEvents.push(...receiptEvents);
+      agreementReceiptEvents.push(...receiptEvents);
     }
 
-    return agreementInitializedEvents;
+    return agreementReceiptEvents;
   }
 
   private async fetchBlockRecords(
@@ -935,6 +935,17 @@ export class IndexerService {
             functionName: "feeVault"
           }), "EscrowAgreement feeVault")
         ),
+        funded: asBoolean(await this.client.readContract({
+          abi: agreementAbi,
+          address: agreement.agreementAddress,
+          functionName: "funded"
+        }), "EscrowAgreement funded"),
+        fundedAt: null,
+        fundedBlockHash: agreement.fundedBlockHash,
+        fundedBlockNumber: agreement.fundedBlockNumber,
+        fundedLogIndex: agreement.fundedLogIndex,
+        fundedPayerAddress: agreement.fundedPayerAddress,
+        fundedTransactionHash: agreement.fundedTransactionHash,
         initializedBlockHash: agreement.initializedBlockHash,
         initializedBlockNumber: agreement.initializedBlockNumber,
         initializedLogIndex: agreement.initializedLogIndex,
@@ -982,6 +993,17 @@ export class IndexerService {
         updatedAt: agreement.updatedAt
       };
 
+      const fundedAtValue = Number(asBigInt(await this.client.readContract({
+        abi: agreementAbi,
+        address: agreement.agreementAddress,
+        functionName: "fundedAt"
+      }), "EscrowAgreement fundedAt"));
+
+      liveAgreement.fundedAt =
+        fundedAtValue > 0
+          ? new Date(fundedAtValue * 1000).toISOString()
+          : null;
+
       const initialized = asBoolean(await this.client.readContract({
         abi: agreementAbi,
         address: agreement.agreementAddress,
@@ -999,6 +1021,8 @@ export class IndexerService {
         liveAgreement.settlementTokenAddress !== agreement.settlementTokenAddress ||
         liveAgreement.arbitratorAddress !== agreement.arbitratorAddress ||
         liveAgreement.feeVaultAddress !== agreement.feeVaultAddress ||
+        liveAgreement.funded !== agreement.funded ||
+        liveAgreement.fundedAt !== agreement.fundedAt ||
         liveAgreement.protocolFeeBps !== agreement.protocolFeeBps ||
         liveAgreement.totalAmount !== agreement.totalAmount ||
         liveAgreement.milestoneCount !== agreement.milestoneCount

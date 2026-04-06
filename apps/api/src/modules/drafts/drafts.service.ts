@@ -1,5 +1,9 @@
 import { randomUUID } from "node:crypto";
 
+import {
+  deploymentSupportsCreateAndFund,
+  getDeploymentManifestByChainId
+} from "@blockchain-escrow/contracts-sdk";
 import type {
   ChainCursorRecord,
   CounterpartyRecord,
@@ -167,7 +171,7 @@ function toCounterpartyDealVersionAcceptanceSummary(
 
 interface DraftProjectionContext {
   agreements: EscrowAgreementRecord[];
-  agreementsByCreatedTransactionHash: ReadonlyMap<`0x${string}`, EscrowAgreementRecord>;
+  agreementsByObservedTransactionHash: ReadonlyMap<`0x${string}`, EscrowAgreementRecord>;
   chainId: number;
   dealId: `0x${string}`;
   fundingTransactionsById: ReadonlyMap<string, FundingTransactionRecord>;
@@ -175,6 +179,7 @@ interface DraftProjectionContext {
   indexedTransactionsByHash: ReadonlyMap<`0x${string}`, IndexedTransactionRecord>;
   linkedAgreement: EscrowAgreementRecord | null;
   release4ChainCursor: ChainCursorRecord | null;
+  requiresFundedAgreement: boolean;
   staleEvaluatedAt: string;
 }
 
@@ -344,7 +349,7 @@ export class DraftsService {
     }
 
     const now = new Date().toISOString();
-    await this.assertDraftIsMutable(draft, now);
+    await this.assertDraftIsMutable(draft);
 
     const duplicateFiles = parsedVersion.data.attachmentFileIds
       ? new Set(parsedVersion.data.attachmentFileIds).size !==
@@ -678,7 +683,7 @@ export class DraftsService {
       throw new NotFoundException("draft deal not found");
     }
 
-    await this.assertDraftIsMutable(draft, new Date().toISOString());
+    await this.assertDraftIsMutable(draft);
 
     const parties = await this.repositories.draftDealParties.listByDraftDealId(draft.id);
     const counterpartyParties = parties.filter(
@@ -832,8 +837,9 @@ export class DraftsService {
           transaction,
           draftContext.dealId,
           dealVersionHash,
-          draftContext.agreementsByCreatedTransactionHash,
+          draftContext.agreementsByObservedTransactionHash,
           draftContext.indexedTransactionsByHash,
+          draftContext.requiresFundedAgreement,
           draftContext.fundingTransactionsById,
           draftContext.release4ChainCursor,
           draftContext.staleEvaluatedAt
@@ -974,6 +980,7 @@ export class DraftsService {
       this.repositories.fundingTransactions.listByDraftDealId(draft.id),
       this.release4Repositories.indexedTransactions.listByChainId(chainId)
     ]);
+    const manifest = getDeploymentManifestByChainId(chainId);
     const release4ChainCursor = release4CursorKey
       ? await this.release4Repositories.chainCursors.findByChainIdAndCursorKey(
           chainId,
@@ -983,8 +990,18 @@ export class DraftsService {
 
     return {
       agreements,
-      agreementsByCreatedTransactionHash: new Map(
-        agreements.map((agreement) => [agreement.createdTransactionHash, agreement] as const)
+      agreementsByObservedTransactionHash: new Map(
+        agreements.flatMap((agreement) => {
+          const entries: [`0x${string}`, EscrowAgreementRecord][] = [
+            [agreement.createdTransactionHash, agreement]
+          ];
+
+          if (agreement.fundedTransactionHash) {
+            entries.push([agreement.fundedTransactionHash, agreement]);
+          }
+
+          return entries;
+        })
       ),
       chainId,
       dealId,
@@ -1000,6 +1017,9 @@ export class DraftsService {
       ),
       linkedAgreement: agreements.find((agreement) => agreement.dealId === dealId) ?? null,
       release4ChainCursor,
+      requiresFundedAgreement: manifest
+        ? deploymentSupportsCreateAndFund(manifest)
+        : false,
       staleEvaluatedAt
     };
   }
@@ -1055,8 +1075,9 @@ export class DraftsService {
           latestTransaction,
           projectionContext.dealId,
           null,
-          projectionContext.agreementsByCreatedTransactionHash,
-          projectionContext.indexedTransactionsByHash
+          projectionContext.agreementsByObservedTransactionHash,
+          projectionContext.indexedTransactionsByHash,
+          projectionContext.requiresFundedAgreement
         )
       : null;
     const latestStalePendingState =
@@ -1082,8 +1103,9 @@ export class DraftsService {
           transaction,
           projectionContext.dealId,
           null,
-          projectionContext.agreementsByCreatedTransactionHash,
-          projectionContext.indexedTransactionsByHash
+          projectionContext.agreementsByObservedTransactionHash,
+          projectionContext.indexedTransactionsByHash,
+          projectionContext.requiresFundedAgreement
         );
         const stalePendingState = resolveFundingTransactionStalePendingState({
           currentStatus: status,
@@ -1119,8 +1141,9 @@ export class DraftsService {
     transaction: FundingTransactionRecord,
     dealId: `0x${string}`,
     dealVersionHash: `0x${string}` | null,
-    agreementsByCreatedTransactionHash: ReadonlyMap<`0x${string}`, EscrowAgreementRecord>,
-    indexedTransactionsByHash: ReadonlyMap<`0x${string}`, IndexedTransactionRecord>
+    agreementsByObservedTransactionHash: ReadonlyMap<`0x${string}`, EscrowAgreementRecord>,
+    indexedTransactionsByHash: ReadonlyMap<`0x${string}`, IndexedTransactionRecord>,
+    requiresFundedAgreement: boolean
   ): FundingTransactionSummary["status"] {
     return resolveFundingTransactionState({
       dealId,
@@ -1128,7 +1151,8 @@ export class DraftsService {
       fundingTransaction: transaction,
       indexedTransaction: indexedTransactionsByHash.get(transaction.transactionHash) ?? null,
       observedAgreement:
-        agreementsByCreatedTransactionHash.get(transaction.transactionHash) ?? null
+        agreementsByObservedTransactionHash.get(transaction.transactionHash) ?? null,
+      requiresFundedAgreement
     }).status;
   }
 
@@ -1136,8 +1160,9 @@ export class DraftsService {
     transaction: FundingTransactionRecord,
     dealId: `0x${string}`,
     dealVersionHash: `0x${string}`,
-    agreementsByCreatedTransactionHash: ReadonlyMap<`0x${string}`, EscrowAgreementRecord>,
+    agreementsByObservedTransactionHash: ReadonlyMap<`0x${string}`, EscrowAgreementRecord>,
     indexedTransactionsByHash: ReadonlyMap<`0x${string}`, IndexedTransactionRecord>,
+    requiresFundedAgreement: boolean,
     fundingTransactionsById: ReadonlyMap<string, FundingTransactionRecord>,
     release4ChainCursor: ChainCursorRecord | null,
     staleEvaluatedAt: string
@@ -1149,7 +1174,8 @@ export class DraftsService {
       fundingTransaction: transaction,
       indexedTransaction,
       observedAgreement:
-        agreementsByCreatedTransactionHash.get(transaction.transactionHash) ?? null
+        agreementsByObservedTransactionHash.get(transaction.transactionHash) ?? null,
+      requiresFundedAgreement
     });
     const observation = buildFundingTransactionObservation(indexedTransaction);
     const stalePendingState = resolveFundingTransactionStalePendingState({
@@ -1420,16 +1446,6 @@ export class DraftsService {
       return null;
     }
 
-    const linkedAgreement = await this.findLinkedAgreementForDraft(draft);
-
-    if (linkedAgreement) {
-      if (draft.state === "ACTIVE") {
-        return draft;
-      }
-
-      return this.repositories.draftDeals.updateState(draft.id, "ACTIVE", updatedAt);
-    }
-
     if (draft.state === "ACTIVE") {
       return draft;
     }
@@ -1477,17 +1493,10 @@ export class DraftsService {
     return draft;
   }
 
-  private async assertDraftIsMutable(
-    draft: DraftDealRecord,
-    updatedAt: string
-  ): Promise<void> {
+  private async assertDraftIsMutable(draft: DraftDealRecord): Promise<void> {
     const linkedAgreement = await this.findLinkedAgreementForDraft(draft);
 
     if (linkedAgreement || draft.state === "ACTIVE") {
-      if (linkedAgreement && draft.state !== "ACTIVE") {
-        await this.repositories.draftDeals.updateState(draft.id, "ACTIVE", updatedAt);
-      }
-
       throw new ConflictException("draft deal is already active onchain");
     }
 

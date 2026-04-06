@@ -6,6 +6,11 @@
     "build": "tsc -p tsconfig.build.json",
     "start": "node dist/main.js",
     "lint": "eslint .",
-    "typecheck": "tsc --noEmit"
+    "test": "node --import tsx --test test/**/*.test.ts",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.test.json"
+  },
+  "dependencies": {
+    "@blockchain-escrow/contracts-sdk": "workspace:*",
+    "@blockchain-escrow/db": "workspace:*"
   }
 }

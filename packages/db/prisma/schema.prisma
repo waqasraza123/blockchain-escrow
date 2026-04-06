@@ -34,6 +34,7 @@ enum AuditAction {
   DRAFT_DEAL_COUNTERPARTY_WALLET_UPDATED
   DEAL_VERSION_ACCEPTANCE_CREATED
   DEAL_VERSION_COUNTERPARTY_ACCEPTANCE_CREATED
+  DRAFT_DEAL_ACTIVATED
   DEAL_VERSION_CREATED
   DRAFT_DEAL_CREATED
   FILE_CREATED
@@ -129,6 +130,7 @@ enum IndexedEventName {
   TokenFeesWithdrawn
   AgreementCreated
   AgreementInitialized
+  AgreementFunded
 }
 
 enum IndexedTransactionExecutionStatus {
@@ -745,6 +747,13 @@ model EscrowAgreementProjection {
   protocolFeeBps          Int
   totalAmount             String   @db.Text
   milestoneCount          Int
+  funded                  Boolean  @default(false)
+  fundedBlockNumber       BigInt?
+  fundedBlockHash         String?  @db.Text
+  fundedTransactionHash   String?  @db.Text
+  fundedLogIndex          Int?
+  fundedTimestamp         DateTime? @db.Timestamptz(3)
+  fundedPayerAddress      String?  @db.Text
   createdBlockNumber      BigInt
   createdBlockHash        String   @db.Text
   createdTransactionHash  String   @db.Text

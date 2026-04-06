@@ -302,6 +302,13 @@ function mapEscrowAgreementRecord(record: {
   dealVersionHash: string;
   factoryAddress: string;
   feeVaultAddress: string;
+  funded: boolean;
+  fundedBlockHash: string | null;
+  fundedBlockNumber: bigint | null;
+  fundedLogIndex: number | null;
+  fundedPayerAddress: string | null;
+  fundedTimestamp: Date | null;
+  fundedTransactionHash: string | null;
   initializedBlockHash: string;
   initializedBlockNumber: bigint;
   initializedLogIndex: number;
@@ -330,6 +337,18 @@ function mapEscrowAgreementRecord(record: {
     dealVersionHash: record.dealVersionHash as EscrowAgreementRecord["dealVersionHash"],
     factoryAddress: record.factoryAddress as EscrowAgreementRecord["factoryAddress"],
     feeVaultAddress: record.feeVaultAddress as EscrowAgreementRecord["feeVaultAddress"],
+    funded: record.funded,
+    fundedAt: record.fundedTimestamp ? toIsoTimestamp(record.fundedTimestamp) : null,
+    fundedBlockHash:
+      record.fundedBlockHash as EscrowAgreementRecord["fundedBlockHash"],
+    fundedBlockNumber: record.fundedBlockNumber
+      ? toBigIntString(record.fundedBlockNumber)
+      : null,
+    fundedLogIndex: record.fundedLogIndex,
+    fundedPayerAddress:
+      record.fundedPayerAddress as EscrowAgreementRecord["fundedPayerAddress"],
+    fundedTransactionHash:
+      record.fundedTransactionHash as EscrowAgreementRecord["fundedTransactionHash"],
     initializedBlockHash:
       record.initializedBlockHash as EscrowAgreementRecord["initializedBlockHash"],
     initializedBlockNumber: toBigIntString(record.initializedBlockNumber),
@@ -530,6 +549,15 @@ function buildRelease4Repositories(database: DatabaseClient): Release4Repositori
             dealVersionHash: record.dealVersionHash,
             factoryAddress: record.factoryAddress,
             feeVaultAddress: record.feeVaultAddress,
+            funded: record.funded,
+            fundedBlockHash: record.fundedBlockHash,
+            fundedBlockNumber: record.fundedBlockNumber
+              ? BigInt(record.fundedBlockNumber)
+              : null,
+            fundedLogIndex: record.fundedLogIndex,
+            fundedPayerAddress: record.fundedPayerAddress,
+            fundedTimestamp: record.fundedAt ? toDate(record.fundedAt) : null,
+            fundedTransactionHash: record.fundedTransactionHash,
             initializedBlockHash: record.initializedBlockHash,
             initializedBlockNumber: BigInt(record.initializedBlockNumber),
             initializedLogIndex: record.initializedLogIndex,
@@ -557,6 +585,15 @@ function buildRelease4Repositories(database: DatabaseClient): Release4Repositori
             dealVersionHash: record.dealVersionHash,
             factoryAddress: record.factoryAddress,
             feeVaultAddress: record.feeVaultAddress,
+            funded: record.funded,
+            fundedBlockHash: record.fundedBlockHash,
+            fundedBlockNumber: record.fundedBlockNumber
+              ? BigInt(record.fundedBlockNumber)
+              : null,
+            fundedLogIndex: record.fundedLogIndex,
+            fundedPayerAddress: record.fundedPayerAddress,
+            fundedTimestamp: record.fundedAt ? toDate(record.fundedAt) : null,
+            fundedTransactionHash: record.fundedTransactionHash,
             initializedBlockHash: record.initializedBlockHash,
             initializedBlockNumber: BigInt(record.initializedBlockNumber),
             initializedLogIndex: record.initializedLogIndex,
