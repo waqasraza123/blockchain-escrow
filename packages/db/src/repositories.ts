@@ -1,4 +1,10 @@
-import type { ChainId, EntityId, HexString, WalletAddress } from "@blockchain-escrow/shared";
+import type {
+  ChainId,
+  EntityId,
+  HexString,
+  IsoTimestamp,
+  WalletAddress
+} from "@blockchain-escrow/shared";
 
 import type {
   ArbitratorRegistryEntryRecord,
@@ -225,6 +231,11 @@ export interface FundingTransactionRepository {
   findById(id: EntityId): Promise<FundingTransactionRecord | null>;
   listByDealVersionId(dealVersionId: EntityId): Promise<FundingTransactionRecord[]>;
   listByDraftDealId(draftDealId: EntityId): Promise<FundingTransactionRecord[]>;
+  markSuperseded(
+    id: EntityId,
+    supersededByFundingTransactionId: EntityId,
+    supersededAt: IsoTimestamp
+  ): Promise<FundingTransactionRecord>;
 }
 
 export interface ChainCursorRepository {

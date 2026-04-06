@@ -316,7 +316,23 @@ export class InMemoryRelease1Repositories implements Release1Repositories {
     ): Promise<FundingTransactionRecord[]> =>
       this.fundingTransactionRecords
         .filter((record) => record.draftDealId === draftDealId)
-        .sort((left, right) => compareIsoTimestamps(right.submittedAt, left.submittedAt))
+        .sort((left, right) => compareIsoTimestamps(right.submittedAt, left.submittedAt)),
+    markSuperseded: async (
+      id: string,
+      supersededByFundingTransactionId: string,
+      supersededAt: string
+    ): Promise<FundingTransactionRecord> => {
+      const record = this.fundingTransactionRecords.find((entry) => entry.id === id);
+
+      if (!record) {
+        throw new Error(`Funding transaction not found: ${id}`);
+      }
+
+      record.supersededAt = supersededAt;
+      record.supersededByFundingTransactionId = supersededByFundingTransactionId;
+
+      return record;
+    }
   };
 
   readonly templates = {

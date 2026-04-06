@@ -447,6 +447,84 @@ test("funding service records and lists pending funding transactions", async () 
   assert.equal(listed.fundingTransactions[0]?.status, "PENDING");
 });
 
+test("funding service supersedes older unresolved tracked transactions when a replacement is submitted", async () => {
+  const seeded = await seedFundingScenario();
+
+  await createCounterpartyAcceptance(seeded);
+
+  const first = await seeded.services.fundingService.createFundingTransaction(
+    {
+      dealVersionId: seeded.version.version.id,
+      draftDealId: seeded.draft.draft.id,
+      organizationId: "org-1"
+    },
+    {
+      transactionHash:
+        "0x6666666666666666666666666666666666666666666666666666666666666666"
+    },
+    {
+      cookieHeader: seeded.actor.cookieHeader,
+      ipAddress: "127.0.0.1",
+      userAgent: "test-agent"
+    }
+  );
+
+  const replacement = await seeded.services.fundingService.createFundingTransaction(
+    {
+      dealVersionId: seeded.version.version.id,
+      draftDealId: seeded.draft.draft.id,
+      organizationId: "org-1"
+    },
+    {
+      transactionHash:
+        "0x7777777777777777777777777777777777777777777777777777777777777777"
+    },
+    {
+      cookieHeader: seeded.actor.cookieHeader,
+      ipAddress: "127.0.0.1",
+      userAgent: "test-agent"
+    }
+  );
+
+  assert.equal(replacement.fundingTransaction.status, "PENDING");
+  assert.equal(replacement.fundingTransaction.supersededAt, null);
+  assert.equal(replacement.fundingTransaction.supersededByFundingTransactionId, null);
+
+  const listed = await seeded.services.fundingService.listFundingTransactions(
+    {
+      dealVersionId: seeded.version.version.id,
+      draftDealId: seeded.draft.draft.id,
+      organizationId: "org-1"
+    },
+    {
+      cookieHeader: seeded.actor.cookieHeader,
+      ipAddress: "127.0.0.1",
+      userAgent: "test-agent"
+    }
+  );
+
+  assert.equal(listed.fundingTransactions.length, 2);
+  const listedReplacement = listed.fundingTransactions.find(
+    (transaction) => transaction.transactionHash === replacement.fundingTransaction.transactionHash
+  );
+  const listedFirst = listed.fundingTransactions.find(
+    (transaction) => transaction.transactionHash === first.fundingTransaction.transactionHash
+  );
+
+  assert.equal(listedReplacement?.status, "PENDING");
+  assert.equal(listedReplacement?.supersededAt, null);
+  assert.equal(listedFirst?.status, "SUPERSEDED");
+  assert.ok(listedFirst?.supersededAt);
+  assert.equal(
+    listedFirst?.supersededByFundingTransactionId,
+    replacement.fundingTransaction.id
+  );
+  assert.equal(
+    listedFirst?.supersededByTransactionHash,
+    replacement.fundingTransaction.transactionHash
+  );
+});
+
 test("funding service confirms tracked funding transactions after agreement indexing and activates the draft", async () => {
   const seeded = await seedFundingScenario();
 

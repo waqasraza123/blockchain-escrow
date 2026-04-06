@@ -37,6 +37,7 @@ enum AuditAction {
   DEAL_VERSION_CREATED
   DRAFT_DEAL_CREATED
   FILE_CREATED
+  FUNDING_TRANSACTION_SUPERSEDED
   FUNDING_TRANSACTION_SUBMITTED
   ORGANIZATION_CREATED
   ORGANIZATION_INVITE_REVOKED
@@ -478,27 +479,32 @@ model CounterpartyDealVersionAcceptance {
 }
 
 model FundingTransaction {
-  id                   String    @id @db.Text
-  organizationId       String    @db.Text
-  draftDealId          String    @db.Text
-  dealVersionId        String    @db.Text
-  submittedByUserId    String    @db.Text
-  submittedWalletId    String    @db.Text
-  submittedWalletAddress String  @db.Text
-  chainId              Int
-  transactionHash      String    @db.Text
-  submittedAt          DateTime  @db.Timestamptz(3)
-  organization         Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  draftDeal            DraftDeal @relation(fields: [draftDealId], references: [id], onDelete: Cascade)
-  dealVersion          DealVersion @relation(fields: [dealVersionId], references: [id], onDelete: Cascade)
-  submittedByUser      User      @relation("FundingTransactionSubmittedByUser", fields: [submittedByUserId], references: [id], onDelete: Restrict)
-  submittedWallet      Wallet    @relation("FundingTransactionSubmittedWallet", fields: [submittedWalletId], references: [id], onDelete: Restrict)
+  id                         String               @id @db.Text
+  organizationId             String               @db.Text
+  draftDealId                String               @db.Text
+  dealVersionId              String               @db.Text
+  submittedByUserId          String               @db.Text
+  submittedWalletId          String               @db.Text
+  submittedWalletAddress     String               @db.Text
+  chainId                    Int
+  transactionHash            String               @db.Text
+  submittedAt                DateTime             @db.Timestamptz(3)
+  supersededAt               DateTime?            @db.Timestamptz(3)
+  supersededByFundingTransactionId String?        @db.Text
+  organization               Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  draftDeal                  DraftDeal            @relation(fields: [draftDealId], references: [id], onDelete: Cascade)
+  dealVersion                DealVersion          @relation(fields: [dealVersionId], references: [id], onDelete: Cascade)
+  submittedByUser            User                 @relation("FundingTransactionSubmittedByUser", fields: [submittedByUserId], references: [id], onDelete: Restrict)
+  submittedWallet            Wallet               @relation("FundingTransactionSubmittedWallet", fields: [submittedWalletId], references: [id], onDelete: Restrict)
+  supersededByFundingTransaction FundingTransaction? @relation("FundingTransactionSupersession", fields: [supersededByFundingTransactionId], references: [id], onDelete: SetNull)
+  supersededFundingTransactions FundingTransaction[] @relation("FundingTransactionSupersession")
 
   @@unique([chainId, transactionHash], map: "funding_transactions_chain_id_transaction_hash_key")
   @@index([organizationId], map: "funding_transactions_organization_id_idx")
   @@index([draftDealId], map: "funding_transactions_draft_deal_id_idx")
   @@index([dealVersionId], map: "funding_transactions_deal_version_id_idx")
   @@index([dealVersionId, submittedAt], map: "funding_transactions_deal_version_id_submitted_at_idx")
+  @@index([supersededByFundingTransactionId], map: "funding_transactions_superseded_by_funding_transaction_id_idx")
   @@map("funding_transactions")
 }
 

@@ -246,6 +246,8 @@ export interface FundingTransactionRecord {
   submittedByUserId: EntityId;
   submittedWalletAddress: WalletAddress;
   submittedWalletId: EntityId;
+  supersededAt: IsoTimestamp | null;
+  supersededByFundingTransactionId: EntityId | null;
   transactionHash: HexString;
 }
 

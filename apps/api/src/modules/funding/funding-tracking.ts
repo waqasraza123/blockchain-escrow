@@ -1,5 +1,6 @@
 import type {
   EscrowAgreementRecord,
+  FundingTransactionRecord,
   IndexedTransactionRecord
 } from "@blockchain-escrow/db";
 import type {
@@ -19,10 +20,17 @@ export interface ResolvedFundingTransactionState {
 export function resolveFundingTransactionState(input: {
   dealId: HexString;
   dealVersionHash?: HexString | null;
+  fundingTransaction: FundingTransactionRecord;
   indexedTransaction: IndexedTransactionRecord | null;
   observedAgreement: EscrowAgreementRecord | null;
 }): ResolvedFundingTransactionState {
-  const { dealId, dealVersionHash, indexedTransaction, observedAgreement } = input;
+  const {
+    dealId,
+    dealVersionHash,
+    fundingTransaction,
+    indexedTransaction,
+    observedAgreement
+  } = input;
 
   if (observedAgreement && observedAgreement.dealId === dealId) {
     return {
@@ -59,6 +67,15 @@ export function resolveFundingTransactionState(input: {
       confirmedAt: null,
       matchesTrackedVersion: false,
       status: "MISMATCHED"
+    };
+  }
+
+  if (fundingTransaction.supersededAt) {
+    return {
+      agreementAddress: null,
+      confirmedAt: null,
+      matchesTrackedVersion: null,
+      status: "SUPERSEDED"
     };
   }
 

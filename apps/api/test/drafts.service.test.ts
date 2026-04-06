@@ -979,6 +979,8 @@ test("drafts service blocks new version snapshots after funding starts", async (
     submittedByUserId: actor.userId,
     submittedWalletAddress: actor.walletAddress,
     submittedWalletId: actor.walletId,
+    supersededAt: null,
+    supersededByFundingTransactionId: null,
     transactionHash:
       "0x9999999999999999999999999999999999999999999999999999999999999999"
   });
@@ -1024,6 +1026,8 @@ test("drafts service exposes tracked funding progress on detail responses", asyn
     submittedByUserId: actor.userId,
     submittedWalletAddress: actor.walletAddress,
     submittedWalletId: actor.walletId,
+    supersededAt: null,
+    supersededByFundingTransactionId: null,
     transactionHash:
       "0x1212121212121212121212121212121212121212121212121212121212121212"
   });
@@ -1051,6 +1055,68 @@ test("drafts service exposes tracked funding progress on detail responses", asyn
   );
 });
 
+test("drafts service exposes superseded tracked funding submissions on detail responses", async () => {
+  const { draftsService, repositories, sessionTokenService } = createDraftsService();
+  const actor = await seedAuthenticatedActor(repositories, sessionTokenService);
+  const seeded = await seedDraftVersionScenario(draftsService, repositories, actor);
+
+  await repositories.fundingTransactions.create({
+    chainId: 84532,
+    dealVersionId: seeded.version.version.id,
+    draftDealId: seeded.draft.draft.id,
+    id: "funding-tx-4",
+    organizationId: "org-1",
+    submittedAt: "2026-04-06T12:15:00.000Z",
+    submittedByUserId: actor.userId,
+    submittedWalletAddress: actor.walletAddress,
+    submittedWalletId: actor.walletId,
+    supersededAt: "2026-04-06T12:16:00.000Z",
+    supersededByFundingTransactionId: "funding-tx-5",
+    transactionHash:
+      "0x4545454545454545454545454545454545454545454545454545454545454545"
+  });
+  await repositories.fundingTransactions.create({
+    chainId: 84532,
+    dealVersionId: seeded.version.version.id,
+    draftDealId: seeded.draft.draft.id,
+    id: "funding-tx-5",
+    organizationId: "org-1",
+    submittedAt: "2026-04-06T12:16:00.000Z",
+    submittedByUserId: actor.userId,
+    submittedWalletAddress: actor.walletAddress,
+    submittedWalletId: actor.walletId,
+    supersededAt: null,
+    supersededByFundingTransactionId: null,
+    transactionHash:
+      "0x5656565656565656565656565656565656565656565656565656565656565656"
+  });
+
+  const detail = await draftsService.getDraft(
+    {
+      draftDealId: seeded.draft.draft.id,
+      organizationId: "org-1"
+    },
+    {
+      cookieHeader: actor.cookieHeader,
+      ipAddress: "127.0.0.1",
+      userAgent: "test-agent"
+    }
+  );
+
+  assert.equal(detail.draft.funding.trackedTransactionCount, 2);
+  assert.equal(detail.draft.funding.latestStatus, "PENDING");
+  assert.equal(detail.versions[0]?.fundingTransactions[0]?.status, "PENDING");
+  assert.equal(detail.versions[0]?.fundingTransactions[1]?.status, "SUPERSEDED");
+  assert.equal(
+    detail.versions[0]?.fundingTransactions[1]?.supersededByFundingTransactionId,
+    "funding-tx-5"
+  );
+  assert.equal(
+    detail.versions[0]?.fundingTransactions[1]?.supersededByTransactionHash,
+    "0x5656565656565656565656565656565656565656565656565656565656565656"
+  );
+});
+
 test("drafts service exposes failed tracked funding progress from indexed reverted transactions", async () => {
   const { draftsService, repositories, release4Repositories, sessionTokenService } =
     createDraftsService();
@@ -1072,6 +1138,8 @@ test("drafts service exposes failed tracked funding progress from indexed revert
     submittedByUserId: actor.userId,
     submittedWalletAddress: actor.walletAddress,
     submittedWalletId: actor.walletId,
+    supersededAt: null,
+    supersededByFundingTransactionId: null,
     transactionHash:
       "0x3434343434343434343434343434343434343434343434343434343434343434"
   });

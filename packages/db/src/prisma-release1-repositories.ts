@@ -454,6 +454,8 @@ function mapFundingTransactionRecord(record: {
   submittedByUserId: string;
   submittedWalletAddress: string;
   submittedWalletId: string;
+  supersededAt: Date | null;
+  supersededByFundingTransactionId: string | null;
   transactionHash: string;
 }): FundingTransactionRecord {
   return {
@@ -467,6 +469,8 @@ function mapFundingTransactionRecord(record: {
     submittedWalletAddress:
       record.submittedWalletAddress as FundingTransactionRecord["submittedWalletAddress"],
     submittedWalletId: record.submittedWalletId,
+    supersededAt: toIsoTimestamp(record.supersededAt),
+    supersededByFundingTransactionId: record.supersededByFundingTransactionId,
     transactionHash: record.transactionHash as FundingTransactionRecord["transactionHash"]
   };
 }
@@ -1328,6 +1332,8 @@ export class PrismaFundingTransactionRepository
         submittedByUserId: record.submittedByUserId,
         submittedWalletAddress: record.submittedWalletAddress,
         submittedWalletId: record.submittedWalletId,
+        supersededAt: record.supersededAt ? toDate(record.supersededAt) : null,
+        supersededByFundingTransactionId: record.supersededByFundingTransactionId,
         transactionHash: record.transactionHash
       }
     });
@@ -1375,6 +1381,22 @@ export class PrismaFundingTransactionRepository
     });
 
     return records.map(mapFundingTransactionRecord);
+  }
+
+  async markSuperseded(
+    id: string,
+    supersededByFundingTransactionId: string,
+    supersededAt: string
+  ): Promise<FundingTransactionRecord> {
+    const record = await this.prisma.fundingTransaction.update({
+      data: {
+        supersededAt: toDate(supersededAt),
+        supersededByFundingTransactionId
+      },
+      where: { id }
+    });
+
+    return mapFundingTransactionRecord(record);
   }
 }
 

@@ -88,6 +88,7 @@ interface FundingComputationContext extends FundingAccessContext {
   dealVersionHash: `0x${string}`;
   draftParties: DraftDealPartyRecord[];
   files: FileRecord[];
+  fundingTransactionsById: ReadonlyMap<string, FundingTransactionRecord>;
   indexedTransactionsByHash: ReadonlyMap<`0x${string}`, IndexedTransactionRecord>;
   latestVersion: DealVersionRecord | null;
   linkedAgreement: EscrowAgreementRecord | null;
@@ -203,8 +204,16 @@ export class FundingService {
       submittedByUserId: access.actor.user.id,
       submittedWalletAddress: access.actor.wallet.address,
       submittedWalletId: access.actor.wallet.id,
+      supersededAt: null,
+      supersededByFundingTransactionId: null,
       transactionHash
     });
+    const supersededTransactions = await this.supersedePendingFundingTransactions(
+      context,
+      fundingTransaction,
+      requestMetadata,
+      now
+    );
 
     await this.release1Repositories.auditLogs.append({
       action: "FUNDING_TRANSACTION_SUBMITTED",
@@ -225,10 +234,14 @@ export class FundingService {
     });
 
     return {
-      fundingTransaction: this.buildFundingTransactionSummary(
-        fundingTransaction,
-        context
-      )
+      fundingTransaction: this.buildFundingTransactionSummary(fundingTransaction, {
+        ...context,
+        fundingTransactionsById: new Map([
+          ...context.fundingTransactionsById,
+          [fundingTransaction.id, fundingTransaction],
+          ...supersededTransactions.map((transaction) => [transaction.id, transaction] as const)
+        ])
+      })
     };
   }
 
@@ -292,8 +305,9 @@ export class FundingService {
       milestones,
       files
     );
-    const [agreements, indexedTransactions] = await Promise.all([
+    const [agreements, fundingTransactions, indexedTransactions] = await Promise.all([
       this.release4Repositories.escrowAgreements.listByChainId(chainId),
+      this.release1Repositories.fundingTransactions.listByDealVersionId(access.version.id),
       this.release4Repositories.indexedTransactions.listByChainId(chainId)
     ]);
     const linkedAgreement = agreements.find((agreement) => agreement.dealId === dealId) ?? null;
@@ -310,6 +324,9 @@ export class FundingService {
       dealVersionHash,
       draftParties,
       files,
+      fundingTransactionsById: new Map(
+        fundingTransactions.map((transaction) => [transaction.id, transaction] as const)
+      ),
       indexedTransactionsByHash: new Map(
         indexedTransactions.map((transaction) => [
           transaction.transactionHash,
@@ -524,10 +541,15 @@ export class FundingService {
     const resolvedState = resolveFundingTransactionState({
       dealId: context.dealId,
       dealVersionHash: context.dealVersionHash,
+      fundingTransaction: record,
       indexedTransaction: context.indexedTransactionsByHash.get(record.transactionHash) ?? null,
       observedAgreement:
         context.agreementsByCreatedTransactionHash.get(record.transactionHash) ?? null
     });
+    const supersededByTransaction =
+      record.supersededByFundingTransactionId
+        ? context.fundingTransactionsById.get(record.supersededByFundingTransactionId) ?? null
+        : null;
 
     return {
       agreementAddress: resolvedState.agreementAddress,
@@ -542,8 +564,64 @@ export class FundingService {
       submittedAt: record.submittedAt,
       submittedByUserId: record.submittedByUserId,
       submittedWalletAddress: record.submittedWalletAddress,
+      supersededAt: record.supersededAt,
+      supersededByFundingTransactionId: record.supersededByFundingTransactionId,
+      supersededByTransactionHash: supersededByTransaction?.transactionHash ?? null,
       transactionHash: record.transactionHash
     };
+  }
+
+  private async supersedePendingFundingTransactions(
+    context: FundingComputationContext,
+    replacementTransaction: FundingTransactionRecord,
+    requestMetadata: RequestMetadata,
+    occurredAt: string
+  ): Promise<FundingTransactionRecord[]> {
+    const supersededTransactions: FundingTransactionRecord[] = [];
+
+    for (const trackedTransaction of context.fundingTransactionsById.values()) {
+      const status = resolveFundingTransactionState({
+        dealId: context.dealId,
+        dealVersionHash: context.dealVersionHash,
+        fundingTransaction: trackedTransaction,
+        indexedTransaction:
+          context.indexedTransactionsByHash.get(trackedTransaction.transactionHash) ?? null,
+        observedAgreement:
+          context.agreementsByCreatedTransactionHash.get(trackedTransaction.transactionHash) ??
+          null
+      }).status;
+
+      if (status !== "PENDING") {
+        continue;
+      }
+
+      const supersededTransaction =
+        await this.release1Repositories.fundingTransactions.markSuperseded(
+          trackedTransaction.id,
+          replacementTransaction.id,
+          occurredAt
+        );
+      supersededTransactions.push(supersededTransaction);
+
+      await this.release1Repositories.auditLogs.append({
+        action: "FUNDING_TRANSACTION_SUPERSEDED",
+        actorUserId: context.actor.user.id,
+        entityId: supersededTransaction.id,
+        entityType: "FUNDING_TRANSACTION",
+        id: randomUUID(),
+        ipAddress: requestMetadata.ipAddress,
+        metadata: {
+          supersededAt: occurredAt,
+          supersededByFundingTransactionId: replacementTransaction.id,
+          supersededByTransactionHash: replacementTransaction.transactionHash
+        },
+        occurredAt,
+        organizationId: context.organization.id,
+        userAgent: requestMetadata.userAgent
+      });
+    }
+
+    return supersededTransactions;
   }
 
   private async syncDraftActivation(

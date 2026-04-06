@@ -43,6 +43,7 @@ export type CreateFundingTransactionInput = z.infer<
 
 export const fundingTransactionStatusSchema = z.enum([
   "PENDING",
+  "SUPERSEDED",
   "CONFIRMED",
   "FAILED",
   "MISMATCHED"
@@ -97,6 +98,9 @@ export interface FundingTransactionSummary {
   submittedAt: IsoTimestamp;
   submittedByUserId: EntityId;
   submittedWalletAddress: WalletAddress;
+  supersededAt: IsoTimestamp | null;
+  supersededByFundingTransactionId: EntityId | null;
+  supersededByTransactionHash: HexString | null;
   transactionHash: HexString;
 }
 

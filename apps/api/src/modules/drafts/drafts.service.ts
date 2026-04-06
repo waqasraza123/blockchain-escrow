@@ -160,6 +160,7 @@ interface DraftProjectionContext {
   agreementsByCreatedTransactionHash: ReadonlyMap<`0x${string}`, EscrowAgreementRecord>;
   chainId: number;
   dealId: `0x${string}`;
+  fundingTransactionsById: ReadonlyMap<string, FundingTransactionRecord>;
   fundingTransactions: FundingTransactionRecord[];
   indexedTransactionsByHash: ReadonlyMap<`0x${string}`, IndexedTransactionRecord>;
   linkedAgreement: EscrowAgreementRecord | null;
@@ -817,7 +818,8 @@ export class DraftsService {
           draftContext.dealId,
           dealVersionHash,
           draftContext.agreementsByCreatedTransactionHash,
-          draftContext.indexedTransactionsByHash
+          draftContext.indexedTransactionsByHash,
+          draftContext.fundingTransactionsById
         )
       ),
       milestones: milestoneSnapshots.map((milestone) =>
@@ -958,6 +960,9 @@ export class DraftsService {
       ),
       chainId,
       dealId,
+      fundingTransactionsById: new Map(
+        fundingTransactions.map((transaction) => [transaction.id, transaction] as const)
+      ),
       fundingTransactions,
       indexedTransactionsByHash: new Map(
         indexedTransactions.map((transaction) => [
@@ -1037,6 +1042,7 @@ export class DraftsService {
     return resolveFundingTransactionState({
       dealId,
       dealVersionHash,
+      fundingTransaction: transaction,
       indexedTransaction: indexedTransactionsByHash.get(transaction.transactionHash) ?? null,
       observedAgreement:
         agreementsByCreatedTransactionHash.get(transaction.transactionHash) ?? null
@@ -1048,15 +1054,21 @@ export class DraftsService {
     dealId: `0x${string}`,
     dealVersionHash: `0x${string}`,
     agreementsByCreatedTransactionHash: ReadonlyMap<`0x${string}`, EscrowAgreementRecord>,
-    indexedTransactionsByHash: ReadonlyMap<`0x${string}`, IndexedTransactionRecord>
+    indexedTransactionsByHash: ReadonlyMap<`0x${string}`, IndexedTransactionRecord>,
+    fundingTransactionsById: ReadonlyMap<string, FundingTransactionRecord>
   ): FundingTransactionSummary {
     const resolvedState = resolveFundingTransactionState({
       dealId,
       dealVersionHash,
+      fundingTransaction: transaction,
       indexedTransaction: indexedTransactionsByHash.get(transaction.transactionHash) ?? null,
       observedAgreement:
         agreementsByCreatedTransactionHash.get(transaction.transactionHash) ?? null
     });
+    const supersededByTransaction =
+      transaction.supersededByFundingTransactionId
+        ? fundingTransactionsById.get(transaction.supersededByFundingTransactionId) ?? null
+        : null;
 
     return {
       agreementAddress: resolvedState.agreementAddress,
@@ -1071,6 +1083,9 @@ export class DraftsService {
       submittedAt: transaction.submittedAt,
       submittedByUserId: transaction.submittedByUserId,
       submittedWalletAddress: transaction.submittedWalletAddress,
+      supersededAt: transaction.supersededAt,
+      supersededByFundingTransactionId: transaction.supersededByFundingTransactionId,
+      supersededByTransactionHash: supersededByTransaction?.transactionHash ?? null,
       transactionHash: transaction.transactionHash
     };
   }
