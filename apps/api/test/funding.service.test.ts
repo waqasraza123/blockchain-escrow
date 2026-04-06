@@ -4,22 +4,10 @@ import assert from "node:assert/strict";
 import {
   getDeploymentManifestByChainId
 } from "@blockchain-escrow/contracts-sdk";
-import type {
-  ArbitratorRegistryEntryRecord,
-  ChainCursorRecord,
-  ContractOwnershipRecord,
-  EscrowAgreementRecord,
-  FeeVaultStateRecord,
-  IndexedBlockRecord,
-  IndexedContractEventRecord,
-  IndexedTransactionRecord,
-  ProtocolConfigStateRecord,
-  Release4Repositories,
-  TokenAllowlistEntryRecord
-} from "@blockchain-escrow/db";
 import { privateKeyToAccount } from "viem/accounts";
 
 import { AuthenticatedSessionService } from "../src/modules/auth/authenticated-session.service";
+import { buildCanonicalDealId } from "../src/modules/drafts/deal-identity";
 import { DraftsService } from "../src/modules/drafts/drafts.service";
 import { FundingService } from "../src/modules/funding/funding.service";
 import {
@@ -28,231 +16,11 @@ import {
   seedAuthenticatedActor
 } from "./helpers/auth-test-context";
 import { InMemoryRelease1Repositories } from "./helpers/in-memory-release1-repositories";
+import { InMemoryRelease4Repositories } from "./helpers/in-memory-release4-repositories";
 
 const counterpartyAccount = privateKeyToAccount(
   "0x8b3a350cf5c34c9194ca7a545d6a76fc4d6f8d4894d3e9d2046df1d5c8d14d14"
 );
-
-class InMemoryRelease4Repositories implements Release4Repositories {
-  readonly arbitratorRegistryEntries = {
-    listApprovedByChainIdAndContract: async (
-      chainId: number,
-      arbitratorRegistryAddress: string
-    ) =>
-      this.arbitratorRegistryEntriesStore.filter(
-        (record) =>
-          record.chainId === chainId &&
-          record.arbitratorRegistryAddress === arbitratorRegistryAddress &&
-          record.isApproved
-      ),
-    listByChainId: async (chainId: number) =>
-      this.arbitratorRegistryEntriesStore.filter((record) => record.chainId === chainId),
-    resetByChainId: async (chainId: number) => {
-      this.arbitratorRegistryEntriesStore = this.arbitratorRegistryEntriesStore.filter(
-        (record) => record.chainId !== chainId
-      );
-    },
-    upsert: async (record: ArbitratorRegistryEntryRecord) => {
-      this.arbitratorRegistryEntriesStore = this.arbitratorRegistryEntriesStore.filter(
-        (entry) =>
-          !(
-            entry.chainId === record.chainId &&
-            entry.arbitratorRegistryAddress === record.arbitratorRegistryAddress &&
-            entry.arbitrator === record.arbitrator
-          )
-      );
-      this.arbitratorRegistryEntriesStore.push(record);
-      return record;
-    }
-  };
-
-  readonly chainCursors = {
-    findByChainIdAndCursorKey: async (
-      chainId: number,
-      cursorKey: string
-    ): Promise<ChainCursorRecord | null> => {
-      void chainId;
-      void cursorKey;
-      return null;
-    },
-    upsert: async (record: ChainCursorRecord) => record
-  };
-
-  readonly contractOwnerships = {
-    listByChainId: async (chainId: number) =>
-      this.contractOwnershipsStore.filter((record) => record.chainId === chainId),
-    resetByChainId: async (chainId: number) => {
-      this.contractOwnershipsStore = this.contractOwnershipsStore.filter(
-        (record) => record.chainId !== chainId
-      );
-    },
-    upsert: async (record: ContractOwnershipRecord) => {
-      this.contractOwnershipsStore = this.contractOwnershipsStore.filter(
-        (entry) =>
-          !(entry.chainId === record.chainId && entry.contractAddress === record.contractAddress)
-      );
-      this.contractOwnershipsStore.push(record);
-      return record;
-    }
-  };
-
-  readonly escrowAgreements = {
-    findByChainIdAndAddress: async (chainId: number, agreementAddress: string) =>
-      this.escrowAgreementsStore.find(
-        (record) =>
-          record.chainId === chainId && record.agreementAddress === agreementAddress
-      ) ?? null,
-    listByChainId: async (chainId: number) =>
-      this.escrowAgreementsStore.filter((record) => record.chainId === chainId),
-    resetByChainId: async (chainId: number) => {
-      this.escrowAgreementsStore = this.escrowAgreementsStore.filter(
-        (record) => record.chainId !== chainId
-      );
-    },
-    upsert: async (record: EscrowAgreementRecord) => {
-      this.escrowAgreementsStore = this.escrowAgreementsStore.filter(
-        (entry) =>
-          !(entry.chainId === record.chainId && entry.agreementAddress === record.agreementAddress)
-      );
-      this.escrowAgreementsStore.push(record);
-      return record;
-    }
-  };
-
-  readonly feeVaultStates = {
-    findByChainIdAndAddress: async (chainId: number, feeVaultAddress: string) =>
-      this.feeVaultStatesStore.find(
-        (record) => record.chainId === chainId && record.feeVaultAddress === feeVaultAddress
-      ) ?? null,
-    listByChainId: async (chainId: number) =>
-      this.feeVaultStatesStore.filter((record) => record.chainId === chainId),
-    resetByChainId: async (chainId: number) => {
-      this.feeVaultStatesStore = this.feeVaultStatesStore.filter(
-        (record) => record.chainId !== chainId
-      );
-    },
-    upsert: async (record: FeeVaultStateRecord) => {
-      this.feeVaultStatesStore = this.feeVaultStatesStore.filter(
-        (entry) =>
-          !(entry.chainId === record.chainId && entry.feeVaultAddress === record.feeVaultAddress)
-      );
-      this.feeVaultStatesStore.push(record);
-      return record;
-    }
-  };
-
-  readonly indexedBlocks = {
-    deleteFromBlockNumber: async (chainId: number, fromBlockNumber: string) => {
-      void chainId;
-      void fromBlockNumber;
-    },
-    findByChainIdAndBlockNumber: async (
-      chainId: number,
-      blockNumber: string
-    ): Promise<IndexedBlockRecord | null> => {
-      void chainId;
-      void blockNumber;
-      return null;
-    },
-    listByChainId: async (chainId: number): Promise<IndexedBlockRecord[]> => {
-      void chainId;
-      return [];
-    },
-    upsertMany: async (records: IndexedBlockRecord[]) => {
-      void records;
-    }
-  };
-
-  readonly indexedContractEvents = {
-    deleteFromBlockNumber: async (chainId: number, fromBlockNumber: string) => {
-      void chainId;
-      void fromBlockNumber;
-    },
-    listByChainId: async (chainId: number): Promise<IndexedContractEventRecord[]> => {
-      void chainId;
-      return [];
-    },
-    upsertMany: async (records: IndexedContractEventRecord[]) => {
-      void records;
-    }
-  };
-
-  readonly indexedTransactions = {
-    deleteFromBlockNumber: async (chainId: number, fromBlockNumber: string) => {
-      void chainId;
-      void fromBlockNumber;
-    },
-    upsertMany: async (records: IndexedTransactionRecord[]) => {
-      void records;
-    }
-  };
-
-  readonly protocolConfigStates = {
-    findByChainIdAndAddress: async (chainId: number, protocolConfigAddress: string) =>
-      this.protocolConfigStatesStore.find(
-        (record) =>
-          record.chainId === chainId &&
-          record.protocolConfigAddress === protocolConfigAddress
-      ) ?? null,
-    listByChainId: async (chainId: number) =>
-      this.protocolConfigStatesStore.filter((record) => record.chainId === chainId),
-    resetByChainId: async (chainId: number) => {
-      this.protocolConfigStatesStore = this.protocolConfigStatesStore.filter(
-        (record) => record.chainId !== chainId
-      );
-    },
-    upsert: async (record: ProtocolConfigStateRecord) => {
-      this.protocolConfigStatesStore = this.protocolConfigStatesStore.filter(
-        (entry) =>
-          !(
-            entry.chainId === record.chainId &&
-            entry.protocolConfigAddress === record.protocolConfigAddress
-          )
-      );
-      this.protocolConfigStatesStore.push(record);
-      return record;
-    }
-  };
-
-  readonly tokenAllowlistEntries = {
-    listAllowedByChainIdAndContract: async (
-      chainId: number,
-      tokenAllowlistAddress: string
-    ) =>
-      this.tokenAllowlistEntriesStore.filter(
-        (record) =>
-          record.chainId === chainId &&
-          record.tokenAllowlistAddress === tokenAllowlistAddress &&
-          record.isAllowed
-      ),
-    listByChainId: async (chainId: number) =>
-      this.tokenAllowlistEntriesStore.filter((record) => record.chainId === chainId),
-    resetByChainId: async (chainId: number) => {
-      this.tokenAllowlistEntriesStore = this.tokenAllowlistEntriesStore.filter(
-        (record) => record.chainId !== chainId
-      );
-    },
-    upsert: async (record: TokenAllowlistEntryRecord) => {
-      this.tokenAllowlistEntriesStore = this.tokenAllowlistEntriesStore.filter(
-        (entry) =>
-          !(
-            entry.chainId === record.chainId &&
-            entry.tokenAllowlistAddress === record.tokenAllowlistAddress &&
-            entry.token === record.token
-          )
-      );
-      this.tokenAllowlistEntriesStore.push(record);
-      return record;
-    }
-  };
-
-  private arbitratorRegistryEntriesStore: ArbitratorRegistryEntryRecord[] = [];
-  private contractOwnershipsStore: ContractOwnershipRecord[] = [];
-  private escrowAgreementsStore: EscrowAgreementRecord[] = [];
-  private feeVaultStatesStore: FeeVaultStateRecord[] = [];
-  private protocolConfigStatesStore: ProtocolConfigStateRecord[] = [];
-  private tokenAllowlistEntriesStore: TokenAllowlistEntryRecord[] = [];
-}
 
 async function seedOrganizationMembership(
   repositories: InMemoryRelease1Repositories,
@@ -304,7 +72,11 @@ function createServices() {
   );
 
   return {
-    draftsService: new DraftsService(release1Repositories, authenticatedSessionService),
+    draftsService: new DraftsService(
+      release1Repositories,
+      release4Repositories,
+      authenticatedSessionService
+    ),
     fundingService: new FundingService(
       release1Repositories,
       release4Repositories,
@@ -627,4 +399,151 @@ test("funding service reports a counterparty acceptance blocker when the wallet 
     result.preparation.counterpartyWalletAddress,
     counterpartyAccount.address.toLowerCase()
   );
+});
+
+test("funding service records and lists pending funding transactions", async () => {
+  const seeded = await seedFundingScenario();
+
+  await createCounterpartyAcceptance(seeded);
+
+  const created = await seeded.services.fundingService.createFundingTransaction(
+    {
+      dealVersionId: seeded.version.version.id,
+      draftDealId: seeded.draft.draft.id,
+      organizationId: "org-1"
+    },
+    {
+      transactionHash:
+        "0x9999999999999999999999999999999999999999999999999999999999999999"
+    },
+    {
+      cookieHeader: seeded.actor.cookieHeader,
+      ipAddress: "127.0.0.1",
+      userAgent: "test-agent"
+    }
+  );
+
+  assert.equal(created.fundingTransaction.status, "PENDING");
+  assert.equal(created.fundingTransaction.submittedByUserId, seeded.actor.userId);
+  assert.equal(
+    created.fundingTransaction.submittedWalletAddress,
+    seeded.actor.walletAddress
+  );
+
+  const listed = await seeded.services.fundingService.listFundingTransactions(
+    {
+      dealVersionId: seeded.version.version.id,
+      draftDealId: seeded.draft.draft.id,
+      organizationId: "org-1"
+    },
+    {
+      cookieHeader: seeded.actor.cookieHeader,
+      ipAddress: "127.0.0.1",
+      userAgent: "test-agent"
+    }
+  );
+
+  assert.equal(listed.fundingTransactions.length, 1);
+  assert.equal(listed.fundingTransactions[0]?.status, "PENDING");
+});
+
+test("funding service confirms tracked funding transactions after agreement indexing and activates the draft", async () => {
+  const seeded = await seedFundingScenario();
+
+  await createCounterpartyAcceptance(seeded);
+
+  const preparation = await seeded.services.fundingService.getFundingPreparation(
+    {
+      dealVersionId: seeded.version.version.id,
+      draftDealId: seeded.draft.draft.id,
+      organizationId: "org-1"
+    },
+    {
+      cookieHeader: seeded.actor.cookieHeader,
+      ipAddress: "127.0.0.1",
+      userAgent: "test-agent"
+    }
+  );
+
+  const trackedTransaction =
+    await seeded.services.fundingService.createFundingTransaction(
+      {
+        dealVersionId: seeded.version.version.id,
+        draftDealId: seeded.draft.draft.id,
+        organizationId: "org-1"
+      },
+      {
+        transactionHash:
+          "0x8888888888888888888888888888888888888888888888888888888888888888"
+      },
+      {
+        cookieHeader: seeded.actor.cookieHeader,
+        ipAddress: "127.0.0.1",
+        userAgent: "test-agent"
+      }
+    );
+
+  await seeded.services.release4Repositories.escrowAgreements.upsert({
+    agreementAddress: "0x7777777777777777777777777777777777777777",
+    arbitratorAddress: null,
+    buyerAddress: seeded.actor.walletAddress,
+    chainId: 84532,
+    createdBlockHash:
+      "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    createdBlockNumber: "10",
+    createdLogIndex: 0,
+    createdTransactionHash: trackedTransaction.fundingTransaction.transactionHash,
+    dealId: buildCanonicalDealId("org-1", seeded.draft.draft.id),
+    dealVersionHash: preparation.preparation.dealVersionHash,
+    factoryAddress: seeded.manifest.contracts.EscrowFactory!.toLowerCase() as `0x${string}`,
+    feeVaultAddress: seeded.manifest.contracts.FeeVault!.toLowerCase() as `0x${string}`,
+    initializedBlockHash:
+      "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    initializedBlockNumber: "10",
+    initializedLogIndex: 1,
+    initializedTimestamp: new Date().toISOString(),
+    initializedTransactionHash: trackedTransaction.fundingTransaction.transactionHash,
+    milestoneCount: 2,
+    protocolConfigAddress:
+      seeded.manifest.contracts.ProtocolConfig!.toLowerCase() as `0x${string}`,
+    protocolFeeBps: seeded.manifest.protocolFeeBps,
+    sellerAddress: counterpartyAccount.address.toLowerCase() as `0x${string}`,
+    settlementTokenAddress: seeded.manifest.usdcToken!.toLowerCase() as `0x${string}`,
+    totalAmount: "3500000",
+    updatedAt: new Date().toISOString()
+  });
+
+  const listed = await seeded.services.fundingService.listFundingTransactions(
+    {
+      dealVersionId: seeded.version.version.id,
+      draftDealId: seeded.draft.draft.id,
+      organizationId: "org-1"
+    },
+    {
+      cookieHeader: seeded.actor.cookieHeader,
+      ipAddress: "127.0.0.1",
+      userAgent: "test-agent"
+    }
+  );
+
+  assert.equal(listed.fundingTransactions[0]?.status, "CONFIRMED");
+  assert.equal(
+    listed.fundingTransactions[0]?.agreementAddress,
+    "0x7777777777777777777777777777777777777777"
+  );
+  assert.equal(listed.fundingTransactions[0]?.matchesTrackedVersion, true);
+
+  const draft = await seeded.services.draftsService.getDraft(
+    {
+      draftDealId: seeded.draft.draft.id,
+      organizationId: "org-1"
+    },
+    {
+      cookieHeader: seeded.actor.cookieHeader,
+      ipAddress: "127.0.0.1",
+      userAgent: "test-agent"
+    }
+  );
+
+  assert.equal(draft.draft.state, "ACTIVE");
 });

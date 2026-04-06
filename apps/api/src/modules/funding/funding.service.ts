@@ -1,4 +1,9 @@
-import { getContractArtifact, getDeploymentManifestByChainId } from "@blockchain-escrow/contracts-sdk";
+import { randomUUID } from "node:crypto";
+
+import {
+  getContractArtifact,
+  getDeploymentManifestByChainId
+} from "@blockchain-escrow/contracts-sdk";
 import type {
   DealVersionFileRecord,
   DealVersionMilestoneRecord,
@@ -6,7 +11,9 @@ import type {
   DealVersionRecord,
   DraftDealPartyRecord,
   DraftDealRecord,
+  EscrowAgreementRecord,
   FileRecord,
+  FundingTransactionRecord,
   OrganizationMemberRecord,
   OrganizationRecord,
   Release1Repositories,
@@ -14,12 +21,20 @@ import type {
 } from "@blockchain-escrow/db";
 import { hasMinimumOrganizationRole } from "@blockchain-escrow/security";
 import type {
+  CreateFundingTransactionResponse,
   FundingPreparationBlocker,
-  GetFundingPreparationResponse
+  FundingPreparationSummary,
+  FundingTransactionSummary,
+  GetFundingPreparationResponse,
+  ListFundingTransactionsResponse
 } from "@blockchain-escrow/shared";
-import { fundingPreparationParamsSchema } from "@blockchain-escrow/shared";
+import {
+  createFundingTransactionSchema,
+  fundingPreparationParamsSchema
+} from "@blockchain-escrow/shared";
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Inject,
   Injectable,
@@ -35,7 +50,10 @@ import {
   type Abi
 } from "viem";
 
-import { RELEASE1_REPOSITORIES, RELEASE4_REPOSITORIES } from "../../infrastructure/tokens";
+import {
+  RELEASE1_REPOSITORIES,
+  RELEASE4_REPOSITORIES
+} from "../../infrastructure/tokens";
 import type { RequestMetadata } from "../auth/auth.http";
 import {
   AuthenticatedSessionService,
@@ -48,6 +66,31 @@ import {
 } from "../drafts/deal-identity";
 
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
+
+interface FundingAccessContext {
+  actor: AuthenticatedSessionContext;
+  draft: DraftDealRecord;
+  membership: OrganizationMemberRecord;
+  organization: OrganizationRecord;
+  version: DealVersionRecord;
+}
+
+interface FundingComputationContext extends FundingAccessContext {
+  acceptances: Awaited<
+    ReturnType<Release1Repositories["dealVersionAcceptances"]["listByDealVersionId"]>
+  >;
+  agreements: EscrowAgreementRecord[];
+  chainId: number;
+  dealId: `0x${string}`;
+  dealVersionHash: `0x${string}`;
+  draftParties: DraftDealPartyRecord[];
+  files: FileRecord[];
+  latestVersion: DealVersionRecord | null;
+  linkedAgreement: EscrowAgreementRecord | null;
+  manifest: NonNullable<ReturnType<typeof getDeploymentManifestByChainId>>;
+  milestones: DealVersionMilestoneRecord[];
+  parties: DealVersionPartyRecord[];
+}
 
 function normalizeAddress(value: string): `0x${string}` {
   return getAddress(value).toLowerCase() as `0x${string}`;
@@ -89,18 +132,147 @@ export class FundingService {
       parsed.data.dealVersionId,
       requestMetadata
     );
-    const [parties, milestones, fileLinks, acceptances, latestVersion] = await Promise.all([
-      this.release1Repositories.dealVersionParties.listByDealVersionId(access.version.id),
-      this.release1Repositories.dealVersionMilestones.listByDealVersionId(access.version.id),
-      this.release1Repositories.dealVersionFiles.listByDealVersionId(access.version.id),
-      this.release1Repositories.dealVersionAcceptances.listByDealVersionId(access.version.id),
-      this.release1Repositories.dealVersions.findLatestByDraftDealId(access.draft.id)
-    ]);
-    const files = await this.resolveFiles(fileLinks);
-    const draftParties = await this.release1Repositories.draftDealParties.listByDraftDealId(
-      access.draft.id
-    );
+    const context = await this.buildFundingContext(access);
 
+    await this.syncDraftActivation(access.draft, context.linkedAgreement, new Date().toISOString());
+
+    return {
+      preparation: await this.buildFundingPreparationSummary(context)
+    };
+  }
+
+  async createFundingTransaction(
+    fundingInput: unknown,
+    transactionInput: unknown,
+    requestMetadata: RequestMetadata
+  ): Promise<CreateFundingTransactionResponse> {
+    const parsedFunding = fundingPreparationParamsSchema.safeParse(fundingInput);
+    const parsedTransaction = createFundingTransactionSchema.safeParse(transactionInput);
+
+    if (!parsedFunding.success) {
+      throw new BadRequestException(parsedFunding.error.flatten());
+    }
+
+    if (!parsedTransaction.success) {
+      throw new BadRequestException(parsedTransaction.error.flatten());
+    }
+
+    const access = await this.requireDealVersionAccess(
+      parsedFunding.data.organizationId,
+      parsedFunding.data.draftDealId,
+      parsedFunding.data.dealVersionId,
+      requestMetadata,
+      "ADMIN"
+    );
+    const context = await this.buildFundingContext(access);
+    const preparation = await this.buildFundingPreparationSummary(context);
+
+    if (context.linkedAgreement) {
+      await this.syncDraftActivation(access.draft, context.linkedAgreement, new Date().toISOString());
+      throw new ConflictException("agreement already created for draft deal");
+    }
+
+    if (!preparation.ready) {
+      throw new ConflictException("funding preparation is not ready");
+    }
+
+    const transactionHash =
+      parsedTransaction.data.transactionHash.toLowerCase() as `0x${string}`;
+    const existing =
+      await this.release1Repositories.fundingTransactions.findByChainIdAndTransactionHash(
+        context.chainId,
+        transactionHash
+      );
+
+    if (existing) {
+      throw new ConflictException("funding transaction is already tracked");
+    }
+
+    const now = new Date().toISOString();
+    const fundingTransaction = await this.release1Repositories.fundingTransactions.create({
+      chainId: context.chainId,
+      dealVersionId: access.version.id,
+      draftDealId: access.draft.id,
+      id: randomUUID(),
+      organizationId: access.organization.id,
+      submittedAt: now,
+      submittedByUserId: access.actor.user.id,
+      submittedWalletAddress: access.actor.wallet.address,
+      submittedWalletId: access.actor.wallet.id,
+      transactionHash
+    });
+
+    await this.release1Repositories.auditLogs.append({
+      action: "FUNDING_TRANSACTION_SUBMITTED",
+      actorUserId: access.actor.user.id,
+      entityId: fundingTransaction.id,
+      entityType: "FUNDING_TRANSACTION",
+      id: randomUUID(),
+      ipAddress: requestMetadata.ipAddress,
+      metadata: {
+        chainId: fundingTransaction.chainId,
+        dealVersionId: fundingTransaction.dealVersionId,
+        draftDealId: fundingTransaction.draftDealId,
+        transactionHash: fundingTransaction.transactionHash
+      },
+      occurredAt: now,
+      organizationId: access.organization.id,
+      userAgent: requestMetadata.userAgent
+    });
+
+    return {
+      fundingTransaction: this.buildFundingTransactionSummary(
+        fundingTransaction,
+        context
+      )
+    };
+  }
+
+  async listFundingTransactions(
+    input: unknown,
+    requestMetadata: RequestMetadata
+  ): Promise<ListFundingTransactionsResponse> {
+    const parsed = fundingPreparationParamsSchema.safeParse(input);
+
+    if (!parsed.success) {
+      throw new BadRequestException(parsed.error.flatten());
+    }
+
+    const access = await this.requireDealVersionAccess(
+      parsed.data.organizationId,
+      parsed.data.draftDealId,
+      parsed.data.dealVersionId,
+      requestMetadata
+    );
+    const context = await this.buildFundingContext(access);
+
+    await this.syncDraftActivation(access.draft, context.linkedAgreement, new Date().toISOString());
+
+    const fundingTransactions =
+      await this.release1Repositories.fundingTransactions.listByDealVersionId(
+        access.version.id
+      );
+
+    return {
+      fundingTransactions: fundingTransactions.map((record) =>
+        this.buildFundingTransactionSummary(record, context)
+      )
+    };
+  }
+
+  private async buildFundingContext(
+    access: FundingAccessContext
+  ): Promise<FundingComputationContext> {
+    const [parties, milestones, fileLinks, acceptances, latestVersion, draftParties] =
+      await Promise.all([
+        this.release1Repositories.dealVersionParties.listByDealVersionId(access.version.id),
+        this.release1Repositories.dealVersionMilestones.listByDealVersionId(access.version.id),
+        this.release1Repositories.dealVersionFiles.listByDealVersionId(access.version.id),
+        this.release1Repositories.dealVersionAcceptances.listByDealVersionId(access.version.id),
+        this.release1Repositories.dealVersions.findLatestByDraftDealId(access.draft.id),
+        this.release1Repositories.draftDealParties.listByDraftDealId(access.draft.id)
+      ]);
+    const files = await this.resolveFiles(fileLinks);
     const chainId = normalizeApiChainId();
     const manifest = getDeploymentManifestByChainId(chainId);
 
@@ -108,23 +280,63 @@ export class FundingService {
       throw new NotFoundException(`deployment manifest not found for chain ${chainId}`);
     }
 
+    const dealId = buildCanonicalDealId(access.organization.id, access.draft.id);
+    const dealVersionHash = buildCanonicalDealVersionHash(
+      access.draft,
+      access.version,
+      parties,
+      milestones,
+      files
+    );
+    const agreements = await this.release4Repositories.escrowAgreements.listByChainId(
+      chainId
+    );
+    const linkedAgreement = agreements.find((agreement) => agreement.dealId === dealId) ?? null;
+
+    return {
+      ...access,
+      acceptances,
+      agreements,
+      chainId,
+      dealId,
+      dealVersionHash,
+      draftParties,
+      files,
+      latestVersion,
+      linkedAgreement,
+      manifest,
+      milestones,
+      parties
+    };
+  }
+
+  private async buildFundingPreparationSummary(
+    context: FundingComputationContext
+  ): Promise<FundingPreparationSummary> {
     const blockers: FundingPreparationBlocker[] = [];
-    if (!latestVersion || latestVersion.id !== access.version.id) {
+
+    if (!context.latestVersion || context.latestVersion.id !== context.version.id) {
       blockers.push("VERSION_NOT_LATEST");
     }
 
-    const organizationAcceptance = acceptances.find(
-      (acceptance) => acceptance.organizationId === access.organization.id
+    const organizationAcceptance = context.acceptances.find(
+      (acceptance) => acceptance.organizationId === context.organization.id
     );
+
     if (!organizationAcceptance) {
       blockers.push("ORGANIZATION_ACCEPTANCE_MISSING");
     }
 
-    const counterpartyDraftParty = this.requireSingleDraftCounterpartyParty(draftParties);
-    const counterpartyVersionParty = this.requireSingleVersionCounterpartyParty(parties);
+    const counterpartyDraftParty = this.requireSingleDraftCounterpartyParty(
+      context.draftParties
+    );
+    const counterpartyVersionParty = this.requireSingleVersionCounterpartyParty(
+      context.parties
+    );
     const counterpartyWalletAddress = counterpartyDraftParty.walletAddress
       ? normalizeAddress(counterpartyDraftParty.walletAddress)
       : null;
+
     if (!counterpartyWalletAddress) {
       blockers.push("COUNTERPARTY_WALLET_MISSING");
     }
@@ -142,31 +354,22 @@ export class FundingService {
     }
 
     const versionPartyAddresses = this.resolveBuyerAndSellerAddresses(
-      parties,
+      context.parties,
       organizationSignerWalletAddress,
       counterpartyWalletAddress
     );
 
-    const dealId = buildCanonicalDealId(access.organization.id, access.draft.id);
-    const dealVersionHash = buildCanonicalDealVersionHash(
-      access.draft,
-      access.version,
-      parties,
-      milestones,
-      files
-    );
-
-    const factoryAddress = manifest.contracts.EscrowFactory
-      ? normalizeAddress(manifest.contracts.EscrowFactory)
+    const factoryAddress = context.manifest.contracts.EscrowFactory
+      ? normalizeAddress(context.manifest.contracts.EscrowFactory)
       : null;
-    const protocolConfigAddress = manifest.contracts.ProtocolConfig
-      ? normalizeAddress(manifest.contracts.ProtocolConfig)
+    const protocolConfigAddress = context.manifest.contracts.ProtocolConfig
+      ? normalizeAddress(context.manifest.contracts.ProtocolConfig)
       : null;
-    const agreementImplementationAddress = manifest.contracts.EscrowAgreement
-      ? normalizeAddress(manifest.contracts.EscrowAgreement)
+    const agreementImplementationAddress = context.manifest.contracts.EscrowAgreement
+      ? normalizeAddress(context.manifest.contracts.EscrowAgreement)
       : null;
-    const settlementTokenAddress = manifest.usdcToken
-      ? normalizeAddress(manifest.usdcToken)
+    const settlementTokenAddress = context.manifest.usdcToken
+      ? normalizeAddress(context.manifest.usdcToken)
       : null;
 
     if (!factoryAddress) {
@@ -184,7 +387,7 @@ export class FundingService {
 
     const protocolProjection = protocolConfigAddress
       ? await this.release4Repositories.protocolConfigStates.findByChainIdAndAddress(
-          chainId,
+          context.chainId,
           protocolConfigAddress
         )
       : null;
@@ -208,13 +411,10 @@ export class FundingService {
         blockers.push("FUNDING_PAUSED");
       }
 
-      if (
-        settlementTokenAddress &&
-        protocolProjection.tokenAllowlistAddress
-      ) {
+      if (settlementTokenAddress && protocolProjection.tokenAllowlistAddress) {
         const allowedTokens =
           await this.release4Repositories.tokenAllowlistEntries.listAllowedByChainIdAndContract(
-            chainId,
+            context.chainId,
             protocolProjection.tokenAllowlistAddress
           );
         const isAllowed = allowedTokens.some(
@@ -227,14 +427,10 @@ export class FundingService {
       }
     }
 
-    const linkedAgreement = (
-      await this.release4Repositories.escrowAgreements.listByChainId(chainId)
-    ).find((agreement) => agreement.dealId === dealId);
-
-    if (linkedAgreement) {
+    if (context.linkedAgreement) {
       blockers.push("AGREEMENT_ALREADY_CREATED");
 
-      if (linkedAgreement.dealVersionHash !== dealVersionHash) {
+      if (context.linkedAgreement.dealVersionHash !== context.dealVersionHash) {
         blockers.push("DEAL_VERSION_MISMATCH_WITH_EXISTING_AGREEMENT");
       }
     }
@@ -247,7 +443,7 @@ export class FundingService {
             salt: keccak256(
               encodeAbiParameters(
                 parseAbiParameters("bytes32 dealId, bytes32 dealVersionHash"),
-                [dealId, dealVersionHash]
+                [context.dealId, context.dealVersionHash]
               )
             )
           })
@@ -267,12 +463,12 @@ export class FundingService {
                 {
                   arbitrator: ZERO_ADDRESS,
                   buyer: versionPartyAddresses.buyerAddress,
-                  dealId,
-                  dealVersionHash,
-                  milestoneCount: milestones.length,
+                  dealId: context.dealId,
+                  dealVersionHash: context.dealVersionHash,
+                  milestoneCount: context.milestones.length,
                   seller: versionPartyAddresses.sellerAddress,
                   settlementToken: settlementTokenAddress,
-                  totalAmount: BigInt(sumMilestones(milestones))
+                  totalAmount: BigInt(sumMilestones(context.milestones))
                 }
               ]
             }) as `0x${string}`,
@@ -282,31 +478,101 @@ export class FundingService {
         : null;
 
     return {
-      preparation: {
-        agreementImplementationAddress,
-        arbitratorAddress: ZERO_ADDRESS as `0x${string}`,
-        blockers: [...new Set(blockers)],
-        buyerAddress: versionPartyAddresses.buyerAddress,
-        chainId,
-        counterpartyWalletAddress,
-        createAgreementTransaction,
-        dealId,
-        dealVersionHash,
-        escrowFactoryAddress: factoryAddress,
-        linkedAgreementAddress: linkedAgreement?.agreementAddress ?? null,
-        milestoneCount: milestones.length,
-        network: manifest.network,
-        organizationSignerWalletAddress,
-        predictedAgreementAddress: predictedAgreementAddress
-          ? normalizeAddress(predictedAgreementAddress)
-          : null,
-        protocolConfigAddress,
-        ready: blockers.length === 0,
-        sellerAddress: versionPartyAddresses.sellerAddress,
-        settlementTokenAddress,
-        totalAmountMinor: sumMilestones(milestones)
-      }
+      agreementImplementationAddress,
+      arbitratorAddress: ZERO_ADDRESS as `0x${string}`,
+      blockers: [...new Set(blockers)],
+      buyerAddress: versionPartyAddresses.buyerAddress,
+      chainId: context.chainId,
+      counterpartyWalletAddress,
+      createAgreementTransaction,
+      dealId: context.dealId,
+      dealVersionHash: context.dealVersionHash,
+      escrowFactoryAddress: factoryAddress,
+      linkedAgreementAddress: context.linkedAgreement?.agreementAddress ?? null,
+      milestoneCount: context.milestones.length,
+      network: context.manifest.network,
+      organizationSignerWalletAddress,
+      predictedAgreementAddress: predictedAgreementAddress
+        ? normalizeAddress(predictedAgreementAddress)
+        : null,
+      protocolConfigAddress,
+      ready: blockers.length === 0,
+      sellerAddress: versionPartyAddresses.sellerAddress,
+      settlementTokenAddress,
+      totalAmountMinor: sumMilestones(context.milestones)
     };
+  }
+
+  private buildFundingTransactionSummary(
+    record: FundingTransactionRecord,
+    context: FundingComputationContext
+  ): FundingTransactionSummary {
+    const observedAgreement =
+      context.agreements.find(
+        (agreement) => agreement.createdTransactionHash === record.transactionHash
+      ) ?? null;
+
+    if (observedAgreement && observedAgreement.dealId === context.dealId) {
+      return {
+        agreementAddress: observedAgreement.agreementAddress,
+        chainId: record.chainId,
+        confirmedAt: observedAgreement.updatedAt,
+        dealVersionId: record.dealVersionId,
+        draftDealId: record.draftDealId,
+        id: record.id,
+        matchesTrackedVersion: observedAgreement.dealVersionHash === context.dealVersionHash,
+        organizationId: record.organizationId,
+        status: "CONFIRMED",
+        submittedAt: record.submittedAt,
+        submittedByUserId: record.submittedByUserId,
+        submittedWalletAddress: record.submittedWalletAddress,
+        transactionHash: record.transactionHash
+      };
+    }
+
+    if (observedAgreement) {
+      return {
+        agreementAddress: null,
+        chainId: record.chainId,
+        confirmedAt: null,
+        dealVersionId: record.dealVersionId,
+        draftDealId: record.draftDealId,
+        id: record.id,
+        matchesTrackedVersion: false,
+        organizationId: record.organizationId,
+        status: "MISMATCHED",
+        submittedAt: record.submittedAt,
+        submittedByUserId: record.submittedByUserId,
+        submittedWalletAddress: record.submittedWalletAddress,
+        transactionHash: record.transactionHash
+      };
+    }
+
+    return {
+      agreementAddress: null,
+      chainId: record.chainId,
+      confirmedAt: null,
+      dealVersionId: record.dealVersionId,
+      draftDealId: record.draftDealId,
+      id: record.id,
+      matchesTrackedVersion: null,
+      organizationId: record.organizationId,
+      status: "PENDING",
+      submittedAt: record.submittedAt,
+      submittedByUserId: record.submittedByUserId,
+      submittedWalletAddress: record.submittedWalletAddress,
+      transactionHash: record.transactionHash
+    };
+  }
+
+  private async syncDraftActivation(
+    draft: DraftDealRecord,
+    linkedAgreement: EscrowAgreementRecord | null,
+    updatedAt: string
+  ): Promise<void> {
+    if (linkedAgreement && draft.state !== "ACTIVE") {
+      await this.release1Repositories.draftDeals.updateState(draft.id, "ACTIVE", updatedAt);
+    }
   }
 
   private requireSingleDraftCounterpartyParty(
@@ -386,17 +652,13 @@ export class FundingService {
     organizationId: string,
     draftDealId: string,
     dealVersionId: string,
-    requestMetadata: RequestMetadata
-  ): Promise<{
-    actor: AuthenticatedSessionContext;
-    draft: DraftDealRecord;
-    membership: OrganizationMemberRecord;
-    organization: OrganizationRecord;
-    version: DealVersionRecord;
-  }> {
+    requestMetadata: RequestMetadata,
+    minimumRole?: "OWNER" | "ADMIN" | "MEMBER"
+  ): Promise<FundingAccessContext> {
     const authorized = await this.requireOrganizationAccess(
       organizationId,
-      requestMetadata
+      requestMetadata,
+      minimumRole
     );
     const [draft, version] = await Promise.all([
       this.release1Repositories.draftDeals.findById(draftDealId),

@@ -1,10 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
+import { getDeploymentManifestByChainId } from "@blockchain-escrow/contracts-sdk";
 import { UnauthorizedException } from "@nestjs/common";
 import { privateKeyToAccount } from "viem/accounts";
 
 import { AuthenticatedSessionService } from "../src/modules/auth/authenticated-session.service";
+import { buildCanonicalDealId } from "../src/modules/drafts/deal-identity";
 import { DraftsService } from "../src/modules/drafts/drafts.service";
 import {
   authConfiguration,
@@ -12,6 +14,7 @@ import {
   seedAuthenticatedActor
 } from "./helpers/auth-test-context";
 import { InMemoryRelease1Repositories } from "./helpers/in-memory-release1-repositories";
+import { InMemoryRelease4Repositories } from "./helpers/in-memory-release4-repositories";
 
 const counterpartyAccount = privateKeyToAccount(
   "0x8b3a350cf5c34c9194ca7a545d6a76fc4d6f8d4894d3e9d2046df1d5c8d14d14"
@@ -63,6 +66,7 @@ async function seedOrganizationMembership(
 
 function createDraftsService() {
   const repositories = new InMemoryRelease1Repositories();
+  const release4Repositories = new InMemoryRelease4Repositories();
   const sessionTokenService = new FakeSessionTokenService();
   const authenticatedSessionService = new AuthenticatedSessionService(
     repositories,
@@ -71,8 +75,13 @@ function createDraftsService() {
   );
 
   return {
-    draftsService: new DraftsService(repositories, authenticatedSessionService),
+    draftsService: new DraftsService(
+      repositories,
+      release4Repositories,
+      authenticatedSessionService
+    ),
     repositories,
+    release4Repositories,
     sessionTokenService
   };
 }
@@ -885,5 +894,107 @@ test("drafts service enforces organization scoping for version acceptances", asy
       }
     ),
     /organization access is required/
+  );
+});
+
+test("drafts service marks a draft active after a linked agreement is indexed", async () => {
+  const { draftsService, release4Repositories, repositories, sessionTokenService } =
+    createDraftsService();
+  const actor = await seedAuthenticatedActor(repositories, sessionTokenService);
+  const seeded = await seedDraftVersionScenario(draftsService, repositories, actor);
+  const manifest = getDeploymentManifestByChainId(84532);
+
+  assert.ok(manifest, "missing base sepolia manifest");
+
+  await release4Repositories.escrowAgreements.upsert({
+    agreementAddress: "0x7777777777777777777777777777777777777777",
+    arbitratorAddress: null,
+    buyerAddress: actor.walletAddress,
+    chainId: 84532,
+    createdBlockHash:
+      "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    createdBlockNumber: "10",
+    createdLogIndex: 0,
+    createdTransactionHash:
+      "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    dealId: buildCanonicalDealId("org-1", seeded.draft.draft.id),
+    dealVersionHash:
+      "0x1111111111111111111111111111111111111111111111111111111111111111",
+    factoryAddress: manifest.contracts.EscrowFactory!.toLowerCase() as `0x${string}`,
+    feeVaultAddress: manifest.contracts.FeeVault!.toLowerCase() as `0x${string}`,
+    initializedBlockHash:
+      "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    initializedBlockNumber: "10",
+    initializedLogIndex: 1,
+    initializedTimestamp: new Date().toISOString(),
+    initializedTransactionHash:
+      "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    milestoneCount: 1,
+    protocolConfigAddress:
+      manifest.contracts.ProtocolConfig!.toLowerCase() as `0x${string}`,
+    protocolFeeBps: manifest.protocolFeeBps,
+    sellerAddress: counterpartyAccount.address.toLowerCase() as `0x${string}`,
+    settlementTokenAddress: manifest.usdcToken!.toLowerCase() as `0x${string}`,
+    totalAmount: "1000000",
+    updatedAt: new Date().toISOString()
+  });
+
+  const detail = await draftsService.getDraft(
+    {
+      draftDealId: seeded.draft.draft.id,
+      organizationId: "org-1"
+    },
+    {
+      cookieHeader: actor.cookieHeader,
+      ipAddress: "127.0.0.1",
+      userAgent: "test-agent"
+    }
+  );
+
+  assert.equal(detail.draft.state, "ACTIVE");
+});
+
+test("drafts service blocks new version snapshots after funding starts", async () => {
+  const { draftsService, repositories, sessionTokenService } = createDraftsService();
+  const actor = await seedAuthenticatedActor(repositories, sessionTokenService);
+  const seeded = await seedDraftVersionScenario(draftsService, repositories, actor);
+
+  await repositories.fundingTransactions.create({
+    chainId: 84532,
+    dealVersionId: seeded.version.version.id,
+    draftDealId: seeded.draft.draft.id,
+    id: "funding-tx-1",
+    organizationId: "org-1",
+    submittedAt: new Date().toISOString(),
+    submittedByUserId: actor.userId,
+    submittedWalletAddress: actor.walletAddress,
+    submittedWalletId: actor.walletId,
+    transactionHash:
+      "0x9999999999999999999999999999999999999999999999999999999999999999"
+  });
+
+  await assert.rejects(
+    () =>
+      draftsService.createVersionSnapshot(
+        {
+          draftDealId: seeded.draft.draft.id,
+          organizationId: "org-1"
+        },
+        {
+          bodyMarkdown: "# Revised terms",
+          milestoneSnapshots: [
+            {
+              amountMinor: "1000000",
+              title: "Updated phase"
+            }
+          ]
+        },
+        {
+          cookieHeader: actor.cookieHeader,
+          ipAddress: "127.0.0.1",
+          userAgent: "test-agent"
+        }
+      ),
+    /funding is already in progress/
   );
 });

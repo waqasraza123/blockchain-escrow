@@ -6,6 +6,7 @@ import type {
   DealVersionRecord,
   DraftDealRecord,
   FileRecord,
+  FundingTransactionRecord,
   OrganizationInviteRecord,
   OrganizationMemberRecord,
   OrganizationRecord,
@@ -160,6 +161,16 @@ export class AuditService {
       case "FILE": {
         const file = await this.requireFileAccess(actor, params.entityId);
         return this.repositories.auditLogs.listByEntity("FILE", file.id);
+      }
+      case "FUNDING_TRANSACTION": {
+        const fundingTransaction = await this.requireFundingTransactionAccess(
+          actor,
+          params.entityId
+        );
+        return this.repositories.auditLogs.listByEntity(
+          "FUNDING_TRANSACTION",
+          fundingTransaction.id
+        );
       }
       case "TEMPLATE": {
         const template = await this.requireTemplateAccess(actor, params.entityId);
@@ -378,6 +389,21 @@ export class AuditService {
 
     await this.requireOrganizationAccess(actor, file.organizationId);
     return file;
+  }
+
+  private async requireFundingTransactionAccess(
+    actor: AuthenticatedSessionContext,
+    fundingTransactionId: string
+  ): Promise<FundingTransactionRecord> {
+    const fundingTransaction =
+      await this.repositories.fundingTransactions.findById(fundingTransactionId);
+
+    if (!fundingTransaction) {
+      throw new NotFoundException("funding transaction not found");
+    }
+
+    await this.requireDraftDealAccess(actor, fundingTransaction.draftDealId);
+    return fundingTransaction;
   }
 
   private async requireTemplateAccess(

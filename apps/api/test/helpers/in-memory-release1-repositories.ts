@@ -10,6 +10,7 @@ import type {
   DraftDealPartyRecord,
   DraftDealRecord,
   FileRecord,
+  FundingTransactionRecord,
   OrganizationInviteRecord,
   OrganizationMemberRecord,
   OrganizationRecord,
@@ -37,6 +38,7 @@ export class InMemoryRelease1Repositories implements Release1Repositories {
   readonly draftDealPartyRecords: DraftDealPartyRecord[] = [];
   readonly draftDealRecords: DraftDealRecord[] = [];
   readonly fileRecords: FileRecord[] = [];
+  readonly fundingTransactionRecords: FundingTransactionRecord[] = [];
   readonly organizationInviteRecords: OrganizationInviteRecord[] = [];
   readonly organizationMemberRecords: OrganizationMemberRecord[] = [];
   readonly organizationRecords: OrganizationRecord[] = [];
@@ -284,6 +286,37 @@ export class InMemoryRelease1Repositories implements Release1Repositories {
       this.fileRecords
         .filter((record) => record.organizationId === organizationId)
         .sort((left, right) => compareIsoTimestamps(left.createdAt, right.createdAt))
+  };
+
+  readonly fundingTransactions = {
+    create: async (
+      record: FundingTransactionRecord
+    ): Promise<FundingTransactionRecord> => {
+      this.fundingTransactionRecords.push(record);
+      return record;
+    },
+    findByChainIdAndTransactionHash: async (
+      chainId: number,
+      transactionHash: `0x${string}`
+    ): Promise<FundingTransactionRecord | null> =>
+      this.fundingTransactionRecords.find(
+        (record) =>
+          record.chainId === chainId && record.transactionHash === transactionHash
+      ) ?? null,
+    findById: async (id: string): Promise<FundingTransactionRecord | null> =>
+      this.fundingTransactionRecords.find((record) => record.id === id) ?? null,
+    listByDealVersionId: async (
+      dealVersionId: string
+    ): Promise<FundingTransactionRecord[]> =>
+      this.fundingTransactionRecords
+        .filter((record) => record.dealVersionId === dealVersionId)
+        .sort((left, right) => compareIsoTimestamps(right.submittedAt, left.submittedAt)),
+    listByDraftDealId: async (
+      draftDealId: string
+    ): Promise<FundingTransactionRecord[]> =>
+      this.fundingTransactionRecords
+        .filter((record) => record.draftDealId === draftDealId)
+        .sort((left, right) => compareIsoTimestamps(right.submittedAt, left.submittedAt))
   };
 
   readonly templates = {

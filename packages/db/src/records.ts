@@ -236,6 +236,19 @@ export interface CounterpartyDealVersionAcceptanceRecord {
   typedData: JsonObject;
 }
 
+export interface FundingTransactionRecord {
+  chainId: ChainId;
+  dealVersionId: EntityId;
+  draftDealId: EntityId;
+  id: EntityId;
+  organizationId: EntityId;
+  submittedAt: IsoTimestamp;
+  submittedByUserId: EntityId;
+  submittedWalletAddress: WalletAddress;
+  submittedWalletId: EntityId;
+  transactionHash: HexString;
+}
+
 export interface ChainCursorRecord {
   chainId: ChainId;
   cursorKey: string;

@@ -9,10 +9,12 @@ import type {
   DealVersionRecord,
   DraftDealPartyRecord,
   DraftDealRecord,
+  EscrowAgreementRecord,
   FileRecord,
   OrganizationMemberRecord,
   OrganizationRecord,
   Release1Repositories,
+  Release4Repositories,
   TemplateRecord
 } from "@blockchain-escrow/db";
 import { hasMinimumOrganizationRole } from "@blockchain-escrow/security";
@@ -61,7 +63,10 @@ import {
   verifyTypedData
 } from "viem";
 
-import { RELEASE1_REPOSITORIES } from "../../infrastructure/tokens";
+import {
+  RELEASE1_REPOSITORIES,
+  RELEASE4_REPOSITORIES
+} from "../../infrastructure/tokens";
 import type { RequestMetadata } from "../auth/auth.http";
 import {
   AuthenticatedSessionService,
@@ -72,7 +77,8 @@ import {
   buildCanonicalDealVersionHash,
   buildCounterpartyAcceptanceTypedData,
   counterpartyAcceptancePrimaryType,
-  counterpartyAcceptanceTypes
+  counterpartyAcceptanceTypes,
+  normalizeApiChainId
 } from "./deal-identity";
 
 function oppositeRole(role: DraftDealPartyRecord["role"]): DraftDealPartyRecord["role"] {
@@ -163,6 +169,8 @@ export class DraftsService {
   constructor(
     @Inject(RELEASE1_REPOSITORIES)
     private readonly repositories: Release1Repositories,
+    @Inject(RELEASE4_REPOSITORIES)
+    private readonly release4Repositories: Release4Repositories,
     private readonly authenticatedSessionService: AuthenticatedSessionService
   ) {}
 
@@ -180,9 +188,8 @@ export class DraftsService {
     const drafts = await this.repositories.draftDeals.listByOrganizationId(
       parsed.data.organizationId
     );
-    const draftItems = await Promise.all(
-      drafts.map((draft) => this.buildDraftListItem(draft))
-    );
+    const now = new Date().toISOString();
+    const draftItems = await Promise.all(drafts.map((draft) => this.buildDraftListItem(draft, now)));
 
     return {
       drafts: draftItems
@@ -204,8 +211,9 @@ export class DraftsService {
       parsed.data.draftDealId,
       requestMetadata
     );
+    const syncedDraft = (await this.syncDraftFundingState(draft.id, new Date().toISOString())) ?? draft;
 
-    return this.buildDraftDetailResponse(draft);
+    return this.buildDraftDetailResponse(syncedDraft);
   }
 
   async createDraft(
@@ -319,6 +327,9 @@ export class DraftsService {
       throw new NotFoundException("draft deal not found");
     }
 
+    const now = new Date().toISOString();
+    await this.assertDraftIsMutable(draft, now);
+
     const duplicateFiles = parsedVersion.data.attachmentFileIds
       ? new Set(parsedVersion.data.attachmentFileIds).size !==
         parsedVersion.data.attachmentFileIds.length
@@ -348,7 +359,6 @@ export class DraftsService {
       draft.id
     );
     const versionNumber = (latestVersion?.versionNumber ?? 0) + 1;
-    const now = new Date().toISOString();
     const version = await this.repositories.dealVersions.create({
       bodyMarkdown: parsedVersion.data.bodyMarkdown,
       createdAt: now,
@@ -652,6 +662,8 @@ export class DraftsService {
       throw new NotFoundException("draft deal not found");
     }
 
+    await this.assertDraftIsMutable(draft, new Date().toISOString());
+
     const parties = await this.repositories.draftDealParties.listByDraftDealId(draft.id);
     const counterpartyParties = parties.filter(
       (party) => party.subjectType === "COUNTERPARTY"
@@ -694,14 +706,18 @@ export class DraftsService {
     };
   }
 
-  private async buildDraftListItem(draft: DraftDealRecord): Promise<DraftDealListItem> {
+  private async buildDraftListItem(
+    draft: DraftDealRecord,
+    syncedAt: string
+  ): Promise<DraftDealListItem> {
+    const syncedDraft = (await this.syncDraftFundingState(draft.id, syncedAt)) ?? draft;
     const [parties, latestVersion] = await Promise.all([
-      this.buildDraftPartySummaries(draft.id),
-      this.repositories.dealVersions.findLatestByDraftDealId(draft.id)
+      this.buildDraftPartySummaries(syncedDraft.id),
+      this.repositories.dealVersions.findLatestByDraftDealId(syncedDraft.id)
     ]);
 
     return {
-      draft: toDraftSummary(draft),
+      draft: toDraftSummary(syncedDraft),
       latestVersion: latestVersion ? toDealVersionSummary(latestVersion) : null,
       parties
     };
@@ -710,13 +726,15 @@ export class DraftsService {
   private async buildDraftDetailResponse(
     draft: DraftDealRecord
   ): Promise<DraftDealDetailResponse> {
+    const syncedDraft =
+      (await this.syncDraftFundingState(draft.id, new Date().toISOString())) ?? draft;
     const [parties, versions] = await Promise.all([
-      this.buildDraftPartySummaries(draft.id),
-      this.repositories.dealVersions.listByDraftDealId(draft.id)
+      this.buildDraftPartySummaries(syncedDraft.id),
+      this.repositories.dealVersions.listByDraftDealId(syncedDraft.id)
     ]);
 
     return {
-      draft: toDraftSummary(draft),
+      draft: toDraftSummary(syncedDraft),
       parties,
       versions: await Promise.all(
         versions.map((version) => this.buildDealVersionDetail(version))
@@ -1113,19 +1131,31 @@ export class DraftsService {
   private async syncDraftFundingState(
     draftDealId: string,
     updatedAt: string
-  ): Promise<void> {
+  ): Promise<DraftDealRecord | null> {
     const draft = await this.repositories.draftDeals.findById(draftDealId);
 
-    if (!draft || (draft.state !== "DRAFT" && draft.state !== "AWAITING_FUNDING")) {
-      return;
+    if (!draft) {
+      return null;
     }
 
-    const latestVersion = await this.repositories.dealVersions.findLatestByDraftDealId(
-      draftDealId
-    );
+    const linkedAgreement = await this.findLinkedAgreementForDraft(draft);
+
+    if (linkedAgreement) {
+      if (draft.state === "ACTIVE") {
+        return draft;
+      }
+
+      return this.repositories.draftDeals.updateState(draft.id, "ACTIVE", updatedAt);
+    }
+
+    if (draft.state === "ACTIVE") {
+      return draft;
+    }
+
+    const latestVersion = await this.repositories.dealVersions.findLatestByDraftDealId(draftDealId);
 
     if (!latestVersion) {
-      return;
+      return draft;
     }
 
     const parties = await this.repositories.dealVersionParties.listByDealVersionId(
@@ -1159,8 +1189,44 @@ export class DraftsService {
         : "DRAFT";
 
     if (draft.state !== desiredState) {
-      await this.repositories.draftDeals.updateState(draft.id, desiredState, updatedAt);
+      return this.repositories.draftDeals.updateState(draft.id, desiredState, updatedAt);
     }
+
+    return draft;
+  }
+
+  private async assertDraftIsMutable(
+    draft: DraftDealRecord,
+    updatedAt: string
+  ): Promise<void> {
+    const linkedAgreement = await this.findLinkedAgreementForDraft(draft);
+
+    if (linkedAgreement || draft.state === "ACTIVE") {
+      if (linkedAgreement && draft.state !== "ACTIVE") {
+        await this.repositories.draftDeals.updateState(draft.id, "ACTIVE", updatedAt);
+      }
+
+      throw new ConflictException("draft deal is already active onchain");
+    }
+
+    const fundingTransactions =
+      await this.repositories.fundingTransactions.listByDraftDealId(draft.id);
+
+    if (fundingTransactions.length > 0) {
+      throw new ConflictException("draft deal funding is already in progress");
+    }
+  }
+
+  private async findLinkedAgreementForDraft(
+    draft: DraftDealRecord
+  ): Promise<EscrowAgreementRecord | null> {
+    const chainId = normalizeApiChainId();
+    const dealId = buildCanonicalDealId(draft.organizationId, draft.id);
+    const agreements = await this.release4Repositories.escrowAgreements.listByChainId(
+      chainId
+    );
+
+    return agreements.find((agreement) => agreement.dealId === dealId) ?? null;
   }
 
   private async requireOrganizationAccess(

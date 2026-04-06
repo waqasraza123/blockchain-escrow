@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import type { ChainId, HexString, WalletAddress } from "./primitives";
+import type { ChainId, EntityId, HexString, IsoTimestamp, WalletAddress } from "./primitives";
 
 export const fundingPreparationParamsSchema = z.object({
   dealVersionId: z.string().trim().min(1),
@@ -34,6 +34,22 @@ export type FundingPreparationBlocker = z.infer<
   typeof fundingPreparationBlockerSchema
 >;
 
+export const createFundingTransactionSchema = z.object({
+  transactionHash: z.string().trim().regex(/^0x[a-fA-F0-9]{64}$/)
+});
+export type CreateFundingTransactionInput = z.infer<
+  typeof createFundingTransactionSchema
+>;
+
+export const fundingTransactionStatusSchema = z.enum([
+  "PENDING",
+  "CONFIRMED",
+  "MISMATCHED"
+]);
+export type FundingTransactionStatus = z.infer<
+  typeof fundingTransactionStatusSchema
+>;
+
 export interface FundingPreparationTransaction {
   data: HexString;
   to: WalletAddress;
@@ -65,4 +81,28 @@ export interface FundingPreparationSummary {
 
 export interface GetFundingPreparationResponse {
   preparation: FundingPreparationSummary;
+}
+
+export interface FundingTransactionSummary {
+  agreementAddress: WalletAddress | null;
+  chainId: ChainId;
+  confirmedAt: IsoTimestamp | null;
+  dealVersionId: EntityId;
+  draftDealId: EntityId;
+  id: EntityId;
+  matchesTrackedVersion: boolean | null;
+  organizationId: EntityId;
+  status: FundingTransactionStatus;
+  submittedAt: IsoTimestamp;
+  submittedByUserId: EntityId;
+  submittedWalletAddress: WalletAddress;
+  transactionHash: HexString;
+}
+
+export interface CreateFundingTransactionResponse {
+  fundingTransaction: FundingTransactionSummary;
+}
+
+export interface ListFundingTransactionsResponse {
+  fundingTransactions: FundingTransactionSummary[];
 }

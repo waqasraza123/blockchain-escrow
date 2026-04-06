@@ -26,6 +26,7 @@ import type {
   DraftDealPartyRecord,
   DraftDealRecord,
   FileRecord,
+  FundingTransactionRecord,
   OrganizationInviteRecord,
   OrganizationMemberRecord,
   OrganizationRecord,
@@ -47,6 +48,7 @@ import type {
   DraftDealPartyRepository,
   DraftDealRepository,
   FileRepository,
+  FundingTransactionRepository,
   OrganizationInviteRepository,
   OrganizationMemberRepository,
   OrganizationRepository,
@@ -439,6 +441,33 @@ function mapCounterpartyDealVersionAcceptanceRecord(record: {
       record.signerWalletAddress as CounterpartyDealVersionAcceptanceRecord["signerWalletAddress"],
     typedData:
       record.typedData as CounterpartyDealVersionAcceptanceRecord["typedData"]
+  };
+}
+
+function mapFundingTransactionRecord(record: {
+  chainId: number;
+  dealVersionId: string;
+  draftDealId: string;
+  id: string;
+  organizationId: string;
+  submittedAt: Date;
+  submittedByUserId: string;
+  submittedWalletAddress: string;
+  submittedWalletId: string;
+  transactionHash: string;
+}): FundingTransactionRecord {
+  return {
+    chainId: record.chainId,
+    dealVersionId: record.dealVersionId,
+    draftDealId: record.draftDealId,
+    id: record.id,
+    organizationId: record.organizationId,
+    submittedAt: toRequiredIsoTimestamp(record.submittedAt),
+    submittedByUserId: record.submittedByUserId,
+    submittedWalletAddress:
+      record.submittedWalletAddress as FundingTransactionRecord["submittedWalletAddress"],
+    submittedWalletId: record.submittedWalletId,
+    transactionHash: record.transactionHash as FundingTransactionRecord["transactionHash"]
   };
 }
 
@@ -1282,6 +1311,73 @@ export class PrismaCounterpartyDealVersionAcceptanceRepository
   }
 }
 
+export class PrismaFundingTransactionRepository
+  implements FundingTransactionRepository
+{
+  constructor(private readonly prisma: PrismaClient) {}
+
+  async create(record: FundingTransactionRecord): Promise<FundingTransactionRecord> {
+    const created = await this.prisma.fundingTransaction.create({
+      data: {
+        chainId: record.chainId,
+        dealVersionId: record.dealVersionId,
+        draftDealId: record.draftDealId,
+        id: record.id,
+        organizationId: record.organizationId,
+        submittedAt: toDate(record.submittedAt),
+        submittedByUserId: record.submittedByUserId,
+        submittedWalletAddress: record.submittedWalletAddress,
+        submittedWalletId: record.submittedWalletId,
+        transactionHash: record.transactionHash
+      }
+    });
+
+    return mapFundingTransactionRecord(created);
+  }
+
+  async findByChainIdAndTransactionHash(
+    chainId: number,
+    transactionHash: `0x${string}`
+  ): Promise<FundingTransactionRecord | null> {
+    const record = await this.prisma.fundingTransaction.findUnique({
+      where: {
+        chainId_transactionHash: {
+          chainId,
+          transactionHash
+        }
+      }
+    });
+
+    return record ? mapFundingTransactionRecord(record) : null;
+  }
+
+  async findById(id: string): Promise<FundingTransactionRecord | null> {
+    const record = await this.prisma.fundingTransaction.findUnique({
+      where: { id }
+    });
+
+    return record ? mapFundingTransactionRecord(record) : null;
+  }
+
+  async listByDealVersionId(dealVersionId: string): Promise<FundingTransactionRecord[]> {
+    const records = await this.prisma.fundingTransaction.findMany({
+      orderBy: [{ submittedAt: "desc" }, { id: "desc" }],
+      where: { dealVersionId }
+    });
+
+    return records.map(mapFundingTransactionRecord);
+  }
+
+  async listByDraftDealId(draftDealId: string): Promise<FundingTransactionRecord[]> {
+    const records = await this.prisma.fundingTransaction.findMany({
+      orderBy: [{ submittedAt: "desc" }, { id: "desc" }],
+      where: { draftDealId }
+    });
+
+    return records.map(mapFundingTransactionRecord);
+  }
+}
+
 export class PrismaOrganizationMemberRepository
   implements OrganizationMemberRepository
 {
@@ -1551,6 +1647,7 @@ export class PrismaRelease1Repositories implements Release1Repositories {
   readonly draftDealParties: DraftDealPartyRepository;
   readonly draftDeals: DraftDealRepository;
   readonly files: FileRepository;
+  readonly fundingTransactions: FundingTransactionRepository;
   readonly organizationInvites: OrganizationInviteRepository;
   readonly organizationMembers: OrganizationMemberRepository;
   readonly organizations: OrganizationRepository;
@@ -1573,6 +1670,7 @@ export class PrismaRelease1Repositories implements Release1Repositories {
     this.draftDealParties = new PrismaDraftDealPartyRepository(prisma);
     this.draftDeals = new PrismaDraftDealRepository(prisma);
     this.files = new PrismaFileRepository(prisma);
+    this.fundingTransactions = new PrismaFundingTransactionRepository(prisma);
     this.organizationInvites = new PrismaOrganizationInviteRepository(prisma);
     this.organizationMembers = new PrismaOrganizationMemberRepository(prisma);
     this.organizations = new PrismaOrganizationRepository(prisma);

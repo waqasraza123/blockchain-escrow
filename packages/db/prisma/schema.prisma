@@ -37,6 +37,7 @@ enum AuditAction {
   DEAL_VERSION_CREATED
   DRAFT_DEAL_CREATED
   FILE_CREATED
+  FUNDING_TRANSACTION_SUBMITTED
   ORGANIZATION_CREATED
   ORGANIZATION_INVITE_REVOKED
   ORGANIZATION_INVITE_ACCEPTED
@@ -53,6 +54,7 @@ enum AuditEntityType {
   DEAL_VERSION
   DRAFT_DEAL
   FILE
+  FUNDING_TRANSACTION
   ORGANIZATION
   ORGANIZATION_INVITE
   ORGANIZATION_MEMBER
@@ -140,6 +142,7 @@ model User {
   dealVersionAcceptancesMade DealVersionAcceptance[] @relation("DealVersionAcceptanceAcceptedByUser")
   dealVersionsCreated        DealVersion[]          @relation("DealVersionCreatedByUser")
   filesCreated               StoredFile[]           @relation("StoredFileCreatedByUser")
+  fundingTransactionsSubmitted FundingTransaction[] @relation("FundingTransactionSubmittedByUser")
   templatesCreated           Template[]             @relation("TemplateCreatedByUser")
   organizationRoles          OrganizationMember[]
   invitesSent                OrganizationInvite[]   @relation("OrganizationInviteInvitedByUser")
@@ -159,6 +162,7 @@ model Wallet {
   user                  User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
   sessions              Session[]
   dealVersionAcceptances DealVersionAcceptance[] @relation("DealVersionAcceptanceSignerWallet")
+  fundingTransactionsSubmitted FundingTransaction[] @relation("FundingTransactionSubmittedWallet")
 
   @@index([userId], map: "wallets_user_id_idx")
   @@map("wallets")
@@ -212,6 +216,7 @@ model Organization {
   draftDealParties       DraftDealParty[]        @relation("DraftDealPartyOrganization")
   draftDeals             DraftDeal[]
   files                  StoredFile[]
+  fundingTransactions    FundingTransaction[]
   templates              Template[]
   members                OrganizationMember[]
   invites                OrganizationInvite[]
@@ -306,6 +311,7 @@ model DraftDeal {
   organization       Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   createdByUser      User               @relation("DraftDealCreatedByUser", fields: [createdByUserId], references: [id], onDelete: Restrict)
   template           Template?          @relation("DraftDealTemplate", fields: [templateId], references: [id], onDelete: SetNull)
+  fundingTransactions FundingTransaction[]
   parties            DraftDealParty[]
   versions           DealVersion[]
 
@@ -355,6 +361,7 @@ model DealVersion {
   template           Template?          @relation("DealVersionTemplate", fields: [templateId], references: [id], onDelete: SetNull)
   acceptances        DealVersionAcceptance[]
   counterpartyAcceptances CounterpartyDealVersionAcceptance[]
+  fundingTransactions FundingTransaction[]
   parties            DealVersionParty[]
   milestones         DealVersionMilestone[]
   files              DealVersionFile[]
@@ -463,6 +470,31 @@ model CounterpartyDealVersionAcceptance {
   @@index([dealVersionId], map: "ctpty_dv_acceptances_version_id_idx")
   @@index([dealVersionId, acceptedAt], map: "ctpty_dv_acceptances_version_id_accepted_at_idx")
   @@map("counterparty_deal_version_acceptances")
+}
+
+model FundingTransaction {
+  id                   String    @id @db.Text
+  organizationId       String    @db.Text
+  draftDealId          String    @db.Text
+  dealVersionId        String    @db.Text
+  submittedByUserId    String    @db.Text
+  submittedWalletId    String    @db.Text
+  submittedWalletAddress String  @db.Text
+  chainId              Int
+  transactionHash      String    @db.Text
+  submittedAt          DateTime  @db.Timestamptz(3)
+  organization         Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  draftDeal            DraftDeal @relation(fields: [draftDealId], references: [id], onDelete: Cascade)
+  dealVersion          DealVersion @relation(fields: [dealVersionId], references: [id], onDelete: Cascade)
+  submittedByUser      User      @relation("FundingTransactionSubmittedByUser", fields: [submittedByUserId], references: [id], onDelete: Restrict)
+  submittedWallet      Wallet    @relation("FundingTransactionSubmittedWallet", fields: [submittedWalletId], references: [id], onDelete: Restrict)
+
+  @@unique([chainId, transactionHash], map: "funding_transactions_chain_id_transaction_hash_key")
+  @@index([organizationId], map: "funding_transactions_organization_id_idx")
+  @@index([draftDealId], map: "funding_transactions_draft_deal_id_idx")
+  @@index([dealVersionId], map: "funding_transactions_deal_version_id_idx")
+  @@index([dealVersionId, submittedAt], map: "funding_transactions_deal_version_id_submitted_at_idx")
+  @@map("funding_transactions")
 }
 
 model OrganizationMember {

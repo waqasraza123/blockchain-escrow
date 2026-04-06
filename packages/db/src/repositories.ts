@@ -1,4 +1,4 @@
-import type { ChainId, EntityId, WalletAddress } from "@blockchain-escrow/shared";
+import type { ChainId, EntityId, HexString, WalletAddress } from "@blockchain-escrow/shared";
 
 import type {
   ArbitratorRegistryEntryRecord,
@@ -17,6 +17,7 @@ import type {
   EscrowAgreementRecord,
   FeeVaultStateRecord,
   FileRecord,
+  FundingTransactionRecord,
   IndexedBlockRecord,
   IndexedContractEventRecord,
   IndexedTransactionRecord,
@@ -215,6 +216,17 @@ export interface CounterpartyDealVersionAcceptanceRepository {
   ): Promise<CounterpartyDealVersionAcceptanceRecord[]>;
 }
 
+export interface FundingTransactionRepository {
+  create(record: FundingTransactionRecord): Promise<FundingTransactionRecord>;
+  findByChainIdAndTransactionHash(
+    chainId: ChainId,
+    transactionHash: HexString
+  ): Promise<FundingTransactionRecord | null>;
+  findById(id: EntityId): Promise<FundingTransactionRecord | null>;
+  listByDealVersionId(dealVersionId: EntityId): Promise<FundingTransactionRecord[]>;
+  listByDraftDealId(draftDealId: EntityId): Promise<FundingTransactionRecord[]>;
+}
+
 export interface ChainCursorRepository {
   findByChainIdAndCursorKey(
     chainId: ChainId,
@@ -327,6 +339,7 @@ export interface Release1Repositories {
   draftDealParties: DraftDealPartyRepository;
   draftDeals: DraftDealRepository;
   files: FileRepository;
+  fundingTransactions: FundingTransactionRepository;
   organizationInvites: OrganizationInviteRepository;
   organizationMembers: OrganizationMemberRepository;
   organizations: OrganizationRepository;
