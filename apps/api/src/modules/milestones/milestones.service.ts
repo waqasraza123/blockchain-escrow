@@ -12,6 +12,7 @@ import type {
   DealVersionMilestoneRecord,
   DealVersionPartyRecord,
   DealVersionRecord,
+  DraftDealPartyRecord,
   DraftDealRecord,
   EscrowAgreementRecord,
   FileRecord,
@@ -22,6 +23,7 @@ import type {
 } from "@blockchain-escrow/db";
 import { hasMinimumOrganizationRole } from "@blockchain-escrow/security";
 import {
+  createCounterpartyMilestoneSubmissionSchema,
   createMilestoneReviewSchema,
   createMilestoneSettlementRequestSchema,
   createMilestoneSubmissionSchema,
@@ -29,6 +31,9 @@ import {
   milestoneReviewParamsSchema,
   milestoneSettlementRequestParamsSchema,
   milestoneSubmissionParamsSchema,
+  prepareCounterpartyMilestoneSubmissionSchema,
+  type CounterpartyDealMilestoneSubmissionChallenge,
+  type CreateCounterpartyDealMilestoneSubmissionResponse,
   type CreateDealMilestoneReviewResponse,
   type CreateDealMilestoneSettlementRequestResponse,
   type CreateDealMilestoneSubmissionResponse,
@@ -38,7 +43,8 @@ import {
   type DealVersionMilestoneSnapshot,
   type DealVersionMilestoneWorkflow,
   type ListDealVersionMilestoneWorkflowsResponse,
-  type MilestoneWorkflowState
+  type MilestoneWorkflowState,
+  type PrepareCounterpartyDealMilestoneSubmissionResponse
 } from "@blockchain-escrow/shared";
 import {
   BadRequestException,
@@ -46,8 +52,10 @@ import {
   ForbiddenException,
   Inject,
   Injectable,
-  NotFoundException
+  NotFoundException,
+  UnauthorizedException
 } from "@nestjs/common";
+import { getAddress, verifyTypedData } from "viem";
 
 import {
   RELEASE1_REPOSITORIES,
@@ -58,7 +66,14 @@ import {
   AuthenticatedSessionService,
   type AuthenticatedSessionContext
 } from "../auth/authenticated-session.service";
-import { buildCanonicalDealId, normalizeApiChainId } from "../drafts/deal-identity";
+import {
+  buildCanonicalDealId,
+  buildCanonicalDealVersionHash,
+  buildCounterpartyMilestoneSubmissionTypedData,
+  counterpartyMilestoneSubmissionPrimaryType,
+  counterpartyMilestoneSubmissionTypes,
+  normalizeApiChainId
+} from "../drafts/deal-identity";
 
 interface MilestoneWorkflowAccessContext {
   actor: AuthenticatedSessionContext;
@@ -84,6 +99,17 @@ interface MilestoneReviewAccessContext extends MilestoneAccessContext {
 interface MilestoneSettlementRequestAccessContext
   extends MilestoneReviewAccessContext {
   settlementRequest: DealMilestoneSettlementRequestRecord | null;
+}
+
+interface CounterpartyMilestoneSubmissionContext {
+  counterpartyParty: DraftDealPartyRecord;
+  draft: DraftDealRecord;
+  linkedAgreement: EscrowAgreementRecord | null;
+  milestone: DealVersionMilestoneRecord;
+  submissionNumber: number;
+  typedData: CounterpartyDealMilestoneSubmissionChallenge["typedData"];
+  version: DealVersionRecord;
+  versionSellerParty: DealVersionPartyRecord;
 }
 
 function toMilestoneSnapshot(
@@ -192,13 +218,16 @@ export class MilestonesService {
       draftDealId: access.draft.id,
       id: randomUUID(),
       organizationId: access.organization.id,
+      scheme: null,
+      signature: null,
       statementMarkdown: parsedBody.data.statementMarkdown,
       submissionNumber: existingSubmissions.length + 1,
       submittedAt: now,
       submittedByCounterpartyId: access.sellerParty.counterpartyId,
       submittedByPartyRole: access.sellerParty.role,
       submittedByPartySubjectType: access.sellerParty.subjectType,
-      submittedByUserId: access.actor.user.id
+      submittedByUserId: access.actor.user.id,
+      typedData: null
     });
 
     for (const file of attachmentFiles) {
@@ -234,6 +263,155 @@ export class MilestonesService {
 
     const milestone = await this.buildMilestoneWorkflows(access.version.id).then(
       (milestones) => milestones.find((record) => record.milestone.id === access.milestone.id)
+    );
+
+    if (!milestone) {
+      throw new NotFoundException("milestone workflow not found");
+    }
+
+    return {
+      milestone,
+      submission: milestone.submissions[milestone.submissions.length - 1]!
+    };
+  }
+
+  async prepareCounterpartyMilestoneSubmission(
+    paramsInput: unknown,
+    bodyInput: unknown
+  ): Promise<PrepareCounterpartyDealMilestoneSubmissionResponse> {
+    const parsedParams = milestoneSubmissionParamsSchema.safeParse(paramsInput);
+    const parsedBody =
+      prepareCounterpartyMilestoneSubmissionSchema.safeParse(bodyInput);
+
+    if (!parsedParams.success) {
+      throw new BadRequestException(parsedParams.error.flatten());
+    }
+
+    if (!parsedBody.success) {
+      throw new BadRequestException(parsedBody.error.flatten());
+    }
+
+    const context = await this.requireCounterpartyMilestoneSubmissionContext(
+      parsedParams.data.organizationId,
+      parsedParams.data.draftDealId,
+      parsedParams.data.dealVersionId,
+      parsedParams.data.dealVersionMilestoneId,
+      parsedBody.data.statementMarkdown
+    );
+
+    this.assertEscrowIsActive(context.draft, context.linkedAgreement);
+
+    return {
+      challenge: {
+        expectedWalletAddress: context.counterpartyParty.walletAddress!,
+        typedData: context.typedData
+      }
+    };
+  }
+
+  async createCounterpartyMilestoneSubmission(
+    paramsInput: unknown,
+    bodyInput: unknown
+  ): Promise<CreateCounterpartyDealMilestoneSubmissionResponse> {
+    const parsedParams = milestoneSubmissionParamsSchema.safeParse(paramsInput);
+    const parsedBody =
+      createCounterpartyMilestoneSubmissionSchema.safeParse(bodyInput);
+
+    if (!parsedParams.success) {
+      throw new BadRequestException(parsedParams.error.flatten());
+    }
+
+    if (!parsedBody.success) {
+      throw new BadRequestException(parsedBody.error.flatten());
+    }
+
+    const context = await this.requireCounterpartyMilestoneSubmissionContext(
+      parsedParams.data.organizationId,
+      parsedParams.data.draftDealId,
+      parsedParams.data.dealVersionId,
+      parsedParams.data.dealVersionMilestoneId,
+      parsedBody.data.statementMarkdown
+    );
+
+    this.assertEscrowIsActive(context.draft, context.linkedAgreement);
+
+    const typedMessage = context.typedData.message as {
+      dealId: `0x${string}`;
+      dealVersionHash: `0x${string}`;
+      dealVersionId: string;
+      dealVersionMilestoneId: string;
+      draftDealId: string;
+      intent: string;
+      organizationId: string;
+      statementHash: `0x${string}`;
+      submissionNumber: string;
+    };
+    const isValid = await verifyTypedData({
+      address: getAddress(context.counterpartyParty.walletAddress!),
+      domain: context.typedData.domain as {
+        chainId: number;
+        name: string;
+        version: string;
+      },
+      message: {
+        ...typedMessage,
+        submissionNumber: BigInt(typedMessage.submissionNumber)
+      },
+      primaryType: counterpartyMilestoneSubmissionPrimaryType,
+      signature: parsedBody.data.signature as `0x${string}`,
+      types: counterpartyMilestoneSubmissionTypes
+    });
+
+    if (!isValid) {
+      throw new UnauthorizedException(
+        "invalid counterparty milestone submission signature"
+      );
+    }
+
+    const now = new Date().toISOString();
+    const submission = await this.repositories.dealMilestoneSubmissions.create({
+      dealVersionId: context.version.id,
+      dealVersionMilestoneId: context.milestone.id,
+      draftDealId: context.draft.id,
+      id: randomUUID(),
+      organizationId: context.draft.organizationId,
+      scheme: "EIP712",
+      signature: parsedBody.data.signature,
+      statementMarkdown: parsedBody.data.statementMarkdown,
+      submissionNumber: context.submissionNumber,
+      submittedAt: now,
+      submittedByCounterpartyId: context.versionSellerParty.counterpartyId,
+      submittedByPartyRole: context.versionSellerParty.role,
+      submittedByPartySubjectType: context.versionSellerParty.subjectType,
+      submittedByUserId: null,
+      typedData: context.typedData
+    });
+
+    await this.repositories.auditLogs.append({
+      action: "DEAL_MILESTONE_SUBMISSION_CREATED",
+      actorUserId: null,
+      entityId: submission.id,
+      entityType: "DEAL_MILESTONE_SUBMISSION",
+      id: randomUUID(),
+      ipAddress: null,
+      metadata: {
+        dealVersionId: submission.dealVersionId,
+        dealVersionMilestoneId: submission.dealVersionMilestoneId,
+        draftDealId: submission.draftDealId,
+        scheme: submission.scheme,
+        signerWalletAddress: context.counterpartyParty.walletAddress,
+        submissionNumber: submission.submissionNumber,
+        submittedByCounterpartyId: submission.submittedByCounterpartyId,
+        submittedByPartyRole: submission.submittedByPartyRole,
+        submittedByPartySubjectType: submission.submittedByPartySubjectType
+      },
+      occurredAt: now,
+      organizationId: context.draft.organizationId,
+      userAgent: null
+    });
+
+    const milestone = await this.buildMilestoneWorkflows(context.version.id).then(
+      (milestones) => milestones.find((record) => record.milestone.id === context.milestone.id)
     );
 
     if (!milestone) {
@@ -743,6 +921,121 @@ export class MilestonesService {
       ...access,
       linkedAgreement,
       milestone
+    };
+  }
+
+  private async requireCounterpartyMilestoneSubmissionContext(
+    organizationId: string,
+    draftDealId: string,
+    dealVersionId: string,
+    dealVersionMilestoneId: string,
+    statementMarkdown: string
+  ): Promise<CounterpartyMilestoneSubmissionContext> {
+    const [draft, version] = await Promise.all([
+      this.repositories.draftDeals.findById(draftDealId),
+      this.repositories.dealVersions.findById(dealVersionId)
+    ]);
+
+    if (!draft || draft.organizationId !== organizationId) {
+      throw new NotFoundException("draft deal not found");
+    }
+
+    if (
+      !version ||
+      version.organizationId !== organizationId ||
+      version.draftDealId !== draft.id
+    ) {
+      throw new NotFoundException("deal version not found");
+    }
+
+    const [draftParties, versionParties, milestone, milestoneSubmissions, linkedAgreement] =
+      await Promise.all([
+        this.repositories.draftDealParties.listByDraftDealId(draft.id),
+        this.repositories.dealVersionParties.listByDealVersionId(version.id),
+        this.repositories.dealVersionMilestones.findById(dealVersionMilestoneId),
+        this.repositories.dealMilestoneSubmissions.listByDealVersionMilestoneId(
+          dealVersionMilestoneId
+        ),
+        this.findLinkedAgreementForDraft(draft)
+      ]);
+
+    if (!milestone || milestone.dealVersionId !== version.id) {
+      throw new NotFoundException("deal milestone not found");
+    }
+
+    const counterpartyParties = draftParties.filter(
+      (party) => party.subjectType === "COUNTERPARTY"
+    );
+
+    if (counterpartyParties.length !== 1) {
+      throw new ConflictException("draft deal must have exactly one counterparty party");
+    }
+
+    const sellerParties = versionParties.filter((party) => party.role === "SELLER");
+
+    if (sellerParties.length !== 1) {
+      throw new ConflictException("deal version must have exactly one seller party");
+    }
+
+    const counterpartyParty = counterpartyParties[0]!;
+    const versionSellerParty = sellerParties[0]!;
+
+    if (versionSellerParty.subjectType !== "COUNTERPARTY") {
+      throw new ConflictException("milestone seller party is not a counterparty");
+    }
+
+    if (counterpartyParty.counterpartyId !== versionSellerParty.counterpartyId) {
+      throw new ConflictException(
+        "draft counterparty party does not match milestone seller party"
+      );
+    }
+
+    if (!counterpartyParty.walletAddress) {
+      throw new ConflictException("counterparty wallet address is required");
+    }
+
+    const [fileLinks, milestones] = await Promise.all([
+      this.repositories.dealVersionFiles.listByDealVersionId(version.id),
+      this.repositories.dealVersionMilestones.listByDealVersionId(version.id)
+    ]);
+    const files = await Promise.all(
+      fileLinks.map(async (link) => {
+        const file = await this.repositories.files.findById(link.fileId);
+
+        if (!file) {
+          throw new NotFoundException("linked file not found");
+        }
+
+        return file;
+      })
+    );
+    const dealId = buildCanonicalDealId(draft.organizationId, draft.id);
+    const dealVersionHash = buildCanonicalDealVersionHash(
+      draft,
+      version,
+      versionParties,
+      milestones,
+      files
+    );
+    const submissionNumber = milestoneSubmissions.length + 1;
+
+    return {
+      counterpartyParty,
+      draft,
+      linkedAgreement,
+      milestone,
+      submissionNumber,
+      typedData: buildCounterpartyMilestoneSubmissionTypedData(
+        draft,
+        version,
+        milestone.id,
+        dealId,
+        dealVersionHash,
+        submissionNumber,
+        statementMarkdown
+      ),
+      version,
+      versionSellerParty
     };
   }
 

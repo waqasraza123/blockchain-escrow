@@ -471,6 +471,9 @@ model DealMilestoneSubmission {
   dealVersionId          String               @db.Text
   dealVersionMilestoneId String               @db.Text
   submittedByUserId      String?              @db.Text
+  scheme                 TypedSignatureScheme?
+  signature              String?              @db.Text
+  typedData              Json?
   submissionNumber       Int
   statementMarkdown      String               @db.Text
   submittedAt            DateTime             @db.Timestamptz(3)

@@ -13,6 +13,7 @@ import type {
   EntityId,
   HexString,
   IsoTimestamp,
+  JsonObject,
   WalletAddress
 } from "./primitives";
 
@@ -218,6 +219,21 @@ export type CreateMilestoneSubmissionInput = z.infer<
   typeof createMilestoneSubmissionSchema
 >;
 
+export const prepareCounterpartyMilestoneSubmissionSchema = z.object({
+  statementMarkdown: z.string().trim().min(1).max(10000)
+});
+export type PrepareCounterpartyMilestoneSubmissionInput = z.infer<
+  typeof prepareCounterpartyMilestoneSubmissionSchema
+>;
+
+export const createCounterpartyMilestoneSubmissionSchema =
+  prepareCounterpartyMilestoneSubmissionSchema.extend({
+    signature: z.string().trim().regex(/^0x[a-fA-F0-9]+$/)
+  });
+export type CreateCounterpartyMilestoneSubmissionInput = z.infer<
+  typeof createCounterpartyMilestoneSubmissionSchema
+>;
+
 export const milestoneReviewParamsSchema = z.object({
   dealMilestoneSubmissionId: z.string().trim().min(1),
   dealVersionId: z.string().trim().min(1),
@@ -279,6 +295,11 @@ export interface DealMilestoneSettlementRequestSummary {
   statementMarkdown: string | null;
 }
 
+export interface CounterpartyDealMilestoneSubmissionChallenge {
+  expectedWalletAddress: WalletAddress;
+  typedData: JsonObject;
+}
+
 export interface DealMilestoneReviewSummary {
   decision: MilestoneReviewDecision;
   dealMilestoneSubmissionId: EntityId;
@@ -335,6 +356,15 @@ export interface CreateDealMilestoneReviewResponse {
 export interface CreateDealMilestoneSettlementRequestResponse {
   milestone: DealVersionMilestoneWorkflow;
   settlementRequest: DealMilestoneSettlementRequestSummary;
+}
+
+export interface PrepareCounterpartyDealMilestoneSubmissionResponse {
+  challenge: CounterpartyDealMilestoneSubmissionChallenge;
+}
+
+export interface CreateCounterpartyDealMilestoneSubmissionResponse {
+  milestone: DealVersionMilestoneWorkflow;
+  submission: DealMilestoneSubmissionSummary;
 }
 
 export interface DealVersionDetail extends DealVersionSummary {

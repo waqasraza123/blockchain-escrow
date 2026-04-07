@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import { getDeploymentManifestByChainId } from "@blockchain-escrow/contracts-sdk";
+import { privateKeyToAccount } from "viem/accounts";
 
 import { AuditService } from "../src/modules/audit/audit.service";
 import { AuthenticatedSessionService } from "../src/modules/auth/authenticated-session.service";
@@ -21,6 +22,12 @@ import {
 import { InMemoryRelease1Repositories } from "./helpers/in-memory-release1-repositories";
 import { InMemoryRelease4Repositories } from "./helpers/in-memory-release4-repositories";
 
+const counterpartyAccount = privateKeyToAccount(
+  "0x8b3a350cf5c34c9194ca7a545d6a76fc4d6f8d4894d3e9d2046df1d5c8d14d14"
+);
+const alternateCounterpartyAccount = privateKeyToAccount(
+  "0x0dbbe8d4c1fdb23f4d4cf8f3668a5985bce4a35d7473f2c452ecf72edb5d2d57"
+);
 const fundingReconciliationConfiguration: FundingReconciliationConfiguration = {
   indexerFreshnessTtlSeconds: 300,
   pendingStaleAfterSeconds: 3600,
@@ -317,6 +324,8 @@ async function seedCounterpartySellerSubmission(
     draftDealId: seeded.draft.draft.id,
     id: `submission-${options?.submissionNumber ?? 1}`,
     organizationId: "org-1",
+    scheme: null,
+    signature: null,
     statementMarkdown:
       options?.statementMarkdown ?? "Counterparty seller delivery evidence.",
     submissionNumber: options?.submissionNumber ?? 1,
@@ -324,7 +333,8 @@ async function seedCounterpartySellerSubmission(
     submittedByCounterpartyId: sellerParty.counterpartyId,
     submittedByPartyRole: "SELLER",
     submittedByPartySubjectType: "COUNTERPARTY",
-    submittedByUserId: null
+    submittedByUserId: null,
+    typedData: null
   });
 
   for (const fileId of options?.attachmentFileIds ?? []) {
@@ -364,6 +374,43 @@ async function seedMilestoneReview(
     reviewedAt: now,
     reviewedByUserId: actor.userId,
     statementMarkdown: options?.statementMarkdown ?? null
+  });
+}
+
+async function prepareCounterpartyMilestoneSubmissionChallenge(
+  services: ReturnType<typeof createServices>,
+  seeded: Awaited<ReturnType<typeof seedMilestoneScenario>>,
+  statementMarkdown = "Counterparty seller delivery evidence."
+) {
+  return services.milestonesService.prepareCounterpartyMilestoneSubmission(
+    {
+      dealVersionId: seeded.version.version.id,
+      dealVersionMilestoneId: seeded.version.version.milestones[0]!.id,
+      draftDealId: seeded.draft.draft.id,
+      organizationId: "org-1"
+    },
+    {
+      statementMarkdown
+    }
+  );
+}
+
+async function signCounterpartyMilestoneSubmissionChallenge(
+  challenge: Awaited<ReturnType<typeof prepareCounterpartyMilestoneSubmissionChallenge>>,
+  signer = counterpartyAccount
+): Promise<`0x${string}`> {
+  return (
+    signer.signTypedData as (input: {
+      domain: unknown;
+      message: unknown;
+      primaryType: unknown;
+      types: unknown;
+    }) => Promise<`0x${string}`>
+  )({
+    domain: challenge.challenge.typedData.domain,
+    message: challenge.challenge.typedData.message,
+    primaryType: challenge.challenge.typedData.primaryType,
+    types: challenge.challenge.typedData.types
   });
 }
 
@@ -616,6 +663,172 @@ test("milestones service rejects duplicate attachment ids in one submission", as
     ),
     "BadRequestException",
     "attachment file ids must be unique"
+  );
+});
+
+test("milestones service lets counterparty-side sellers prepare and create signed milestone submissions", async () => {
+  const services = createServices();
+  const actor = await seedAuthenticatedActor(
+    services.release1Repositories,
+    services.sessionTokenService
+  );
+  const seeded = await seedMilestoneScenario(services, actor, "BUYER");
+  await services.draftsService.updateCounterpartyWallet(
+    {
+      draftDealId: seeded.draft.draft.id,
+      organizationId: "org-1"
+    },
+    {
+      walletAddress: counterpartyAccount.address
+    },
+    requestMetadata(actor.cookieHeader)
+  );
+  await seedActiveAgreement(services, seeded);
+
+  const challenge = await prepareCounterpartyMilestoneSubmissionChallenge(
+    services,
+    seeded,
+    "Counterparty signed milestone evidence."
+  );
+  const signature = await signCounterpartyMilestoneSubmissionChallenge(challenge);
+  const result = await services.milestonesService.createCounterpartyMilestoneSubmission(
+    {
+      dealVersionId: seeded.version.version.id,
+      dealVersionMilestoneId: seeded.version.version.milestones[0]!.id,
+      draftDealId: seeded.draft.draft.id,
+      organizationId: "org-1"
+    },
+    {
+      signature,
+      statementMarkdown: "Counterparty signed milestone evidence."
+    }
+  );
+
+  assert.equal(
+    challenge.challenge.expectedWalletAddress,
+    counterpartyAccount.address.toLowerCase()
+  );
+  assert.equal(result.submission.submissionNumber, 1);
+  assert.equal(result.submission.statementMarkdown, "Counterparty signed milestone evidence.");
+  assert.equal(result.submission.submittedByPartyRole, "SELLER");
+  assert.equal(result.submission.submittedByPartySubjectType, "COUNTERPARTY");
+  assert.equal(result.submission.submittedByCounterpartyId, "counterparty-1");
+  assert.equal(result.submission.submittedByUserId, null);
+  assert.deepEqual(result.submission.attachmentFiles, []);
+  assert.equal(result.milestone.state, "SUBMITTED");
+
+  const auditLogs = await services.auditService.listByEntity(
+    {
+      entityId: result.submission.id,
+      entityType: "DEAL_MILESTONE_SUBMISSION"
+    },
+    requestMetadata(actor.cookieHeader)
+  );
+
+  assert.equal(auditLogs.auditLogs.length, 1);
+  assert.equal(
+    auditLogs.auditLogs[0]?.action,
+    "DEAL_MILESTONE_SUBMISSION_CREATED"
+  );
+});
+
+test("milestones service rejects counterparty milestone submissions with an invalid signature", async () => {
+  const services = createServices();
+  const actor = await seedAuthenticatedActor(
+    services.release1Repositories,
+    services.sessionTokenService
+  );
+  const seeded = await seedMilestoneScenario(services, actor, "BUYER");
+  await services.draftsService.updateCounterpartyWallet(
+    {
+      draftDealId: seeded.draft.draft.id,
+      organizationId: "org-1"
+    },
+    {
+      walletAddress: counterpartyAccount.address
+    },
+    requestMetadata(actor.cookieHeader)
+  );
+  await seedActiveAgreement(services, seeded);
+
+  const challenge = await prepareCounterpartyMilestoneSubmissionChallenge(
+    services,
+    seeded
+  );
+  const signature = await signCounterpartyMilestoneSubmissionChallenge(
+    challenge,
+    alternateCounterpartyAccount
+  );
+
+  await expectRejectsWith(
+    services.milestonesService.createCounterpartyMilestoneSubmission(
+      {
+        dealVersionId: seeded.version.version.id,
+        dealVersionMilestoneId: seeded.version.version.milestones[0]!.id,
+        draftDealId: seeded.draft.draft.id,
+        organizationId: "org-1"
+      },
+      {
+        signature,
+        statementMarkdown: "Counterparty seller delivery evidence."
+      }
+    ),
+    "UnauthorizedException",
+    "invalid counterparty milestone submission signature"
+  );
+});
+
+test("milestones service requires a tracked counterparty wallet for signed counterparty milestone submissions", async () => {
+  const services = createServices();
+  const actor = await seedAuthenticatedActor(
+    services.release1Repositories,
+    services.sessionTokenService
+  );
+  const seeded = await seedMilestoneScenario(services, actor, "BUYER");
+
+  await seedActiveAgreement(services, seeded);
+
+  await expectRejectsWith(
+    services.milestonesService.prepareCounterpartyMilestoneSubmission(
+      {
+        dealVersionId: seeded.version.version.id,
+        dealVersionMilestoneId: seeded.version.version.milestones[0]!.id,
+        draftDealId: seeded.draft.draft.id,
+        organizationId: "org-1"
+      },
+      {
+        statementMarkdown: "Counterparty seller delivery evidence."
+      }
+    ),
+    "ConflictException",
+    "counterparty wallet address is required"
+  );
+});
+
+test("milestones service only allows signed counterparty milestone submissions when the seller party is counterparty-backed", async () => {
+  const services = createServices();
+  const actor = await seedAuthenticatedActor(
+    services.release1Repositories,
+    services.sessionTokenService
+  );
+  const seeded = await seedMilestoneScenario(services, actor, "SELLER");
+
+  await seedActiveAgreement(services, seeded);
+
+  await expectRejectsWith(
+    services.milestonesService.prepareCounterpartyMilestoneSubmission(
+      {
+        dealVersionId: seeded.version.version.id,
+        dealVersionMilestoneId: seeded.version.version.milestones[0]!.id,
+        draftDealId: seeded.draft.draft.id,
+        organizationId: "org-1"
+      },
+      {
+        statementMarkdown: "Counterparty seller delivery evidence."
+      }
+    ),
+    "ConflictException",
+    "milestone seller party is not a counterparty"
   );
 });
 

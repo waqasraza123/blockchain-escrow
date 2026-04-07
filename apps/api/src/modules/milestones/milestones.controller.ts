@@ -1,9 +1,11 @@
 import { Body, Controller, Get, Param, Post, Req } from "@nestjs/common";
 import type {
+  CreateCounterpartyDealMilestoneSubmissionResponse,
   CreateDealMilestoneReviewResponse,
   CreateDealMilestoneSettlementRequestResponse,
   CreateDealMilestoneSubmissionResponse,
-  ListDealVersionMilestoneWorkflowsResponse
+  ListDealVersionMilestoneWorkflowsResponse,
+  PrepareCounterpartyDealMilestoneSubmissionResponse
 } from "@blockchain-escrow/shared";
 
 import { readRequestMetadata, type HttpRequestLike } from "../auth/auth.http";
@@ -44,6 +46,44 @@ export class MilestonesController {
       },
       body,
       readRequestMetadata(request)
+    );
+  }
+
+  @Post("milestones/:dealVersionMilestoneId/counterparty-submission-challenge")
+  async prepareCounterpartyMilestoneSubmission(
+    @Param("organizationId") organizationId: string,
+    @Param("draftDealId") draftDealId: string,
+    @Param("dealVersionId") dealVersionId: string,
+    @Param("dealVersionMilestoneId") dealVersionMilestoneId: string,
+    @Body() body: unknown
+  ): Promise<PrepareCounterpartyDealMilestoneSubmissionResponse> {
+    return this.milestonesService.prepareCounterpartyMilestoneSubmission(
+      {
+        dealVersionId,
+        dealVersionMilestoneId,
+        draftDealId,
+        organizationId
+      },
+      body
+    );
+  }
+
+  @Post("milestones/:dealVersionMilestoneId/counterparty-submissions")
+  async createCounterpartyMilestoneSubmission(
+    @Param("organizationId") organizationId: string,
+    @Param("draftDealId") draftDealId: string,
+    @Param("dealVersionId") dealVersionId: string,
+    @Param("dealVersionMilestoneId") dealVersionMilestoneId: string,
+    @Body() body: unknown
+  ): Promise<CreateCounterpartyDealMilestoneSubmissionResponse> {
+    return this.milestonesService.createCounterpartyMilestoneSubmission(
+      {
+        dealVersionId,
+        dealVersionMilestoneId,
+        draftDealId,
+        organizationId
+      },
+      body
     );
   }
 

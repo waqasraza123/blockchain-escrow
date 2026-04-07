@@ -395,6 +395,8 @@ function mapDealMilestoneSubmissionRecord(record: {
   draftDealId: string;
   id: string;
   organizationId: string;
+  scheme: PrismaTypedSignatureScheme | null;
+  signature: string | null;
   statementMarkdown: string;
   submissionNumber: number;
   submittedAt: Date;
@@ -402,6 +404,7 @@ function mapDealMilestoneSubmissionRecord(record: {
   submittedByPartyRole: PrismaDealPartyRole;
   submittedByPartySubjectType: PrismaDealPartySubjectType;
   submittedByUserId: string | null;
+  typedData: Prisma.JsonValue | null;
 }): DealMilestoneSubmissionRecord {
   return {
     dealVersionId: record.dealVersionId,
@@ -409,13 +412,16 @@ function mapDealMilestoneSubmissionRecord(record: {
     draftDealId: record.draftDealId,
     id: record.id,
     organizationId: record.organizationId,
+    scheme: record.scheme,
+    signature: record.signature,
     statementMarkdown: record.statementMarkdown,
     submissionNumber: record.submissionNumber,
     submittedAt: toRequiredIsoTimestamp(record.submittedAt),
     submittedByCounterpartyId: record.submittedByCounterpartyId,
     submittedByPartyRole: record.submittedByPartyRole,
     submittedByPartySubjectType: record.submittedByPartySubjectType,
-    submittedByUserId: record.submittedByUserId
+    submittedByUserId: record.submittedByUserId,
+    typedData: record.typedData as DealMilestoneSubmissionRecord["typedData"]
   };
 }
 
@@ -1333,13 +1339,19 @@ export class PrismaDealMilestoneSubmissionRepository
         draftDealId: record.draftDealId,
         id: record.id,
         organizationId: record.organizationId,
+        scheme: record.scheme,
+        signature: record.signature,
         statementMarkdown: record.statementMarkdown,
         submissionNumber: record.submissionNumber,
         submittedAt: toDate(record.submittedAt),
         submittedByCounterpartyId: record.submittedByCounterpartyId,
         submittedByPartyRole: record.submittedByPartyRole,
         submittedByPartySubjectType: record.submittedByPartySubjectType,
-        submittedByUserId: record.submittedByUserId
+        submittedByUserId: record.submittedByUserId,
+        typedData:
+          record.typedData === null
+            ? Prisma.JsonNull
+            : (record.typedData as Prisma.InputJsonValue)
       }
     });
 

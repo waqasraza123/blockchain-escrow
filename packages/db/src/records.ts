@@ -212,6 +212,8 @@ export interface DealMilestoneSubmissionRecord {
   draftDealId: EntityId;
   id: EntityId;
   organizationId: EntityId;
+  scheme: TypedSignatureScheme | null;
+  signature: string | null;
   statementMarkdown: string;
   submissionNumber: number;
   submittedAt: IsoTimestamp;
@@ -219,6 +221,7 @@ export interface DealMilestoneSubmissionRecord {
   submittedByPartyRole: DealPartyRole;
   submittedByPartySubjectType: DealPartySubjectType;
   submittedByUserId: EntityId | null;
+  typedData: JsonObject | null;
 }
 
 export interface DealMilestoneSubmissionFileRecord {

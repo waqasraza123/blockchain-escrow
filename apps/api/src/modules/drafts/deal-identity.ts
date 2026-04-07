@@ -24,6 +24,22 @@ export const counterpartyAcceptanceTypes = {
   ]
 } as const;
 
+export const counterpartyMilestoneSubmissionPrimaryType =
+  "CounterpartyDealMilestoneSubmission";
+export const counterpartyMilestoneSubmissionTypes = {
+  CounterpartyDealMilestoneSubmission: [
+    { name: "organizationId", type: "string" },
+    { name: "draftDealId", type: "string" },
+    { name: "dealVersionId", type: "string" },
+    { name: "dealVersionMilestoneId", type: "string" },
+    { name: "dealId", type: "bytes32" },
+    { name: "dealVersionHash", type: "bytes32" },
+    { name: "statementHash", type: "bytes32" },
+    { name: "submissionNumber", type: "uint256" },
+    { name: "intent", type: "string" }
+  ]
+} as const;
+
 function sortObjectKeys(value: unknown): unknown {
   if (Array.isArray(value)) {
     return value.map(sortObjectKeys);
@@ -125,5 +141,36 @@ export function buildCounterpartyAcceptanceTypedData(
     },
     primaryType: counterpartyAcceptancePrimaryType,
     types: counterpartyAcceptanceTypes as unknown as JsonObject
+  };
+}
+
+export function buildCounterpartyMilestoneSubmissionTypedData(
+  draft: DraftDealRecord,
+  version: DealVersionRecord,
+  dealVersionMilestoneId: string,
+  dealId: `0x${string}`,
+  dealVersionHash: `0x${string}`,
+  submissionNumber: number,
+  statementMarkdown: string
+): JsonObject {
+  return {
+    domain: {
+      chainId: normalizeApiChainId(),
+      name: "Blockchain Escrow",
+      version: "1"
+    },
+    message: {
+      dealId,
+      dealVersionHash,
+      dealVersionId: version.id,
+      dealVersionMilestoneId,
+      draftDealId: draft.id,
+      intent: "COUNTERPARTY_SUBMIT_DEAL_MILESTONE",
+      organizationId: draft.organizationId,
+      statementHash: keccak256(stringToHex(statementMarkdown)),
+      submissionNumber: submissionNumber.toString()
+    },
+    primaryType: counterpartyMilestoneSubmissionPrimaryType,
+    types: counterpartyMilestoneSubmissionTypes as unknown as JsonObject
   };
 }
