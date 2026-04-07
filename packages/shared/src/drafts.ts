@@ -172,6 +172,73 @@ export interface DealVersionMilestoneSnapshot {
   title: string;
 }
 
+export const milestoneWorkflowStateSchema = z.enum([
+  "PENDING",
+  "SUBMITTED",
+  "APPROVED",
+  "REJECTED",
+  "DISPUTED",
+  "RELEASED",
+  "REFUNDED"
+]);
+export type MilestoneWorkflowState = z.infer<typeof milestoneWorkflowStateSchema>;
+
+export const milestoneSubmissionParamsSchema = z.object({
+  dealVersionId: z.string().trim().min(1),
+  dealVersionMilestoneId: z.string().trim().min(1),
+  draftDealId: z.string().trim().min(1),
+  organizationId: z.string().trim().min(1)
+});
+export type MilestoneSubmissionParams = z.infer<
+  typeof milestoneSubmissionParamsSchema
+>;
+
+export const dealVersionMilestoneWorkflowParamsSchema = z.object({
+  dealVersionId: z.string().trim().min(1),
+  draftDealId: z.string().trim().min(1),
+  organizationId: z.string().trim().min(1)
+});
+export type DealVersionMilestoneWorkflowParams = z.infer<
+  typeof dealVersionMilestoneWorkflowParamsSchema
+>;
+
+export const createMilestoneSubmissionSchema = z.object({
+  attachmentFileIds: z.array(z.string().trim().min(1)).max(50).optional(),
+  statementMarkdown: z.string().trim().min(1).max(10000)
+});
+export type CreateMilestoneSubmissionInput = z.infer<
+  typeof createMilestoneSubmissionSchema
+>;
+
+export interface DealMilestoneSubmissionSummary {
+  attachmentFiles: FileSummary[];
+  dealVersionId: EntityId;
+  dealVersionMilestoneId: EntityId;
+  draftDealId: EntityId;
+  id: EntityId;
+  organizationId: EntityId;
+  statementMarkdown: string;
+  submissionNumber: number;
+  submittedAt: IsoTimestamp;
+  submittedByUserId: EntityId;
+}
+
+export interface DealVersionMilestoneWorkflow {
+  latestSubmissionAt: IsoTimestamp | null;
+  milestone: DealVersionMilestoneSnapshot;
+  state: MilestoneWorkflowState;
+  submissions: DealMilestoneSubmissionSummary[];
+}
+
+export interface ListDealVersionMilestoneWorkflowsResponse {
+  milestones: DealVersionMilestoneWorkflow[];
+}
+
+export interface CreateDealMilestoneSubmissionResponse {
+  milestone: DealVersionMilestoneWorkflow;
+  submission: DealMilestoneSubmissionSummary;
+}
+
 export interface DealVersionDetail extends DealVersionSummary {
   bodyMarkdown: string;
   files: FileSummary[];

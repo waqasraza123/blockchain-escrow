@@ -31,6 +31,7 @@ enum AuditAction {
   AUTH_NONCE_ISSUED
   AUTH_SESSION_VERIFIED
   COUNTERPARTY_CREATED
+  DEAL_MILESTONE_SUBMISSION_CREATED
   DRAFT_DEAL_COUNTERPARTY_WALLET_UPDATED
   DEAL_VERSION_ACCEPTANCE_CREATED
   DEAL_VERSION_COUNTERPARTY_ACCEPTANCE_CREATED
@@ -59,6 +60,7 @@ enum FundingTransactionReconciledStatus {
 
 enum AuditEntityType {
   COUNTERPARTY
+  DEAL_MILESTONE_SUBMISSION
   DEAL_VERSION_ACCEPTANCE
   DEAL_VERSION_COUNTERPARTY_ACCEPTANCE
   DEAL_VERSION
@@ -157,6 +159,7 @@ model User {
   draftDealsCreated          DraftDeal[]            @relation("DraftDealCreatedByUser")
   dealVersionAcceptancesMade DealVersionAcceptance[] @relation("DealVersionAcceptanceAcceptedByUser")
   dealVersionsCreated        DealVersion[]          @relation("DealVersionCreatedByUser")
+  dealMilestoneSubmissionsMade DealMilestoneSubmission[] @relation("DealMilestoneSubmissionSubmittedByUser")
   filesCreated               StoredFile[]           @relation("StoredFileCreatedByUser")
   fundingTransactionsSubmitted FundingTransaction[] @relation("FundingTransactionSubmittedByUser")
   templatesCreated           Template[]             @relation("TemplateCreatedByUser")
@@ -226,6 +229,7 @@ model Organization {
   updatedAt              DateTime                @db.Timestamptz(3)
   createdByUser          User                    @relation(fields: [createdByUserId], references: [id], onDelete: Restrict)
   counterparties         Counterparty[]
+  dealMilestoneSubmissions DealMilestoneSubmission[]
   dealVersionAcceptances DealVersionAcceptance[]
   dealVersionParties     DealVersionParty[]      @relation("DealVersionPartyOrganization")
   dealVersions           DealVersion[]
@@ -277,6 +281,7 @@ model StoredFile {
   category         FileCategory
   createdAt        DateTime     @db.Timestamptz(3)
   updatedAt        DateTime     @db.Timestamptz(3)
+  dealMilestoneSubmissionFiles DealMilestoneSubmissionFile[]
   dealVersionFiles DealVersionFile[]
   organization     Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   createdByUser    User         @relation("StoredFileCreatedByUser", fields: [createdByUserId], references: [id], onDelete: Restrict)
@@ -327,6 +332,7 @@ model DraftDeal {
   organization       Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   createdByUser      User               @relation("DraftDealCreatedByUser", fields: [createdByUserId], references: [id], onDelete: Restrict)
   template           Template?          @relation("DraftDealTemplate", fields: [templateId], references: [id], onDelete: SetNull)
+  milestoneSubmissions DealMilestoneSubmission[]
   fundingTransactions FundingTransaction[]
   parties            DraftDealParty[]
   versions           DealVersion[]
@@ -378,6 +384,7 @@ model DealVersion {
   acceptances        DealVersionAcceptance[]
   counterpartyAcceptances CounterpartyDealVersionAcceptance[]
   fundingTransactions FundingTransaction[]
+  milestoneSubmissions DealMilestoneSubmission[]
   parties            DealVersionParty[]
   milestones         DealVersionMilestone[]
   files              DealVersionFile[]
@@ -423,10 +430,52 @@ model DealVersionMilestone {
   dueAt         DateTime?   @db.Timestamptz(3)
   createdAt     DateTime    @db.Timestamptz(3)
   dealVersion   DealVersion @relation(fields: [dealVersionId], references: [id], onDelete: Cascade)
+  submissions   DealMilestoneSubmission[]
 
   @@unique([dealVersionId, position], map: "deal_version_milestones_deal_version_id_position_key")
   @@index([dealVersionId], map: "deal_version_milestones_deal_version_id_idx")
   @@map("deal_version_milestones")
+}
+
+model DealMilestoneSubmission {
+  id                     String               @id @db.Text
+  organizationId         String               @db.Text
+  draftDealId            String               @db.Text
+  dealVersionId          String               @db.Text
+  dealVersionMilestoneId String               @db.Text
+  submittedByUserId      String               @db.Text
+  submissionNumber       Int
+  statementMarkdown      String               @db.Text
+  submittedAt            DateTime             @db.Timestamptz(3)
+  organization           Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  draftDeal              DraftDeal            @relation(fields: [draftDealId], references: [id], onDelete: Cascade)
+  dealVersion            DealVersion          @relation(fields: [dealVersionId], references: [id], onDelete: Cascade)
+  dealVersionMilestone   DealVersionMilestone @relation(fields: [dealVersionMilestoneId], references: [id], onDelete: Cascade)
+  submittedByUser        User                 @relation("DealMilestoneSubmissionSubmittedByUser", fields: [submittedByUserId], references: [id], onDelete: Restrict)
+  files                  DealMilestoneSubmissionFile[]
+
+  @@unique([dealVersionMilestoneId, submissionNumber], map: "deal_milestone_submissions_milestone_id_submission_number_key")
+  @@index([organizationId], map: "deal_milestone_submissions_organization_id_idx")
+  @@index([draftDealId], map: "deal_milestone_submissions_draft_deal_id_idx")
+  @@index([dealVersionId], map: "deal_milestone_submissions_deal_version_id_idx")
+  @@index([dealVersionMilestoneId], map: "deal_milestone_submissions_milestone_id_idx")
+  @@index([submittedByUserId], map: "deal_milestone_submissions_submitted_by_user_id_idx")
+  @@index([dealVersionMilestoneId, submittedAt], map: "deal_milestone_submissions_milestone_id_submitted_at_idx")
+  @@map("deal_milestone_submissions")
+}
+
+model DealMilestoneSubmissionFile {
+  id                        String                  @id @db.Text
+  dealMilestoneSubmissionId String                  @db.Text
+  fileId                    String                  @db.Text
+  createdAt                 DateTime                @db.Timestamptz(3)
+  dealMilestoneSubmission   DealMilestoneSubmission @relation(fields: [dealMilestoneSubmissionId], references: [id], onDelete: Cascade)
+  file                      StoredFile              @relation(fields: [fileId], references: [id], onDelete: Cascade)
+
+  @@unique([dealMilestoneSubmissionId, fileId], map: "deal_milestone_submission_files_submission_id_file_id_key")
+  @@index([dealMilestoneSubmissionId], map: "deal_milestone_submission_files_submission_id_idx")
+  @@index([fileId], map: "deal_milestone_submission_files_file_id_idx")
+  @@map("deal_milestone_submission_files")
 }
 
 model DealVersionFile {

@@ -205,6 +205,25 @@ export interface DealVersionMilestoneRecord {
   title: string;
 }
 
+export interface DealMilestoneSubmissionRecord {
+  dealVersionId: EntityId;
+  dealVersionMilestoneId: EntityId;
+  draftDealId: EntityId;
+  id: EntityId;
+  organizationId: EntityId;
+  statementMarkdown: string;
+  submissionNumber: number;
+  submittedAt: IsoTimestamp;
+  submittedByUserId: EntityId;
+}
+
+export interface DealMilestoneSubmissionFileRecord {
+  createdAt: IsoTimestamp;
+  dealMilestoneSubmissionId: EntityId;
+  fileId: EntityId;
+  id: EntityId;
+}
+
 export interface DealVersionFileRecord {
   createdAt: IsoTimestamp;
   dealVersionId: EntityId;

@@ -2,6 +2,8 @@ import type {
   AuditLogRecord,
   CounterpartyRecord,
   CounterpartyDealVersionAcceptanceRecord,
+  DealMilestoneSubmissionFileRecord,
+  DealMilestoneSubmissionRecord,
   DealVersionAcceptanceRecord,
   DealVersionFileRecord,
   DealVersionMilestoneRecord,
@@ -30,6 +32,8 @@ export class InMemoryRelease1Repositories implements Release1Repositories {
   readonly auditLogRecords: AuditLogRecord[] = [];
   readonly counterpartyRecords: CounterpartyRecord[] = [];
   readonly counterpartyDealVersionAcceptanceRecords: CounterpartyDealVersionAcceptanceRecord[] = [];
+  readonly dealMilestoneSubmissionFileRecords: DealMilestoneSubmissionFileRecord[] = [];
+  readonly dealMilestoneSubmissionRecords: DealMilestoneSubmissionRecord[] = [];
   readonly dealVersionAcceptanceRecords: DealVersionAcceptanceRecord[] = [];
   readonly dealVersionFileRecords: DealVersionFileRecord[] = [];
   readonly dealVersionMilestoneRecords: DealVersionMilestoneRecord[] = [];
@@ -251,12 +255,64 @@ export class InMemoryRelease1Repositories implements Release1Repositories {
       this.dealVersionMilestoneRecords.push(record);
       return record;
     },
+    findById: async (
+      id: string
+    ): Promise<DealVersionMilestoneRecord | null> =>
+      this.dealVersionMilestoneRecords.find((record) => record.id === id) ?? null,
     listByDealVersionId: async (
       dealVersionId: string
     ): Promise<DealVersionMilestoneRecord[]> =>
       this.dealVersionMilestoneRecords
         .filter((record) => record.dealVersionId === dealVersionId)
         .sort((left, right) => left.position - right.position)
+  };
+
+  readonly dealMilestoneSubmissions = {
+    create: async (
+      record: DealMilestoneSubmissionRecord
+    ): Promise<DealMilestoneSubmissionRecord> => {
+      this.dealMilestoneSubmissionRecords.push(record);
+      return record;
+    },
+    findById: async (
+      id: string
+    ): Promise<DealMilestoneSubmissionRecord | null> =>
+      this.dealMilestoneSubmissionRecords.find((record) => record.id === id) ?? null,
+    listByDealVersionId: async (
+      dealVersionId: string
+    ): Promise<DealMilestoneSubmissionRecord[]> =>
+      this.dealMilestoneSubmissionRecords
+        .filter((record) => record.dealVersionId === dealVersionId)
+        .sort((left, right) =>
+          left.submissionNumber - right.submissionNumber ||
+          compareIsoTimestamps(left.submittedAt, right.submittedAt)
+        ),
+    listByDealVersionMilestoneId: async (
+      dealVersionMilestoneId: string
+    ): Promise<DealMilestoneSubmissionRecord[]> =>
+      this.dealMilestoneSubmissionRecords
+        .filter((record) => record.dealVersionMilestoneId === dealVersionMilestoneId)
+        .sort((left, right) =>
+          left.submissionNumber - right.submissionNumber ||
+          compareIsoTimestamps(left.submittedAt, right.submittedAt)
+        )
+  };
+
+  readonly dealMilestoneSubmissionFiles = {
+    add: async (
+      record: DealMilestoneSubmissionFileRecord
+    ): Promise<DealMilestoneSubmissionFileRecord> => {
+      this.dealMilestoneSubmissionFileRecords.push(record);
+      return record;
+    },
+    listByDealMilestoneSubmissionId: async (
+      dealMilestoneSubmissionId: string
+    ): Promise<DealMilestoneSubmissionFileRecord[]> =>
+      this.dealMilestoneSubmissionFileRecords
+        .filter(
+          (record) => record.dealMilestoneSubmissionId === dealMilestoneSubmissionId
+        )
+        .sort((left, right) => compareIsoTimestamps(left.createdAt, right.createdAt))
   };
 
   readonly dealVersionFiles = {
