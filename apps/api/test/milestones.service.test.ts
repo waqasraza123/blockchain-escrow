@@ -12,6 +12,7 @@ import {
 } from "../src/modules/drafts/deal-identity";
 import { DraftsService } from "../src/modules/drafts/drafts.service";
 import { MilestonesService } from "../src/modules/milestones/milestones.service";
+import type { MilestoneReviewConfiguration } from "../src/modules/milestones/milestones.tokens";
 import type { RequestMetadata } from "../src/modules/auth/auth.http";
 import type { FundingReconciliationConfiguration } from "../src/modules/funding/funding.tokens";
 import {
@@ -32,6 +33,9 @@ const fundingReconciliationConfiguration: FundingReconciliationConfiguration = {
   indexerFreshnessTtlSeconds: 300,
   pendingStaleAfterSeconds: 3600,
   release4CursorKeyOverride: "release4:base-sepolia"
+};
+const milestoneReviewConfiguration: MilestoneReviewConfiguration = {
+  reviewDeadlineSeconds: 7 * 24 * 60 * 60
 };
 
 function requestMetadata(cookieHeader: string): RequestMetadata {
@@ -104,7 +108,8 @@ function createServices() {
     milestonesService: new MilestonesService(
       repositories,
       release4Repositories,
-      authenticatedSessionService
+      authenticatedSessionService,
+      milestoneReviewConfiguration
     ),
     release1Repositories: repositories,
     release4Repositories,
@@ -302,11 +307,13 @@ async function seedCounterpartySellerSubmission(
   options?: {
     attachmentFileIds?: string[];
     dealVersionMilestoneId?: string;
+    reviewDeadlineAt?: string;
     statementMarkdown?: string;
+    submittedAt?: string;
     submissionNumber?: number;
   }
 ) {
-  const now = new Date().toISOString();
+  const submittedAt = options?.submittedAt ?? new Date().toISOString();
   const sellerParty = (
     await services.release1Repositories.dealVersionParties.listByDealVersionId(
       seeded.version.version.id
@@ -316,20 +323,28 @@ async function seedCounterpartySellerSubmission(
   if (!sellerParty || sellerParty.subjectType !== "COUNTERPARTY") {
     throw new Error("counterparty seller party not found");
   }
+  const dealVersionMilestoneId =
+    options?.dealVersionMilestoneId ?? seeded.version.version.milestones[0]!.id;
+  const submissionNumber = options?.submissionNumber ?? 1;
 
   const submission = await services.release1Repositories.dealMilestoneSubmissions.create({
     dealVersionId: seeded.version.version.id,
-    dealVersionMilestoneId:
-      options?.dealVersionMilestoneId ?? seeded.version.version.milestones[0]!.id,
+    dealVersionMilestoneId,
     draftDealId: seeded.draft.draft.id,
-    id: `submission-${options?.submissionNumber ?? 1}`,
+    id: `${dealVersionMilestoneId}-submission-${submissionNumber}`,
     organizationId: "org-1",
+    reviewDeadlineAt:
+      options?.reviewDeadlineAt ??
+      new Date(
+        new Date(submittedAt).getTime() +
+          milestoneReviewConfiguration.reviewDeadlineSeconds * 1000
+      ).toISOString(),
     scheme: null,
     signature: null,
     statementMarkdown:
       options?.statementMarkdown ?? "Counterparty seller delivery evidence.",
-    submissionNumber: options?.submissionNumber ?? 1,
-    submittedAt: now,
+    submissionNumber,
+    submittedAt,
     submittedByCounterpartyId: sellerParty.counterpartyId,
     submittedByPartyRole: "SELLER",
     submittedByPartySubjectType: "COUNTERPARTY",
@@ -339,7 +354,7 @@ async function seedCounterpartySellerSubmission(
 
   for (const fileId of options?.attachmentFileIds ?? []) {
     await services.release1Repositories.dealMilestoneSubmissionFiles.add({
-      createdAt: now,
+      createdAt: submittedAt,
       dealMilestoneSubmissionId: submission.id,
       fileId,
       id: `${submission.id}-${fileId}`
@@ -357,10 +372,11 @@ async function seedMilestoneReview(
   options?: {
     decision?: "APPROVED" | "REJECTED";
     dealVersionMilestoneId?: string;
+    reviewedAt?: string;
     statementMarkdown?: string | null;
   }
 ) {
-  const now = new Date().toISOString();
+  const reviewedAt = options?.reviewedAt ?? new Date().toISOString();
 
   return services.release1Repositories.dealMilestoneReviews.create({
     decision: options?.decision ?? "APPROVED",
@@ -371,7 +387,7 @@ async function seedMilestoneReview(
     draftDealId: seeded.draft.draft.id,
     id: `review-${submissionId}`,
     organizationId: "org-1",
-    reviewedAt: now,
+    reviewedAt,
     reviewedByUserId: actor.userId,
     statementMarkdown: options?.statementMarkdown ?? null
   });
@@ -501,11 +517,18 @@ test("milestones service lists workflows and creates immutable seller submission
   assert.equal(firstSubmission.submission.submissionNumber, 1);
   assert.equal(firstSubmission.submission.attachmentFiles[0]?.id, "file-1");
   assert.equal(firstSubmission.submission.review, null);
+  assert.equal(firstSubmission.submission.reviewDeadline.status, "OPEN");
+  assert.equal(
+    new Date(firstSubmission.submission.reviewDeadline.deadlineAt).getTime() -
+      new Date(firstSubmission.submission.submittedAt).getTime(),
+    milestoneReviewConfiguration.reviewDeadlineSeconds * 1000
+  );
   assert.equal(firstSubmission.submission.submittedByPartyRole, "SELLER");
   assert.equal(firstSubmission.submission.submittedByPartySubjectType, "ORGANIZATION");
   assert.equal(secondSubmission.submission.submissionNumber, 2);
   assert.equal(secondSubmission.submission.attachmentFiles[0]?.id, "file-2");
   assert.equal(secondSubmission.milestone.state, "SUBMITTED");
+  assert.equal(secondSubmission.milestone.latestReviewDeadline?.status, "OPEN");
   assert.equal(secondSubmission.milestone.submissions.length, 2);
   assert.equal(secondSubmission.milestone.latestReviewAt, null);
 
@@ -519,6 +542,7 @@ test("milestones service lists workflows and creates immutable seller submission
   );
 
   assert.equal(listedAfter.milestones[0]?.state, "SUBMITTED");
+  assert.equal(listedAfter.milestones[0]?.latestReviewDeadline?.status, "OPEN");
   assert.equal(listedAfter.milestones[0]?.latestReviewAt, null);
   assert.equal(listedAfter.milestones[0]?.submissions[0]?.submissionNumber, 1);
   assert.equal(listedAfter.milestones[0]?.submissions[1]?.submissionNumber, 2);
@@ -868,6 +892,7 @@ test("milestones service lets buyer-side organizations approve latest counterpar
   assert.equal(result.review.statementMarkdown, null);
   assert.equal(result.review.reviewedByUserId, actor.userId);
   assert.equal(result.milestone.state, "APPROVED");
+  assert.equal(result.milestone.latestReviewDeadline?.status, "REVIEWED_ON_TIME");
   assert.equal(result.milestone.latestReviewAt, result.review.reviewedAt);
   assert.equal(result.milestone.submissions.length, 1);
   assert.equal(result.milestone.submissions[0]?.review?.decision, "APPROVED");
@@ -924,7 +949,65 @@ test("milestones service lets buyer-side organizations reject latest counterpart
     "Missing acceptance criteria evidence."
   );
   assert.equal(result.milestone.state, "REJECTED");
+  assert.equal(result.milestone.latestReviewDeadline?.status, "REVIEWED_ON_TIME");
   assert.equal(result.milestone.submissions[0]?.review?.decision, "REJECTED");
+});
+
+test("milestones service derives expired and late-reviewed deadline summaries", async () => {
+  const services = createServices();
+  const actor = await seedAuthenticatedActor(
+    services.release1Repositories,
+    services.sessionTokenService
+  );
+  const seeded = await seedMilestoneScenario(services, actor, "BUYER");
+
+  const overdueSubmission = await seedCounterpartySellerSubmission(services, seeded, {
+    dealVersionMilestoneId: seeded.version.version.milestones[0]!.id,
+    reviewDeadlineAt: "2026-04-01T00:00:00.000Z",
+    statementMarkdown: "Waiting on buyer review.",
+    submittedAt: "2026-03-25T00:00:00.000Z",
+    submissionNumber: 1
+  });
+  const lateReviewedSubmission = await seedCounterpartySellerSubmission(
+    services,
+    seeded,
+    {
+      dealVersionMilestoneId: seeded.version.version.milestones[1]!.id,
+      reviewDeadlineAt: "2026-04-01T00:00:00.000Z",
+      statementMarkdown: "Delivered after deadline path.",
+      submittedAt: "2026-03-24T00:00:00.000Z",
+      submissionNumber: 1
+    }
+  );
+
+  await seedMilestoneReview(services, seeded, actor, lateReviewedSubmission.id, {
+    dealVersionMilestoneId: seeded.version.version.milestones[1]!.id,
+    reviewedAt: "2026-04-03T00:00:00.000Z"
+  });
+
+  const result = await services.milestonesService.listMilestoneWorkflows(
+    {
+      dealVersionId: seeded.version.version.id,
+      draftDealId: seeded.draft.draft.id,
+      organizationId: "org-1"
+    },
+    requestMetadata(actor.cookieHeader)
+  );
+
+  assert.equal(result.milestones[0]?.submissions[0]?.id, overdueSubmission.id);
+  assert.equal(result.milestones[0]?.latestReviewDeadline?.status, "EXPIRED");
+  assert.equal(
+    result.milestones[0]?.latestReviewDeadline?.expiredAt,
+    "2026-04-01T00:00:00.000Z"
+  );
+  assert.equal(
+    result.milestones[1]?.latestReviewDeadline?.status,
+    "REVIEWED_AFTER_DEADLINE"
+  );
+  assert.equal(
+    result.milestones[1]?.latestReviewDeadline?.expiredAt,
+    "2026-04-01T00:00:00.000Z"
+  );
 });
 
 test("milestones service requires buyer role for milestone reviews", async () => {

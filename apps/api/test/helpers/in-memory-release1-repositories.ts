@@ -2,6 +2,7 @@ import type {
   AuditLogRecord,
   CounterpartyRecord,
   CounterpartyDealVersionAcceptanceRecord,
+  DealMilestoneReviewDeadlineExpiryRecord,
   DealMilestoneReviewRecord,
   DealMilestoneSettlementRequestRecord,
   DealMilestoneSubmissionFileRecord,
@@ -34,6 +35,7 @@ export class InMemoryRelease1Repositories implements Release1Repositories {
   readonly auditLogRecords: AuditLogRecord[] = [];
   readonly counterpartyRecords: CounterpartyRecord[] = [];
   readonly counterpartyDealVersionAcceptanceRecords: CounterpartyDealVersionAcceptanceRecord[] = [];
+  readonly dealMilestoneReviewDeadlineExpiryRecords: DealMilestoneReviewDeadlineExpiryRecord[] = [];
   readonly dealMilestoneReviewRecords: DealMilestoneReviewRecord[] = [];
   readonly dealMilestoneSettlementRequestRecords: DealMilestoneSettlementRequestRecord[] = [];
   readonly dealMilestoneSubmissionFileRecords: DealMilestoneSubmissionFileRecord[] = [];
@@ -323,6 +325,27 @@ export class InMemoryRelease1Repositories implements Release1Repositories {
       this.dealMilestoneReviewRecords
         .filter((record) => record.dealVersionId === dealVersionId)
         .sort((left, right) => compareIsoTimestamps(left.reviewedAt, right.reviewedAt))
+  };
+
+  readonly dealMilestoneReviewDeadlineExpiries = {
+    create: async (
+      record: DealMilestoneReviewDeadlineExpiryRecord
+    ): Promise<DealMilestoneReviewDeadlineExpiryRecord> => {
+      this.dealMilestoneReviewDeadlineExpiryRecords.push(record);
+      return record;
+    },
+    findByDealMilestoneSubmissionId: async (
+      dealMilestoneSubmissionId: string
+    ): Promise<DealMilestoneReviewDeadlineExpiryRecord | null> =>
+      this.dealMilestoneReviewDeadlineExpiryRecords.find(
+        (record) => record.dealMilestoneSubmissionId === dealMilestoneSubmissionId
+      ) ?? null,
+    listByDealVersionId: async (
+      dealVersionId: string
+    ): Promise<DealMilestoneReviewDeadlineExpiryRecord[]> =>
+      this.dealMilestoneReviewDeadlineExpiryRecords
+        .filter((record) => record.dealVersionId === dealVersionId)
+        .sort((left, right) => compareIsoTimestamps(left.expiredAt, right.expiredAt))
   };
 
   readonly dealMilestoneSettlementRequests = {

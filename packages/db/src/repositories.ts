@@ -13,6 +13,7 @@ import type {
   ContractOwnershipRecord,
   CounterpartyRecord,
   CounterpartyDealVersionAcceptanceRecord,
+  DealMilestoneReviewDeadlineExpiryRecord,
   DealMilestoneReviewRecord,
   DealMilestoneSettlementRequestRecord,
   DealMilestoneSubmissionFileRecord,
@@ -208,6 +209,18 @@ export interface DealMilestoneSubmissionRepository {
   listByDealVersionMilestoneId(
     dealVersionMilestoneId: EntityId
   ): Promise<DealMilestoneSubmissionRecord[]>;
+}
+
+export interface DealMilestoneReviewDeadlineExpiryRepository {
+  create(
+    record: DealMilestoneReviewDeadlineExpiryRecord
+  ): Promise<DealMilestoneReviewDeadlineExpiryRecord>;
+  findByDealMilestoneSubmissionId(
+    dealMilestoneSubmissionId: EntityId
+  ): Promise<DealMilestoneReviewDeadlineExpiryRecord | null>;
+  listByDealVersionId(
+    dealVersionId: EntityId
+  ): Promise<DealMilestoneReviewDeadlineExpiryRecord[]>;
 }
 
 export interface DealMilestoneReviewRepository {
@@ -413,6 +426,7 @@ export interface Release1Repositories {
   auditLogs: AuditLogRepository;
   counterparties: CounterpartyRepository;
   counterpartyDealVersionAcceptances: CounterpartyDealVersionAcceptanceRepository;
+  dealMilestoneReviewDeadlineExpiries: DealMilestoneReviewDeadlineExpiryRepository;
   dealMilestoneReviews: DealMilestoneReviewRepository;
   dealMilestoneSettlementRequests: DealMilestoneSettlementRequestRepository;
   dealMilestoneSubmissionFiles: DealMilestoneSubmissionFileRepository;

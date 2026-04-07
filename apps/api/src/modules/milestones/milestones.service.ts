@@ -5,6 +5,7 @@ import {
   getDeploymentManifestByChainId
 } from "@blockchain-escrow/contracts-sdk";
 import type {
+  DealMilestoneReviewDeadlineExpiryRecord,
   DealMilestoneReviewRecord,
   DealMilestoneSettlementRequestRecord,
   DealMilestoneSubmissionFileRecord,
@@ -43,6 +44,7 @@ import {
   type DealVersionMilestoneSnapshot,
   type DealVersionMilestoneWorkflow,
   type ListDealVersionMilestoneWorkflowsResponse,
+  type MilestoneReviewDeadlineSummary,
   type MilestoneWorkflowState,
   type PrepareCounterpartyDealMilestoneSubmissionResponse
 } from "@blockchain-escrow/shared";
@@ -74,6 +76,10 @@ import {
   counterpartyMilestoneSubmissionTypes,
   normalizeApiChainId
 } from "../drafts/deal-identity";
+import {
+  MILESTONE_REVIEW_CONFIGURATION,
+  type MilestoneReviewConfiguration
+} from "./milestones.tokens";
 
 interface MilestoneWorkflowAccessContext {
   actor: AuthenticatedSessionContext;
@@ -139,6 +145,18 @@ function resolveMilestoneWorkflowState(
   return latestSubmission.review.decision;
 }
 
+function addSecondsToIsoTimestamp(timestamp: string, seconds: number): string {
+  return new Date(new Date(timestamp).getTime() + seconds * 1000).toISOString();
+}
+
+function isIsoTimestampAtOrAfter(left: string, right: string): boolean {
+  return new Date(left).getTime() >= new Date(right).getTime();
+}
+
+function isIsoTimestampAfter(left: string, right: string): boolean {
+  return new Date(left).getTime() > new Date(right).getTime();
+}
+
 @Injectable()
 export class MilestonesService {
   constructor(
@@ -146,7 +164,9 @@ export class MilestonesService {
     private readonly repositories: Release1Repositories,
     @Inject(RELEASE4_REPOSITORIES)
     private readonly release4Repositories: Release4Repositories,
-    private readonly authenticatedSessionService: AuthenticatedSessionService
+    private readonly authenticatedSessionService: AuthenticatedSessionService,
+    @Inject(MILESTONE_REVIEW_CONFIGURATION)
+    private readonly milestoneReviewConfiguration: MilestoneReviewConfiguration
   ) {}
 
   async listMilestoneWorkflows(
@@ -218,6 +238,7 @@ export class MilestonesService {
       draftDealId: access.draft.id,
       id: randomUUID(),
       organizationId: access.organization.id,
+      reviewDeadlineAt: this.buildReviewDeadlineAt(now),
       scheme: null,
       signature: null,
       statementMarkdown: parsedBody.data.statementMarkdown,
@@ -375,6 +396,7 @@ export class MilestonesService {
       draftDealId: context.draft.id,
       id: randomUUID(),
       organizationId: context.draft.organizationId,
+      reviewDeadlineAt: this.buildReviewDeadlineAt(now),
       scheme: "EIP712",
       signature: parsedBody.data.signature,
       statementMarkdown: parsedBody.data.statementMarkdown,
@@ -642,20 +664,29 @@ export class MilestonesService {
   private async buildMilestoneWorkflows(
     dealVersionId: string
   ): Promise<DealVersionMilestoneWorkflow[]> {
-    const [milestones, submissions, reviews, settlementRequests] = await Promise.all([
+    const [milestones, submissions, reviews, settlementRequests, deadlineExpiries] =
+      await Promise.all([
       this.repositories.dealVersionMilestones.listByDealVersionId(dealVersionId),
       this.repositories.dealMilestoneSubmissions.listByDealVersionId(dealVersionId),
       this.repositories.dealMilestoneReviews.listByDealVersionId(dealVersionId),
       this.repositories.dealMilestoneSettlementRequests.listByDealVersionId(
         dealVersionId
+      ),
+      this.repositories.dealMilestoneReviewDeadlineExpiries.listByDealVersionId(
+        dealVersionId
       )
     ]);
     const submissionsByMilestoneId = new Map<string, DealMilestoneSubmissionRecord[]>();
     const reviewsBySubmissionId = new Map<string, DealMilestoneReviewRecord>();
+    const deadlineExpiriesBySubmissionId = new Map<
+      string,
+      DealMilestoneReviewDeadlineExpiryRecord
+    >();
     const settlementRequestsByReviewId = new Map<
       string,
       DealMilestoneSettlementRequestRecord
     >();
+    const evaluatedAt = new Date().toISOString();
 
     for (const submission of submissions) {
       const records =
@@ -666,6 +697,13 @@ export class MilestonesService {
 
     for (const review of reviews) {
       reviewsBySubmissionId.set(review.dealMilestoneSubmissionId, review);
+    }
+
+    for (const deadlineExpiry of deadlineExpiries) {
+      deadlineExpiriesBySubmissionId.set(
+        deadlineExpiry.dealMilestoneSubmissionId,
+        deadlineExpiry
+      );
     }
 
     for (const settlementRequest of settlementRequests) {
@@ -680,6 +718,8 @@ export class MilestonesService {
         this.buildMilestoneWorkflow(
           milestone,
           submissionsByMilestoneId.get(milestone.id) ?? [],
+          deadlineExpiriesBySubmissionId,
+          evaluatedAt,
           reviewsBySubmissionId,
           settlementRequestsByReviewId
         )
@@ -690,6 +730,11 @@ export class MilestonesService {
   private async buildMilestoneWorkflow(
     milestone: DealVersionMilestoneRecord,
     submissions: DealMilestoneSubmissionRecord[],
+    deadlineExpiriesBySubmissionId: ReadonlyMap<
+      string,
+      DealMilestoneReviewDeadlineExpiryRecord
+    >,
+    evaluatedAt: string,
     reviewsBySubmissionId: ReadonlyMap<string, DealMilestoneReviewRecord>,
     settlementRequestsByReviewId: ReadonlyMap<
       string,
@@ -700,6 +745,8 @@ export class MilestonesService {
       submissions.map((submission) =>
         this.toSubmissionSummary(
           submission,
+          deadlineExpiriesBySubmissionId.get(submission.id) ?? null,
+          evaluatedAt,
           reviewsBySubmissionId.get(submission.id) ?? null,
           settlementRequestsByReviewId
         )
@@ -709,6 +756,7 @@ export class MilestonesService {
       submissionSummaries[submissionSummaries.length - 1] ?? null;
 
     return {
+      latestReviewDeadline: latestSubmission?.reviewDeadline ?? null,
       latestReviewAt: latestSubmission?.review?.reviewedAt ?? null,
       latestSubmissionAt: latestSubmission?.submittedAt ?? null,
       milestone: toMilestoneSnapshot(milestone),
@@ -719,6 +767,8 @@ export class MilestonesService {
 
   private async toSubmissionSummary(
     submission: DealMilestoneSubmissionRecord,
+    deadlineExpiry: DealMilestoneReviewDeadlineExpiryRecord | null,
+    evaluatedAt: string,
     review: DealMilestoneReviewRecord | null,
     settlementRequestsByReviewId: ReadonlyMap<
       string,
@@ -758,6 +808,12 @@ export class MilestonesService {
             settlementRequestsByReviewId.get(review.id) ?? null
           )
         : null,
+      reviewDeadline: this.toReviewDeadlineSummary(
+        submission,
+        review,
+        deadlineExpiry,
+        evaluatedAt
+      ),
       statementMarkdown: submission.statementMarkdown,
       submissionNumber: submission.submissionNumber,
       submittedAt: submission.submittedAt,
@@ -804,6 +860,43 @@ export class MilestonesService {
       requestedAt: settlementRequest.requestedAt,
       requestedByUserId: settlementRequest.requestedByUserId,
       statementMarkdown: settlementRequest.statementMarkdown
+    };
+  }
+
+  private toReviewDeadlineSummary(
+    submission: DealMilestoneSubmissionRecord,
+    review: DealMilestoneReviewRecord | null,
+    deadlineExpiry: DealMilestoneReviewDeadlineExpiryRecord | null,
+    evaluatedAt: string
+  ): MilestoneReviewDeadlineSummary {
+    if (review) {
+      if (!isIsoTimestampAfter(review.reviewedAt, submission.reviewDeadlineAt)) {
+        return {
+          deadlineAt: submission.reviewDeadlineAt,
+          expiredAt: null,
+          status: "REVIEWED_ON_TIME"
+        };
+      }
+
+      return {
+        deadlineAt: submission.reviewDeadlineAt,
+        expiredAt: deadlineExpiry?.expiredAt ?? submission.reviewDeadlineAt,
+        status: "REVIEWED_AFTER_DEADLINE"
+      };
+    }
+
+    if (isIsoTimestampAtOrAfter(evaluatedAt, submission.reviewDeadlineAt)) {
+      return {
+        deadlineAt: submission.reviewDeadlineAt,
+        expiredAt: deadlineExpiry?.expiredAt ?? submission.reviewDeadlineAt,
+        status: "EXPIRED"
+      };
+    }
+
+    return {
+      deadlineAt: submission.reviewDeadlineAt,
+      expiredAt: null,
+      status: "OPEN"
     };
   }
 
@@ -1225,5 +1318,12 @@ export class MilestonesService {
     if (new Set(fileIds).size !== fileIds.length) {
       throw new BadRequestException("attachment file ids must be unique");
     }
+  }
+
+  private buildReviewDeadlineAt(submittedAt: string): string {
+    return addSecondsToIsoTimestamp(
+      submittedAt,
+      this.milestoneReviewConfiguration.reviewDeadlineSeconds
+    );
   }
 }

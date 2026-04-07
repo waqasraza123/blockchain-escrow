@@ -192,6 +192,16 @@ export type MilestoneSettlementRequestKind = z.infer<
   typeof milestoneSettlementRequestKindSchema
 >;
 
+export const milestoneReviewDeadlineStatusSchema = z.enum([
+  "OPEN",
+  "EXPIRED",
+  "REVIEWED_ON_TIME",
+  "REVIEWED_AFTER_DEADLINE"
+]);
+export type MilestoneReviewDeadlineStatus = z.infer<
+  typeof milestoneReviewDeadlineStatusSchema
+>;
+
 export const milestoneSubmissionParamsSchema = z.object({
   dealVersionId: z.string().trim().min(1),
   dealVersionMilestoneId: z.string().trim().min(1),
@@ -295,6 +305,12 @@ export interface DealMilestoneSettlementRequestSummary {
   statementMarkdown: string | null;
 }
 
+export interface MilestoneReviewDeadlineSummary {
+  deadlineAt: IsoTimestamp;
+  expiredAt: IsoTimestamp | null;
+  status: MilestoneReviewDeadlineStatus;
+}
+
 export interface CounterpartyDealMilestoneSubmissionChallenge {
   expectedWalletAddress: WalletAddress;
   typedData: JsonObject;
@@ -322,6 +338,7 @@ export interface DealMilestoneSubmissionSummary {
   id: EntityId;
   organizationId: EntityId;
   review: DealMilestoneReviewSummary | null;
+  reviewDeadline: MilestoneReviewDeadlineSummary;
   statementMarkdown: string;
   submissionNumber: number;
   submittedAt: IsoTimestamp;
@@ -332,6 +349,7 @@ export interface DealMilestoneSubmissionSummary {
 }
 
 export interface DealVersionMilestoneWorkflow {
+  latestReviewDeadline: MilestoneReviewDeadlineSummary | null;
   latestReviewAt: IsoTimestamp | null;
   latestSubmissionAt: IsoTimestamp | null;
   milestone: DealVersionMilestoneSnapshot;

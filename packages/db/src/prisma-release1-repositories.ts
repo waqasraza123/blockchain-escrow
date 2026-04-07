@@ -21,6 +21,7 @@ import type {
   AuditLogRecord,
   CounterpartyRecord,
   CounterpartyDealVersionAcceptanceRecord,
+  DealMilestoneReviewDeadlineExpiryRecord,
   DealMilestoneReviewRecord,
   DealMilestoneSettlementRequestRecord,
   DealMilestoneSubmissionFileRecord,
@@ -47,6 +48,7 @@ import type {
   AuditLogRepository,
   CounterpartyRepository,
   CounterpartyDealVersionAcceptanceRepository,
+  DealMilestoneReviewDeadlineExpiryRepository,
   DealMilestoneReviewRepository,
   DealMilestoneSettlementRequestRepository,
   DealMilestoneSubmissionFileRepository,
@@ -395,6 +397,7 @@ function mapDealMilestoneSubmissionRecord(record: {
   draftDealId: string;
   id: string;
   organizationId: string;
+  reviewDeadlineAt: Date;
   scheme: PrismaTypedSignatureScheme | null;
   signature: string | null;
   statementMarkdown: string;
@@ -412,6 +415,7 @@ function mapDealMilestoneSubmissionRecord(record: {
     draftDealId: record.draftDealId,
     id: record.id,
     organizationId: record.organizationId,
+    reviewDeadlineAt: toRequiredIsoTimestamp(record.reviewDeadlineAt),
     scheme: record.scheme,
     signature: record.signature,
     statementMarkdown: record.statementMarkdown,
@@ -422,6 +426,28 @@ function mapDealMilestoneSubmissionRecord(record: {
     submittedByPartySubjectType: record.submittedByPartySubjectType,
     submittedByUserId: record.submittedByUserId,
     typedData: record.typedData as DealMilestoneSubmissionRecord["typedData"]
+  };
+}
+
+function mapDealMilestoneReviewDeadlineExpiryRecord(record: {
+  dealMilestoneSubmissionId: string;
+  dealVersionId: string;
+  dealVersionMilestoneId: string;
+  deadlineAt: Date;
+  draftDealId: string;
+  expiredAt: Date;
+  id: string;
+  organizationId: string;
+}): DealMilestoneReviewDeadlineExpiryRecord {
+  return {
+    dealMilestoneSubmissionId: record.dealMilestoneSubmissionId,
+    dealVersionId: record.dealVersionId,
+    dealVersionMilestoneId: record.dealVersionMilestoneId,
+    deadlineAt: toRequiredIsoTimestamp(record.deadlineAt),
+    draftDealId: record.draftDealId,
+    expiredAt: toRequiredIsoTimestamp(record.expiredAt),
+    id: record.id,
+    organizationId: record.organizationId
   };
 }
 
@@ -1339,6 +1365,7 @@ export class PrismaDealMilestoneSubmissionRepository
         draftDealId: record.draftDealId,
         id: record.id,
         organizationId: record.organizationId,
+        reviewDeadlineAt: toDate(record.reviewDeadlineAt),
         scheme: record.scheme,
         signature: record.signature,
         statementMarkdown: record.statementMarkdown,
@@ -1386,6 +1413,52 @@ export class PrismaDealMilestoneSubmissionRepository
     });
 
     return records.map(mapDealMilestoneSubmissionRecord);
+  }
+}
+
+export class PrismaDealMilestoneReviewDeadlineExpiryRepository
+  implements DealMilestoneReviewDeadlineExpiryRepository
+{
+  constructor(private readonly prisma: PrismaClient) {}
+
+  async create(
+    record: DealMilestoneReviewDeadlineExpiryRecord
+  ): Promise<DealMilestoneReviewDeadlineExpiryRecord> {
+    const created = await this.prisma.dealMilestoneReviewDeadlineExpiry.create({
+      data: {
+        dealMilestoneSubmissionId: record.dealMilestoneSubmissionId,
+        dealVersionId: record.dealVersionId,
+        dealVersionMilestoneId: record.dealVersionMilestoneId,
+        deadlineAt: toDate(record.deadlineAt),
+        draftDealId: record.draftDealId,
+        expiredAt: toDate(record.expiredAt),
+        id: record.id,
+        organizationId: record.organizationId
+      }
+    });
+
+    return mapDealMilestoneReviewDeadlineExpiryRecord(created);
+  }
+
+  async findByDealMilestoneSubmissionId(
+    dealMilestoneSubmissionId: string
+  ): Promise<DealMilestoneReviewDeadlineExpiryRecord | null> {
+    const record = await this.prisma.dealMilestoneReviewDeadlineExpiry.findUnique({
+      where: { dealMilestoneSubmissionId }
+    });
+
+    return record ? mapDealMilestoneReviewDeadlineExpiryRecord(record) : null;
+  }
+
+  async listByDealVersionId(
+    dealVersionId: string
+  ): Promise<DealMilestoneReviewDeadlineExpiryRecord[]> {
+    const records = await this.prisma.dealMilestoneReviewDeadlineExpiry.findMany({
+      where: { dealVersionId },
+      orderBy: [{ expiredAt: "asc" }, { id: "asc" }]
+    });
+
+    return records.map(mapDealMilestoneReviewDeadlineExpiryRecord);
   }
 }
 
@@ -2083,6 +2156,7 @@ export class PrismaRelease1Repositories implements Release1Repositories {
   readonly auditLogs: AuditLogRepository;
   readonly counterparties: CounterpartyRepository;
   readonly counterpartyDealVersionAcceptances: CounterpartyDealVersionAcceptanceRepository;
+  readonly dealMilestoneReviewDeadlineExpiries: DealMilestoneReviewDeadlineExpiryRepository;
   readonly dealMilestoneReviews: DealMilestoneReviewRepository;
   readonly dealMilestoneSettlementRequests: DealMilestoneSettlementRequestRepository;
   readonly dealMilestoneSubmissionFiles: DealMilestoneSubmissionFileRepository;
@@ -2110,6 +2184,8 @@ export class PrismaRelease1Repositories implements Release1Repositories {
     this.counterparties = new PrismaCounterpartyRepository(prisma);
     this.counterpartyDealVersionAcceptances =
       new PrismaCounterpartyDealVersionAcceptanceRepository(prisma);
+    this.dealMilestoneReviewDeadlineExpiries =
+      new PrismaDealMilestoneReviewDeadlineExpiryRepository(prisma);
     this.dealMilestoneReviews = new PrismaDealMilestoneReviewRepository(prisma);
     this.dealMilestoneSettlementRequests =
       new PrismaDealMilestoneSettlementRequestRepository(prisma);

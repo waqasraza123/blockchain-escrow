@@ -33,6 +33,7 @@ enum AuditAction {
   COUNTERPARTY_CREATED
   DEAL_MILESTONE_RELEASE_REQUESTED
   DEAL_MILESTONE_REFUND_REQUESTED
+  DEAL_MILESTONE_REVIEW_DEADLINE_EXPIRED
   DEAL_MILESTONE_REVIEW_APPROVED
   DEAL_MILESTONE_REVIEW_REJECTED
   DEAL_MILESTONE_SUBMISSION_CREATED
@@ -247,6 +248,7 @@ model Organization {
   updatedAt              DateTime                @db.Timestamptz(3)
   createdByUser          User                    @relation(fields: [createdByUserId], references: [id], onDelete: Restrict)
   counterparties         Counterparty[]
+  dealMilestoneReviewDeadlineExpiries DealMilestoneReviewDeadlineExpiry[]
   dealMilestoneReviews   DealMilestoneReview[]
   dealMilestoneSettlementRequests DealMilestoneSettlementRequest[]
   dealMilestoneSubmissions DealMilestoneSubmission[]
@@ -353,6 +355,7 @@ model DraftDeal {
   organization       Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   createdByUser      User               @relation("DraftDealCreatedByUser", fields: [createdByUserId], references: [id], onDelete: Restrict)
   template           Template?          @relation("DraftDealTemplate", fields: [templateId], references: [id], onDelete: SetNull)
+  milestoneReviewDeadlineExpiries DealMilestoneReviewDeadlineExpiry[]
   milestoneSubmissions DealMilestoneSubmission[]
   milestoneSettlementRequests DealMilestoneSettlementRequest[]
   fundingTransactions FundingTransaction[]
@@ -407,6 +410,7 @@ model DealVersion {
   acceptances        DealVersionAcceptance[]
   counterpartyAcceptances CounterpartyDealVersionAcceptance[]
   fundingTransactions FundingTransaction[]
+  milestoneReviewDeadlineExpiries DealMilestoneReviewDeadlineExpiry[]
   milestoneReviews   DealMilestoneReview[]
   milestoneSettlementRequests DealMilestoneSettlementRequest[]
   milestoneSubmissions DealMilestoneSubmission[]
@@ -455,6 +459,7 @@ model DealVersionMilestone {
   dueAt         DateTime?   @db.Timestamptz(3)
   createdAt     DateTime    @db.Timestamptz(3)
   dealVersion   DealVersion @relation(fields: [dealVersionId], references: [id], onDelete: Cascade)
+  reviewDeadlineExpiries DealMilestoneReviewDeadlineExpiry[]
   reviews       DealMilestoneReview[]
   settlementRequests DealMilestoneSettlementRequest[]
   submissions   DealMilestoneSubmission[]
@@ -471,6 +476,7 @@ model DealMilestoneSubmission {
   dealVersionId          String               @db.Text
   dealVersionMilestoneId String               @db.Text
   submittedByUserId      String?              @db.Text
+  reviewDeadlineAt       DateTime             @db.Timestamptz(3)
   scheme                 TypedSignatureScheme?
   signature              String?              @db.Text
   typedData              Json?
@@ -487,6 +493,7 @@ model DealMilestoneSubmission {
   dealVersionMilestone   DealVersionMilestone @relation(fields: [dealVersionMilestoneId], references: [id], onDelete: Cascade)
   submittedByUser        User?                @relation("DealMilestoneSubmissionSubmittedByUser", fields: [submittedByUserId], references: [id], onDelete: SetNull)
   files                  DealMilestoneSubmissionFile[]
+  reviewDeadlineExpiry   DealMilestoneReviewDeadlineExpiry?
   review                 DealMilestoneReview?
   settlementRequests     DealMilestoneSettlementRequest[]
 
@@ -499,6 +506,28 @@ model DealMilestoneSubmission {
   @@index([submittedByUserId], map: "deal_milestone_submissions_submitted_by_user_id_idx")
   @@index([dealVersionMilestoneId, submittedAt], map: "deal_milestone_submissions_milestone_id_submitted_at_idx")
   @@map("deal_milestone_submissions")
+}
+
+model DealMilestoneReviewDeadlineExpiry {
+  id                        String                  @id @db.Text
+  organizationId            String                  @db.Text
+  draftDealId               String                  @db.Text
+  dealVersionId             String                  @db.Text
+  dealVersionMilestoneId    String                  @db.Text
+  dealMilestoneSubmissionId String                  @unique @db.Text
+  deadlineAt                DateTime                @db.Timestamptz(3)
+  expiredAt                 DateTime                @db.Timestamptz(3)
+  organization              Organization            @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  draftDeal                 DraftDeal               @relation(fields: [draftDealId], references: [id], onDelete: Cascade)
+  dealVersion               DealVersion             @relation(fields: [dealVersionId], references: [id], onDelete: Cascade)
+  dealVersionMilestone      DealVersionMilestone    @relation(fields: [dealVersionMilestoneId], references: [id], onDelete: Cascade)
+  dealMilestoneSubmission   DealMilestoneSubmission @relation(fields: [dealMilestoneSubmissionId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId], map: "deal_milestone_review_deadline_expiries_organization_id_idx")
+  @@index([draftDealId], map: "deal_milestone_review_deadline_expiries_draft_deal_id_idx")
+  @@index([dealVersionId], map: "deal_milestone_review_deadline_expiries_deal_version_id_idx")
+  @@index([dealVersionMilestoneId], map: "deal_milestone_review_deadline_expiries_milestone_id_idx")
+  @@map("deal_milestone_review_deadline_expiries")
 }
 
 model DealMilestoneSubmissionFile {

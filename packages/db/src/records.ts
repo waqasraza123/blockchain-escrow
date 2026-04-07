@@ -212,6 +212,7 @@ export interface DealMilestoneSubmissionRecord {
   draftDealId: EntityId;
   id: EntityId;
   organizationId: EntityId;
+  reviewDeadlineAt: IsoTimestamp;
   scheme: TypedSignatureScheme | null;
   signature: string | null;
   statementMarkdown: string;
@@ -222,6 +223,17 @@ export interface DealMilestoneSubmissionRecord {
   submittedByPartySubjectType: DealPartySubjectType;
   submittedByUserId: EntityId | null;
   typedData: JsonObject | null;
+}
+
+export interface DealMilestoneReviewDeadlineExpiryRecord {
+  dealMilestoneSubmissionId: EntityId;
+  dealVersionId: EntityId;
+  dealVersionMilestoneId: EntityId;
+  deadlineAt: IsoTimestamp;
+  draftDealId: EntityId;
+  expiredAt: IsoTimestamp;
+  id: EntityId;
+  organizationId: EntityId;
 }
 
 export interface DealMilestoneSubmissionFileRecord {
