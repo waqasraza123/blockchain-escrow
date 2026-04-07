@@ -2,12 +2,6 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import { getDeploymentManifestByChainId } from "@blockchain-escrow/contracts-sdk";
-import {
-  BadRequestException,
-  ConflictException,
-  ForbiddenException,
-  NotFoundException
-} from "@nestjs/common";
 
 import { AuditService } from "../src/modules/audit/audit.service";
 import { AuthenticatedSessionService } from "../src/modules/auth/authenticated-session.service";
@@ -295,14 +289,76 @@ async function seedActiveAgreement(
   });
 }
 
-async function expectRejectsWith<T extends Error>(
+async function seedCounterpartySellerSubmission(
+  services: ReturnType<typeof createServices>,
+  seeded: Awaited<ReturnType<typeof seedMilestoneScenario>>,
+  options?: {
+    attachmentFileIds?: string[];
+    dealVersionMilestoneId?: string;
+    statementMarkdown?: string;
+    submissionNumber?: number;
+  }
+) {
+  const now = new Date().toISOString();
+  const sellerParty = (
+    await services.release1Repositories.dealVersionParties.listByDealVersionId(
+      seeded.version.version.id
+    )
+  ).find((party) => party.role === "SELLER");
+
+  if (!sellerParty || sellerParty.subjectType !== "COUNTERPARTY") {
+    throw new Error("counterparty seller party not found");
+  }
+
+  const submission = await services.release1Repositories.dealMilestoneSubmissions.create({
+    dealVersionId: seeded.version.version.id,
+    dealVersionMilestoneId:
+      options?.dealVersionMilestoneId ?? seeded.version.version.milestones[0]!.id,
+    draftDealId: seeded.draft.draft.id,
+    id: `submission-${options?.submissionNumber ?? 1}`,
+    organizationId: "org-1",
+    statementMarkdown:
+      options?.statementMarkdown ?? "Counterparty seller delivery evidence.",
+    submissionNumber: options?.submissionNumber ?? 1,
+    submittedAt: now,
+    submittedByCounterpartyId: sellerParty.counterpartyId,
+    submittedByPartyRole: "SELLER",
+    submittedByPartySubjectType: "COUNTERPARTY",
+    submittedByUserId: null
+  });
+
+  for (const fileId of options?.attachmentFileIds ?? []) {
+    await services.release1Repositories.dealMilestoneSubmissionFiles.add({
+      createdAt: now,
+      dealMilestoneSubmissionId: submission.id,
+      fileId,
+      id: `${submission.id}-${fileId}`
+    });
+  }
+
+  return submission;
+}
+
+async function expectRejectsWith(
   action: Promise<unknown>,
-  expectedClass: Function & { prototype: T },
+  expectedName: string,
   expectedMessage: string
 ) {
   await assert.rejects(action, (error: unknown) => {
-    assert.ok(error instanceof expectedClass);
-    assert.equal((error as T).message, expectedMessage);
+    assert.ok(error instanceof Error);
+    assert.equal(error.name, expectedName);
+    assert.equal(error.message, expectedMessage);
+    return true;
+  });
+}
+
+async function expectRejectsInstance(
+  action: Promise<unknown>,
+  expectedName: string
+) {
+  await assert.rejects(action, (error: unknown) => {
+    assert.ok(error instanceof Error);
+    assert.equal(error.name, expectedName);
     return true;
   });
 }
@@ -369,10 +425,14 @@ test("milestones service lists workflows and creates immutable seller submission
 
   assert.equal(firstSubmission.submission.submissionNumber, 1);
   assert.equal(firstSubmission.submission.attachmentFiles[0]?.id, "file-1");
+  assert.equal(firstSubmission.submission.review, null);
+  assert.equal(firstSubmission.submission.submittedByPartyRole, "SELLER");
+  assert.equal(firstSubmission.submission.submittedByPartySubjectType, "ORGANIZATION");
   assert.equal(secondSubmission.submission.submissionNumber, 2);
   assert.equal(secondSubmission.submission.attachmentFiles[0]?.id, "file-2");
   assert.equal(secondSubmission.milestone.state, "SUBMITTED");
   assert.equal(secondSubmission.milestone.submissions.length, 2);
+  assert.equal(secondSubmission.milestone.latestReviewAt, null);
 
   const listedAfter = await services.milestonesService.listMilestoneWorkflows(
     {
@@ -384,6 +444,7 @@ test("milestones service lists workflows and creates immutable seller submission
   );
 
   assert.equal(listedAfter.milestones[0]?.state, "SUBMITTED");
+  assert.equal(listedAfter.milestones[0]?.latestReviewAt, null);
   assert.equal(listedAfter.milestones[0]?.submissions[0]?.submissionNumber, 1);
   assert.equal(listedAfter.milestones[0]?.submissions[1]?.submissionNumber, 2);
 
@@ -425,7 +486,7 @@ test("milestones service rejects submissions for buyer-side organizations", asyn
       },
       requestMetadata(actor.cookieHeader)
     ),
-    ForbiddenException,
+    "ForbiddenException",
     "seller organization party is required"
   );
 });
@@ -451,7 +512,7 @@ test("milestones service rejects submissions before escrow is active", async () 
       },
       requestMetadata(actor.cookieHeader)
     ),
-    ConflictException,
+    "ConflictException",
     "draft deal escrow is not active"
   );
 });
@@ -491,7 +552,7 @@ test("milestones service enforces attachment file organization scoping", async (
       },
       requestMetadata(actor.cookieHeader)
     ),
-    NotFoundException,
+    "NotFoundException",
     "file not found"
   );
 });
@@ -525,7 +586,252 @@ test("milestones service rejects duplicate attachment ids in one submission", as
       },
       requestMetadata(actor.cookieHeader)
     ),
-    BadRequestException,
+    "BadRequestException",
     "attachment file ids must be unique"
+  );
+});
+
+test("milestones service lets buyer-side organizations approve latest counterparty seller submissions", async () => {
+  const services = createServices();
+  const actor = await seedAuthenticatedActor(
+    services.release1Repositories,
+    services.sessionTokenService
+  );
+  const seeded = await seedMilestoneScenario(services, actor, "BUYER");
+
+  await seedFile(services.release1Repositories, {
+    createdByUserId: actor.userId,
+    fileId: "file-1",
+    organizationId: "org-1"
+  });
+  await seedActiveAgreement(services, seeded);
+  const submission = await seedCounterpartySellerSubmission(services, seeded, {
+    attachmentFileIds: ["file-1"]
+  });
+
+  const result = await services.milestonesService.createMilestoneReview(
+    {
+      dealMilestoneSubmissionId: submission.id,
+      dealVersionId: seeded.version.version.id,
+      dealVersionMilestoneId: seeded.version.version.milestones[0]!.id,
+      draftDealId: seeded.draft.draft.id,
+      organizationId: "org-1"
+    },
+    {
+      decision: "APPROVED"
+    },
+    requestMetadata(actor.cookieHeader)
+  );
+
+  assert.equal(result.review.decision, "APPROVED");
+  assert.equal(result.review.statementMarkdown, null);
+  assert.equal(result.review.reviewedByUserId, actor.userId);
+  assert.equal(result.milestone.state, "APPROVED");
+  assert.equal(result.milestone.latestReviewAt, result.review.reviewedAt);
+  assert.equal(result.milestone.submissions.length, 1);
+  assert.equal(result.milestone.submissions[0]?.review?.decision, "APPROVED");
+  assert.equal(
+    result.milestone.submissions[0]?.submittedByPartySubjectType,
+    "COUNTERPARTY"
+  );
+  assert.equal(
+    result.milestone.submissions[0]?.submittedByCounterpartyId,
+    "counterparty-1"
+  );
+
+  const auditLogs = await services.auditService.listByEntity(
+    {
+      entityId: result.review.id,
+      entityType: "DEAL_MILESTONE_REVIEW"
+    },
+    requestMetadata(actor.cookieHeader)
+  );
+
+  assert.equal(auditLogs.auditLogs.length, 1);
+  assert.equal(auditLogs.auditLogs[0]?.action, "DEAL_MILESTONE_REVIEW_APPROVED");
+});
+
+test("milestones service lets buyer-side organizations reject latest counterparty seller submissions", async () => {
+  const services = createServices();
+  const actor = await seedAuthenticatedActor(
+    services.release1Repositories,
+    services.sessionTokenService
+  );
+  const seeded = await seedMilestoneScenario(services, actor, "BUYER");
+
+  await seedActiveAgreement(services, seeded);
+  const submission = await seedCounterpartySellerSubmission(services, seeded);
+
+  const result = await services.milestonesService.createMilestoneReview(
+    {
+      dealMilestoneSubmissionId: submission.id,
+      dealVersionId: seeded.version.version.id,
+      dealVersionMilestoneId: seeded.version.version.milestones[0]!.id,
+      draftDealId: seeded.draft.draft.id,
+      organizationId: "org-1"
+    },
+    {
+      decision: "REJECTED",
+      statementMarkdown: "Missing acceptance criteria evidence."
+    },
+    requestMetadata(actor.cookieHeader)
+  );
+
+  assert.equal(result.review.decision, "REJECTED");
+  assert.equal(
+    result.review.statementMarkdown,
+    "Missing acceptance criteria evidence."
+  );
+  assert.equal(result.milestone.state, "REJECTED");
+  assert.equal(result.milestone.submissions[0]?.review?.decision, "REJECTED");
+});
+
+test("milestones service requires buyer role for milestone reviews", async () => {
+  const services = createServices();
+  const actor = await seedAuthenticatedActor(
+    services.release1Repositories,
+    services.sessionTokenService
+  );
+  const seeded = await seedMilestoneScenario(services, actor, "SELLER");
+
+  await seedActiveAgreement(services, seeded);
+  const submission = await services.milestonesService.createMilestoneSubmission(
+    {
+      dealVersionId: seeded.version.version.id,
+      dealVersionMilestoneId: seeded.version.version.milestones[0]!.id,
+      draftDealId: seeded.draft.draft.id,
+      organizationId: "org-1"
+    },
+    {
+      statementMarkdown: "Seller-side evidence."
+    },
+    requestMetadata(actor.cookieHeader)
+  );
+
+  await expectRejectsWith(
+    services.milestonesService.createMilestoneReview(
+      {
+        dealMilestoneSubmissionId: submission.submission.id,
+        dealVersionId: seeded.version.version.id,
+        dealVersionMilestoneId: seeded.version.version.milestones[0]!.id,
+        draftDealId: seeded.draft.draft.id,
+        organizationId: "org-1"
+      },
+      {
+        decision: "APPROVED"
+      },
+      requestMetadata(actor.cookieHeader)
+    ),
+    "ForbiddenException",
+    "buyer organization party is required"
+  );
+});
+
+test("milestones service requires a rejection statement for rejected reviews", async () => {
+  const services = createServices();
+  const actor = await seedAuthenticatedActor(
+    services.release1Repositories,
+    services.sessionTokenService
+  );
+  const seeded = await seedMilestoneScenario(services, actor, "BUYER");
+
+  await seedActiveAgreement(services, seeded);
+  const submission = await seedCounterpartySellerSubmission(services, seeded);
+
+  await expectRejectsInstance(
+    services.milestonesService.createMilestoneReview(
+      {
+        dealMilestoneSubmissionId: submission.id,
+        dealVersionId: seeded.version.version.id,
+        dealVersionMilestoneId: seeded.version.version.milestones[0]!.id,
+        draftDealId: seeded.draft.draft.id,
+        organizationId: "org-1"
+      },
+      {
+        decision: "REJECTED"
+      },
+      requestMetadata(actor.cookieHeader)
+    ),
+    "BadRequestException"
+  );
+});
+
+test("milestones service prevents duplicate reviews for the same submission", async () => {
+  const services = createServices();
+  const actor = await seedAuthenticatedActor(
+    services.release1Repositories,
+    services.sessionTokenService
+  );
+  const seeded = await seedMilestoneScenario(services, actor, "BUYER");
+
+  await seedActiveAgreement(services, seeded);
+  const submission = await seedCounterpartySellerSubmission(services, seeded);
+
+  await services.milestonesService.createMilestoneReview(
+    {
+      dealMilestoneSubmissionId: submission.id,
+      dealVersionId: seeded.version.version.id,
+      dealVersionMilestoneId: seeded.version.version.milestones[0]!.id,
+      draftDealId: seeded.draft.draft.id,
+      organizationId: "org-1"
+    },
+    {
+      decision: "APPROVED"
+    },
+    requestMetadata(actor.cookieHeader)
+  );
+
+  await expectRejectsWith(
+    services.milestonesService.createMilestoneReview(
+      {
+        dealMilestoneSubmissionId: submission.id,
+        dealVersionId: seeded.version.version.id,
+        dealVersionMilestoneId: seeded.version.version.milestones[0]!.id,
+        draftDealId: seeded.draft.draft.id,
+        organizationId: "org-1"
+      },
+      {
+        decision: "APPROVED"
+      },
+      requestMetadata(actor.cookieHeader)
+    ),
+    "ConflictException",
+    "milestone submission already reviewed"
+  );
+});
+
+test("milestones service only allows reviews for the latest submission on a milestone", async () => {
+  const services = createServices();
+  const actor = await seedAuthenticatedActor(
+    services.release1Repositories,
+    services.sessionTokenService
+  );
+  const seeded = await seedMilestoneScenario(services, actor, "BUYER");
+
+  await seedActiveAgreement(services, seeded);
+  const firstSubmission = await seedCounterpartySellerSubmission(services, seeded, {
+    submissionNumber: 1
+  });
+  await seedCounterpartySellerSubmission(services, seeded, {
+    statementMarkdown: "Updated evidence package.",
+    submissionNumber: 2
+  });
+
+  await expectRejectsWith(
+    services.milestonesService.createMilestoneReview(
+      {
+        dealMilestoneSubmissionId: firstSubmission.id,
+        dealVersionId: seeded.version.version.id,
+        dealVersionMilestoneId: seeded.version.version.milestones[0]!.id,
+        draftDealId: seeded.draft.draft.id,
+        organizationId: "org-1"
+      },
+      {
+        decision: "APPROVED"
+      },
+      requestMetadata(actor.cookieHeader)
+    ),
+    "ConflictException",
+    "only latest milestone submission can be reviewed"
   );
 });

@@ -5,6 +5,7 @@ import {
   getDeploymentManifestByChainId
 } from "@blockchain-escrow/contracts-sdk";
 import type {
+  DealMilestoneReviewRecord,
   DealMilestoneSubmissionFileRecord,
   DealMilestoneSubmissionRecord,
   DealVersionMilestoneRecord,
@@ -20,14 +21,19 @@ import type {
 } from "@blockchain-escrow/db";
 import { hasMinimumOrganizationRole } from "@blockchain-escrow/security";
 import {
+  createMilestoneReviewSchema,
   createMilestoneSubmissionSchema,
   dealVersionMilestoneWorkflowParamsSchema,
+  milestoneReviewParamsSchema,
   milestoneSubmissionParamsSchema,
+  type CreateDealMilestoneReviewResponse,
   type CreateDealMilestoneSubmissionResponse,
+  type DealMilestoneReviewSummary,
   type DealMilestoneSubmissionSummary,
   type DealVersionMilestoneSnapshot,
   type DealVersionMilestoneWorkflow,
-  type ListDealVersionMilestoneWorkflowsResponse
+  type ListDealVersionMilestoneWorkflowsResponse,
+  type MilestoneWorkflowState
 } from "@blockchain-escrow/shared";
 import {
   BadRequestException,
@@ -55,12 +61,19 @@ interface MilestoneWorkflowAccessContext {
   membership: OrganizationMemberRecord;
   organization: OrganizationRecord;
   organizationParty: DealVersionPartyRecord;
+  sellerParty: DealVersionPartyRecord;
   version: DealVersionRecord;
 }
 
-interface MilestoneSubmissionAccessContext extends MilestoneWorkflowAccessContext {
+interface MilestoneAccessContext extends MilestoneWorkflowAccessContext {
   linkedAgreement: EscrowAgreementRecord | null;
   milestone: DealVersionMilestoneRecord;
+}
+
+interface MilestoneReviewAccessContext extends MilestoneAccessContext {
+  latestSubmission: DealMilestoneSubmissionRecord;
+  review: DealMilestoneReviewRecord | null;
+  submission: DealMilestoneSubmissionRecord;
 }
 
 function toMilestoneSnapshot(
@@ -74,6 +87,20 @@ function toMilestoneSnapshot(
     position: milestone.position,
     title: milestone.title
   };
+}
+
+function resolveMilestoneWorkflowState(
+  latestSubmission: DealMilestoneSubmissionSummary | null
+): MilestoneWorkflowState {
+  if (!latestSubmission) {
+    return "PENDING";
+  }
+
+  if (!latestSubmission.review) {
+    return "SUBMITTED";
+  }
+
+  return latestSubmission.review.decision;
 }
 
 @Injectable()
@@ -126,7 +153,7 @@ export class MilestonesService {
 
     this.assertUniqueAttachmentFileIds(parsedBody.data.attachmentFileIds ?? []);
 
-    const access = await this.requireSubmissionAccess(
+    const access = await this.requireMilestoneAccess(
       parsedParams.data.organizationId,
       parsedParams.data.draftDealId,
       parsedParams.data.dealVersionId,
@@ -158,6 +185,9 @@ export class MilestonesService {
       statementMarkdown: parsedBody.data.statementMarkdown,
       submissionNumber: existingSubmissions.length + 1,
       submittedAt: now,
+      submittedByCounterpartyId: access.sellerParty.counterpartyId,
+      submittedByPartyRole: access.sellerParty.role,
+      submittedByPartySubjectType: access.sellerParty.subjectType,
       submittedByUserId: access.actor.user.id
     });
 
@@ -182,17 +212,23 @@ export class MilestonesService {
         dealVersionId: access.version.id,
         dealVersionMilestoneId: access.milestone.id,
         draftDealId: access.draft.id,
-        submissionNumber: submission.submissionNumber
+        submissionNumber: submission.submissionNumber,
+        submittedByCounterpartyId: submission.submittedByCounterpartyId,
+        submittedByPartyRole: submission.submittedByPartyRole,
+        submittedByPartySubjectType: submission.submittedByPartySubjectType
       },
       occurredAt: now,
       organizationId: access.organization.id,
       userAgent: requestMetadata.userAgent
     });
 
-    const milestone = await this.buildMilestoneWorkflow(
-      access.milestone,
-      [...existingSubmissions, submission]
+    const milestone = await this.buildMilestoneWorkflows(access.version.id).then(
+      (milestones) => milestones.find((record) => record.milestone.id === access.milestone.id)
     );
+
+    if (!milestone) {
+      throw new NotFoundException("milestone workflow not found");
+    }
 
     return {
       milestone,
@@ -200,14 +236,113 @@ export class MilestonesService {
     };
   }
 
+  async createMilestoneReview(
+    paramsInput: unknown,
+    bodyInput: unknown,
+    requestMetadata: RequestMetadata
+  ): Promise<CreateDealMilestoneReviewResponse> {
+    const parsedParams = milestoneReviewParamsSchema.safeParse(paramsInput);
+    const parsedBody = createMilestoneReviewSchema.safeParse(bodyInput);
+
+    if (!parsedParams.success) {
+      throw new BadRequestException(parsedParams.error.flatten());
+    }
+
+    if (!parsedBody.success) {
+      throw new BadRequestException(parsedBody.error.flatten());
+    }
+
+    const access = await this.requireMilestoneReviewAccess(
+      parsedParams.data.organizationId,
+      parsedParams.data.draftDealId,
+      parsedParams.data.dealVersionId,
+      parsedParams.data.dealVersionMilestoneId,
+      parsedParams.data.dealMilestoneSubmissionId,
+      requestMetadata
+    );
+
+    if (access.organizationParty.role !== "BUYER") {
+      throw new ForbiddenException("buyer organization party is required");
+    }
+
+    this.assertEscrowIsActive(access.draft, access.linkedAgreement);
+
+    if (access.review) {
+      throw new ConflictException("milestone submission already reviewed");
+    }
+
+    if (access.latestSubmission.id !== access.submission.id) {
+      throw new ConflictException("only latest milestone submission can be reviewed");
+    }
+
+    if (access.submission.submittedByPartyRole !== "SELLER") {
+      throw new ConflictException("milestone submission must originate from the seller party");
+    }
+
+    if (!this.doesSubmissionMatchSellerParty(access.submission, access.sellerParty)) {
+      throw new ConflictException("milestone submission origin does not match seller party");
+    }
+
+    const now = new Date().toISOString();
+    const review = await this.repositories.dealMilestoneReviews.create({
+      decision: parsedBody.data.decision,
+      dealMilestoneSubmissionId: access.submission.id,
+      dealVersionId: access.version.id,
+      dealVersionMilestoneId: access.milestone.id,
+      draftDealId: access.draft.id,
+      id: randomUUID(),
+      organizationId: access.organization.id,
+      reviewedAt: now,
+      reviewedByUserId: access.actor.user.id,
+      statementMarkdown: parsedBody.data.statementMarkdown ?? null
+    });
+
+    await this.repositories.auditLogs.append({
+      action:
+        review.decision === "APPROVED"
+          ? "DEAL_MILESTONE_REVIEW_APPROVED"
+          : "DEAL_MILESTONE_REVIEW_REJECTED",
+      actorUserId: access.actor.user.id,
+      entityId: review.id,
+      entityType: "DEAL_MILESTONE_REVIEW",
+      id: randomUUID(),
+      ipAddress: requestMetadata.ipAddress,
+      metadata: {
+        decision: review.decision,
+        dealMilestoneSubmissionId: review.dealMilestoneSubmissionId,
+        dealVersionId: review.dealVersionId,
+        dealVersionMilestoneId: review.dealVersionMilestoneId,
+        draftDealId: review.draftDealId
+      },
+      occurredAt: now,
+      organizationId: access.organization.id,
+      userAgent: requestMetadata.userAgent
+    });
+
+    const milestone = await this.buildMilestoneWorkflows(access.version.id).then(
+      (milestones) => milestones.find((record) => record.milestone.id === access.milestone.id)
+    );
+
+    if (!milestone) {
+      throw new NotFoundException("milestone workflow not found");
+    }
+
+    return {
+      milestone,
+      review: this.toReviewSummary(review)
+    };
+  }
+
   private async buildMilestoneWorkflows(
     dealVersionId: string
   ): Promise<DealVersionMilestoneWorkflow[]> {
-    const [milestones, submissions] = await Promise.all([
+    const [milestones, submissions, reviews] = await Promise.all([
       this.repositories.dealVersionMilestones.listByDealVersionId(dealVersionId),
-      this.repositories.dealMilestoneSubmissions.listByDealVersionId(dealVersionId)
+      this.repositories.dealMilestoneSubmissions.listByDealVersionId(dealVersionId),
+      this.repositories.dealMilestoneReviews.listByDealVersionId(dealVersionId)
     ]);
     const submissionsByMilestoneId = new Map<string, DealMilestoneSubmissionRecord[]>();
+    const reviewsBySubmissionId = new Map<string, DealMilestoneReviewRecord>();
 
     for (const submission of submissions) {
       const records =
@@ -216,11 +351,16 @@ export class MilestonesService {
       submissionsByMilestoneId.set(submission.dealVersionMilestoneId, records);
     }
 
+    for (const review of reviews) {
+      reviewsBySubmissionId.set(review.dealMilestoneSubmissionId, review);
+    }
+
     return Promise.all(
       milestones.map((milestone) =>
         this.buildMilestoneWorkflow(
           milestone,
-          submissionsByMilestoneId.get(milestone.id) ?? []
+          submissionsByMilestoneId.get(milestone.id) ?? [],
+          reviewsBySubmissionId
         )
       )
     );
@@ -228,24 +368,32 @@ export class MilestonesService {
 
   private async buildMilestoneWorkflow(
     milestone: DealVersionMilestoneRecord,
-    submissions: DealMilestoneSubmissionRecord[]
+    submissions: DealMilestoneSubmissionRecord[],
+    reviewsBySubmissionId: ReadonlyMap<string, DealMilestoneReviewRecord>
   ): Promise<DealVersionMilestoneWorkflow> {
     const submissionSummaries = await Promise.all(
-      submissions.map((submission) => this.toSubmissionSummary(submission))
+      submissions.map((submission) =>
+        this.toSubmissionSummary(
+          submission,
+          reviewsBySubmissionId.get(submission.id) ?? null
+        )
+      )
     );
     const latestSubmission =
       submissionSummaries[submissionSummaries.length - 1] ?? null;
 
     return {
+      latestReviewAt: latestSubmission?.review?.reviewedAt ?? null,
       latestSubmissionAt: latestSubmission?.submittedAt ?? null,
       milestone: toMilestoneSnapshot(milestone),
-      state: submissionSummaries.length > 0 ? "SUBMITTED" : "PENDING",
+      state: resolveMilestoneWorkflowState(latestSubmission),
       submissions: submissionSummaries
     };
   }
 
   private async toSubmissionSummary(
-    submission: DealMilestoneSubmissionRecord
+    submission: DealMilestoneSubmissionRecord,
+    review: DealMilestoneReviewRecord | null
   ): Promise<DealMilestoneSubmissionSummary> {
     const fileLinks =
       await this.repositories.dealMilestoneSubmissionFiles.listByDealMilestoneSubmissionId(
@@ -274,10 +422,31 @@ export class MilestonesService {
       draftDealId: submission.draftDealId,
       id: submission.id,
       organizationId: submission.organizationId,
+      review: review ? this.toReviewSummary(review) : null,
       statementMarkdown: submission.statementMarkdown,
       submissionNumber: submission.submissionNumber,
       submittedAt: submission.submittedAt,
+      submittedByCounterpartyId: submission.submittedByCounterpartyId,
+      submittedByPartyRole: submission.submittedByPartyRole,
+      submittedByPartySubjectType: submission.submittedByPartySubjectType,
       submittedByUserId: submission.submittedByUserId
+    };
+  }
+
+  private toReviewSummary(
+    review: DealMilestoneReviewRecord
+  ): DealMilestoneReviewSummary {
+    return {
+      decision: review.decision,
+      dealMilestoneSubmissionId: review.dealMilestoneSubmissionId,
+      dealVersionId: review.dealVersionId,
+      dealVersionMilestoneId: review.dealVersionMilestoneId,
+      draftDealId: review.draftDealId,
+      id: review.id,
+      organizationId: review.organizationId,
+      reviewedAt: review.reviewedAt,
+      reviewedByUserId: review.reviewedByUserId,
+      statementMarkdown: review.statementMarkdown
     };
   }
 
@@ -339,28 +508,43 @@ export class MilestonesService {
       throw new NotFoundException("deal version not found");
     }
 
-    const organizationParty = await this.requireOrganizationVersionParty(
-      version.id,
-      organizationId
+    const parties = await this.repositories.dealVersionParties.listByDealVersionId(version.id);
+    const organizationParties = parties.filter(
+      (party) =>
+        party.subjectType === "ORGANIZATION" &&
+        party.organizationId === organizationId
     );
+
+    if (organizationParties.length !== 1) {
+      throw new ConflictException(
+        "deal version must have exactly one organization-side party"
+      );
+    }
+
+    const sellerParties = parties.filter((party) => party.role === "SELLER");
+
+    if (sellerParties.length !== 1) {
+      throw new ConflictException("deal version must have exactly one seller party");
+    }
 
     return {
       actor: authorized.actor,
       draft,
       membership: authorized.membership,
       organization: authorized.organization,
-      organizationParty,
+      organizationParty: organizationParties[0]!,
+      sellerParty: sellerParties[0]!,
       version
     };
   }
 
-  private async requireSubmissionAccess(
+  private async requireMilestoneAccess(
     organizationId: string,
     draftDealId: string,
     dealVersionId: string,
     dealVersionMilestoneId: string,
     requestMetadata: RequestMetadata
-  ): Promise<MilestoneSubmissionAccessContext> {
+  ): Promise<MilestoneAccessContext> {
     const access = await this.requireWorkflowAccess(
       organizationId,
       draftDealId,
@@ -383,6 +567,54 @@ export class MilestonesService {
     };
   }
 
+  private async requireMilestoneReviewAccess(
+    organizationId: string,
+    draftDealId: string,
+    dealVersionId: string,
+    dealVersionMilestoneId: string,
+    dealMilestoneSubmissionId: string,
+    requestMetadata: RequestMetadata
+  ): Promise<MilestoneReviewAccessContext> {
+    const access = await this.requireMilestoneAccess(
+      organizationId,
+      draftDealId,
+      dealVersionId,
+      dealVersionMilestoneId,
+      requestMetadata
+    );
+    const [submission, review, milestoneSubmissions] = await Promise.all([
+      this.repositories.dealMilestoneSubmissions.findById(dealMilestoneSubmissionId),
+      this.repositories.dealMilestoneReviews.findByDealMilestoneSubmissionId(
+        dealMilestoneSubmissionId
+      ),
+      this.repositories.dealMilestoneSubmissions.listByDealVersionMilestoneId(
+        dealVersionMilestoneId
+      )
+    ]);
+
+    if (
+      !submission ||
+      submission.draftDealId !== access.draft.id ||
+      submission.dealVersionId !== access.version.id ||
+      submission.dealVersionMilestoneId !== access.milestone.id
+    ) {
+      throw new NotFoundException("deal milestone submission not found");
+    }
+
+    const latestSubmission = milestoneSubmissions[milestoneSubmissions.length - 1] ?? null;
+
+    if (!latestSubmission) {
+      throw new NotFoundException("deal milestone submission not found");
+    }
+
+    return {
+      ...access,
+      latestSubmission,
+      review,
+      submission
+    };
+  }
+
   private assertEscrowIsActive(
     draft: DraftDealRecord,
     linkedAgreement: EscrowAgreementRecord | null
@@ -402,6 +634,25 @@ export class MilestonesService {
     }
   }
 
+  private doesSubmissionMatchSellerParty(
+    submission: DealMilestoneSubmissionRecord,
+    sellerParty: DealVersionPartyRecord
+  ): boolean {
+    if (submission.submittedByPartyRole !== sellerParty.role) {
+      return false;
+    }
+
+    if (submission.submittedByPartySubjectType !== sellerParty.subjectType) {
+      return false;
+    }
+
+    if (sellerParty.subjectType === "COUNTERPARTY") {
+      return submission.submittedByCounterpartyId === sellerParty.counterpartyId;
+    }
+
+    return submission.submittedByCounterpartyId === null;
+  }
+
   private async findLinkedAgreementForDraft(
     draft: DraftDealRecord
   ): Promise<EscrowAgreementRecord | null> {
@@ -412,28 +663,6 @@ export class MilestonesService {
     );
 
     return agreements.find((agreement) => agreement.dealId === dealId) ?? null;
-  }
-
-  private async requireOrganizationVersionParty(
-    dealVersionId: string,
-    organizationId: string
-  ): Promise<DealVersionPartyRecord> {
-    const parties = await this.repositories.dealVersionParties.listByDealVersionId(
-      dealVersionId
-    );
-    const matchingParties = parties.filter(
-      (party) =>
-        party.subjectType === "ORGANIZATION" &&
-        party.organizationId === organizationId
-    );
-
-    if (matchingParties.length !== 1) {
-      throw new ConflictException(
-        "deal version must have exactly one organization-side party"
-      );
-    }
-
-    return matchingParties[0]!;
   }
 
   private async requireOrganizationAccess(

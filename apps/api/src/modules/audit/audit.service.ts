@@ -2,6 +2,7 @@ import type {
   AuditLogRecord,
   CounterpartyRecord,
   CounterpartyDealVersionAcceptanceRecord,
+  DealMilestoneReviewRecord,
   DealMilestoneSubmissionRecord,
   DealVersionAcceptanceRecord,
   DealVersionRecord,
@@ -146,6 +147,16 @@ export class AuditService {
         return this.repositories.auditLogs.listByEntity(
           "DEAL_MILESTONE_SUBMISSION",
           submission.id
+        );
+      }
+      case "DEAL_MILESTONE_REVIEW": {
+        const review = await this.requireDealMilestoneReviewAccess(
+          actor,
+          params.entityId
+        );
+        return this.repositories.auditLogs.listByEntity(
+          "DEAL_MILESTONE_REVIEW",
+          review.id
         );
       }
       case "DEAL_VERSION_ACCEPTANCE": {
@@ -380,6 +391,22 @@ export class AuditService {
 
     await this.requireDraftDealAccess(actor, submission.draftDealId);
     return submission;
+  }
+
+  private async requireDealMilestoneReviewAccess(
+    actor: AuthenticatedSessionContext,
+    dealMilestoneReviewId: string
+  ): Promise<DealMilestoneReviewRecord> {
+    const review = await this.repositories.dealMilestoneReviews.findById(
+      dealMilestoneReviewId
+    );
+
+    if (!review) {
+      throw new NotFoundException("deal milestone review not found");
+    }
+
+    await this.requireDraftDealAccess(actor, review.draftDealId);
+    return review;
   }
 
   private async requireCounterpartyDealVersionAcceptanceAccess(

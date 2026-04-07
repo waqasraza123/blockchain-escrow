@@ -214,7 +214,10 @@ export interface DealMilestoneSubmissionRecord {
   statementMarkdown: string;
   submissionNumber: number;
   submittedAt: IsoTimestamp;
-  submittedByUserId: EntityId;
+  submittedByCounterpartyId: EntityId | null;
+  submittedByPartyRole: DealPartyRole;
+  submittedByPartySubjectType: DealPartySubjectType;
+  submittedByUserId: EntityId | null;
 }
 
 export interface DealMilestoneSubmissionFileRecord {
@@ -222,6 +225,19 @@ export interface DealMilestoneSubmissionFileRecord {
   dealMilestoneSubmissionId: EntityId;
   fileId: EntityId;
   id: EntityId;
+}
+
+export interface DealMilestoneReviewRecord {
+  decision: "APPROVED" | "REJECTED";
+  dealMilestoneSubmissionId: EntityId;
+  dealVersionId: EntityId;
+  dealVersionMilestoneId: EntityId;
+  draftDealId: EntityId;
+  id: EntityId;
+  organizationId: EntityId;
+  reviewedAt: IsoTimestamp;
+  reviewedByUserId: EntityId;
+  statementMarkdown: string | null;
 }
 
 export interface DealVersionFileRecord {

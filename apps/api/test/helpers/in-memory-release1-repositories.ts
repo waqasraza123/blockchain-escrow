@@ -2,6 +2,7 @@ import type {
   AuditLogRecord,
   CounterpartyRecord,
   CounterpartyDealVersionAcceptanceRecord,
+  DealMilestoneReviewRecord,
   DealMilestoneSubmissionFileRecord,
   DealMilestoneSubmissionRecord,
   DealVersionAcceptanceRecord,
@@ -32,6 +33,7 @@ export class InMemoryRelease1Repositories implements Release1Repositories {
   readonly auditLogRecords: AuditLogRecord[] = [];
   readonly counterpartyRecords: CounterpartyRecord[] = [];
   readonly counterpartyDealVersionAcceptanceRecords: CounterpartyDealVersionAcceptanceRecord[] = [];
+  readonly dealMilestoneReviewRecords: DealMilestoneReviewRecord[] = [];
   readonly dealMilestoneSubmissionFileRecords: DealMilestoneSubmissionFileRecord[] = [];
   readonly dealMilestoneSubmissionRecords: DealMilestoneSubmissionRecord[] = [];
   readonly dealVersionAcceptanceRecords: DealVersionAcceptanceRecord[] = [];
@@ -296,6 +298,29 @@ export class InMemoryRelease1Repositories implements Release1Repositories {
           left.submissionNumber - right.submissionNumber ||
           compareIsoTimestamps(left.submittedAt, right.submittedAt)
         )
+  };
+
+  readonly dealMilestoneReviews = {
+    create: async (
+      record: DealMilestoneReviewRecord
+    ): Promise<DealMilestoneReviewRecord> => {
+      this.dealMilestoneReviewRecords.push(record);
+      return record;
+    },
+    findByDealMilestoneSubmissionId: async (
+      dealMilestoneSubmissionId: string
+    ): Promise<DealMilestoneReviewRecord | null> =>
+      this.dealMilestoneReviewRecords.find(
+        (record) => record.dealMilestoneSubmissionId === dealMilestoneSubmissionId
+      ) ?? null,
+    findById: async (id: string): Promise<DealMilestoneReviewRecord | null> =>
+      this.dealMilestoneReviewRecords.find((record) => record.id === id) ?? null,
+    listByDealVersionId: async (
+      dealVersionId: string
+    ): Promise<DealMilestoneReviewRecord[]> =>
+      this.dealMilestoneReviewRecords
+        .filter((record) => record.dealVersionId === dealVersionId)
+        .sort((left, right) => compareIsoTimestamps(left.reviewedAt, right.reviewedAt))
   };
 
   readonly dealMilestoneSubmissionFiles = {

@@ -1,5 +1,6 @@
 import { Body, Controller, Get, Param, Post, Req } from "@nestjs/common";
 import type {
+  CreateDealMilestoneReviewResponse,
   CreateDealMilestoneSubmissionResponse,
   ListDealVersionMilestoneWorkflowsResponse
 } from "@blockchain-escrow/shared";
@@ -35,6 +36,29 @@ export class MilestonesController {
   ): Promise<CreateDealMilestoneSubmissionResponse> {
     return this.milestonesService.createMilestoneSubmission(
       {
+        dealVersionId,
+        dealVersionMilestoneId,
+        draftDealId,
+        organizationId
+      },
+      body,
+      readRequestMetadata(request)
+    );
+  }
+
+  @Post("milestones/:dealVersionMilestoneId/submissions/:dealMilestoneSubmissionId/reviews")
+  async createMilestoneReview(
+    @Param("organizationId") organizationId: string,
+    @Param("draftDealId") draftDealId: string,
+    @Param("dealVersionId") dealVersionId: string,
+    @Param("dealVersionMilestoneId") dealVersionMilestoneId: string,
+    @Param("dealMilestoneSubmissionId") dealMilestoneSubmissionId: string,
+    @Body() body: unknown,
+    @Req() request: HttpRequestLike
+  ): Promise<CreateDealMilestoneReviewResponse> {
+    return this.milestonesService.createMilestoneReview(
+      {
+        dealMilestoneSubmissionId,
         dealVersionId,
         dealVersionMilestoneId,
         draftDealId,

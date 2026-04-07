@@ -183,6 +183,9 @@ export const milestoneWorkflowStateSchema = z.enum([
 ]);
 export type MilestoneWorkflowState = z.infer<typeof milestoneWorkflowStateSchema>;
 
+export const milestoneReviewDecisionSchema = z.enum(["APPROVED", "REJECTED"]);
+export type MilestoneReviewDecision = z.infer<typeof milestoneReviewDecisionSchema>;
+
 export const milestoneSubmissionParamsSchema = z.object({
   dealVersionId: z.string().trim().min(1),
   dealVersionMilestoneId: z.string().trim().min(1),
@@ -210,6 +213,46 @@ export type CreateMilestoneSubmissionInput = z.infer<
   typeof createMilestoneSubmissionSchema
 >;
 
+export const milestoneReviewParamsSchema = z.object({
+  dealMilestoneSubmissionId: z.string().trim().min(1),
+  dealVersionId: z.string().trim().min(1),
+  dealVersionMilestoneId: z.string().trim().min(1),
+  draftDealId: z.string().trim().min(1),
+  organizationId: z.string().trim().min(1)
+});
+export type MilestoneReviewParams = z.infer<typeof milestoneReviewParamsSchema>;
+
+export const createMilestoneReviewSchema = z
+  .object({
+    decision: milestoneReviewDecisionSchema,
+    statementMarkdown: z.string().trim().min(1).max(10000).optional()
+  })
+  .superRefine((value, ctx) => {
+    if (value.decision === "REJECTED" && !value.statementMarkdown) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "rejection statement is required",
+        path: ["statementMarkdown"]
+      });
+    }
+  });
+export type CreateMilestoneReviewInput = z.infer<
+  typeof createMilestoneReviewSchema
+>;
+
+export interface DealMilestoneReviewSummary {
+  decision: MilestoneReviewDecision;
+  dealMilestoneSubmissionId: EntityId;
+  dealVersionId: EntityId;
+  dealVersionMilestoneId: EntityId;
+  draftDealId: EntityId;
+  id: EntityId;
+  organizationId: EntityId;
+  reviewedAt: IsoTimestamp;
+  reviewedByUserId: EntityId;
+  statementMarkdown: string | null;
+}
+
 export interface DealMilestoneSubmissionSummary {
   attachmentFiles: FileSummary[];
   dealVersionId: EntityId;
@@ -217,13 +260,18 @@ export interface DealMilestoneSubmissionSummary {
   draftDealId: EntityId;
   id: EntityId;
   organizationId: EntityId;
+  review: DealMilestoneReviewSummary | null;
   statementMarkdown: string;
   submissionNumber: number;
   submittedAt: IsoTimestamp;
-  submittedByUserId: EntityId;
+  submittedByCounterpartyId: EntityId | null;
+  submittedByPartyRole: DealPartyRole;
+  submittedByPartySubjectType: DealPartySubjectType;
+  submittedByUserId: EntityId | null;
 }
 
 export interface DealVersionMilestoneWorkflow {
+  latestReviewAt: IsoTimestamp | null;
   latestSubmissionAt: IsoTimestamp | null;
   milestone: DealVersionMilestoneSnapshot;
   state: MilestoneWorkflowState;
@@ -237,6 +285,11 @@ export interface ListDealVersionMilestoneWorkflowsResponse {
 export interface CreateDealMilestoneSubmissionResponse {
   milestone: DealVersionMilestoneWorkflow;
   submission: DealMilestoneSubmissionSummary;
+}
+
+export interface CreateDealMilestoneReviewResponse {
+  milestone: DealVersionMilestoneWorkflow;
+  review: DealMilestoneReviewSummary;
 }
 
 export interface DealVersionDetail extends DealVersionSummary {

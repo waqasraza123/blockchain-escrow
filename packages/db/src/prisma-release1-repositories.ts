@@ -12,13 +12,15 @@ import {
   OrganizationRole as PrismaOrganizationRole,
   AuditAction as PrismaAuditAction,
   AuditEntityType as PrismaAuditEntityType,
-  FundingTransactionReconciledStatus as PrismaFundingTransactionReconciledStatus
+  FundingTransactionReconciledStatus as PrismaFundingTransactionReconciledStatus,
+  MilestoneReviewDecision as PrismaMilestoneReviewDecision
 } from "@prisma/client";
 
 import type {
   AuditLogRecord,
   CounterpartyRecord,
   CounterpartyDealVersionAcceptanceRecord,
+  DealMilestoneReviewRecord,
   DealMilestoneSubmissionFileRecord,
   DealMilestoneSubmissionRecord,
   DealVersionAcceptanceRecord,
@@ -43,6 +45,7 @@ import type {
   AuditLogRepository,
   CounterpartyRepository,
   CounterpartyDealVersionAcceptanceRepository,
+  DealMilestoneReviewRepository,
   DealMilestoneSubmissionFileRepository,
   DealMilestoneSubmissionRepository,
   DealVersionAcceptanceRepository,
@@ -392,7 +395,10 @@ function mapDealMilestoneSubmissionRecord(record: {
   statementMarkdown: string;
   submissionNumber: number;
   submittedAt: Date;
-  submittedByUserId: string;
+  submittedByCounterpartyId: string | null;
+  submittedByPartyRole: PrismaDealPartyRole;
+  submittedByPartySubjectType: PrismaDealPartySubjectType;
+  submittedByUserId: string | null;
 }): DealMilestoneSubmissionRecord {
   return {
     dealVersionId: record.dealVersionId,
@@ -403,6 +409,9 @@ function mapDealMilestoneSubmissionRecord(record: {
     statementMarkdown: record.statementMarkdown,
     submissionNumber: record.submissionNumber,
     submittedAt: toRequiredIsoTimestamp(record.submittedAt),
+    submittedByCounterpartyId: record.submittedByCounterpartyId,
+    submittedByPartyRole: record.submittedByPartyRole,
+    submittedByPartySubjectType: record.submittedByPartySubjectType,
     submittedByUserId: record.submittedByUserId
   };
 }
@@ -418,6 +427,32 @@ function mapDealMilestoneSubmissionFileRecord(record: {
     dealMilestoneSubmissionId: record.dealMilestoneSubmissionId,
     fileId: record.fileId,
     id: record.id
+  };
+}
+
+function mapDealMilestoneReviewRecord(record: {
+  decision: PrismaMilestoneReviewDecision;
+  dealMilestoneSubmissionId: string;
+  dealVersionId: string;
+  dealVersionMilestoneId: string;
+  draftDealId: string;
+  id: string;
+  organizationId: string;
+  reviewedAt: Date;
+  reviewedByUserId: string;
+  statementMarkdown: string | null;
+}): DealMilestoneReviewRecord {
+  return {
+    decision: record.decision,
+    dealMilestoneSubmissionId: record.dealMilestoneSubmissionId,
+    dealVersionId: record.dealVersionId,
+    dealVersionMilestoneId: record.dealVersionMilestoneId,
+    draftDealId: record.draftDealId,
+    id: record.id,
+    organizationId: record.organizationId,
+    reviewedAt: toRequiredIsoTimestamp(record.reviewedAt),
+    reviewedByUserId: record.reviewedByUserId,
+    statementMarkdown: record.statementMarkdown
   };
 }
 
@@ -1270,6 +1305,9 @@ export class PrismaDealMilestoneSubmissionRepository
         statementMarkdown: record.statementMarkdown,
         submissionNumber: record.submissionNumber,
         submittedAt: toDate(record.submittedAt),
+        submittedByCounterpartyId: record.submittedByCounterpartyId,
+        submittedByPartyRole: record.submittedByPartyRole,
+        submittedByPartySubjectType: record.submittedByPartySubjectType,
         submittedByUserId: record.submittedByUserId
       }
     });
@@ -1305,6 +1343,58 @@ export class PrismaDealMilestoneSubmissionRepository
     });
 
     return records.map(mapDealMilestoneSubmissionRecord);
+  }
+}
+
+export class PrismaDealMilestoneReviewRepository
+  implements DealMilestoneReviewRepository
+{
+  constructor(private readonly prisma: PrismaClient) {}
+
+  async create(record: DealMilestoneReviewRecord): Promise<DealMilestoneReviewRecord> {
+    const created = await this.prisma.dealMilestoneReview.create({
+      data: {
+        decision: record.decision,
+        dealMilestoneSubmissionId: record.dealMilestoneSubmissionId,
+        dealVersionId: record.dealVersionId,
+        dealVersionMilestoneId: record.dealVersionMilestoneId,
+        draftDealId: record.draftDealId,
+        id: record.id,
+        organizationId: record.organizationId,
+        reviewedAt: toDate(record.reviewedAt),
+        reviewedByUserId: record.reviewedByUserId,
+        statementMarkdown: record.statementMarkdown
+      }
+    });
+
+    return mapDealMilestoneReviewRecord(created);
+  }
+
+  async findByDealMilestoneSubmissionId(
+    dealMilestoneSubmissionId: string
+  ): Promise<DealMilestoneReviewRecord | null> {
+    const record = await this.prisma.dealMilestoneReview.findUnique({
+      where: { dealMilestoneSubmissionId }
+    });
+
+    return record ? mapDealMilestoneReviewRecord(record) : null;
+  }
+
+  async findById(id: string): Promise<DealMilestoneReviewRecord | null> {
+    const record = await this.prisma.dealMilestoneReview.findUnique({
+      where: { id }
+    });
+
+    return record ? mapDealMilestoneReviewRecord(record) : null;
+  }
+
+  async listByDealVersionId(dealVersionId: string): Promise<DealMilestoneReviewRecord[]> {
+    const records = await this.prisma.dealMilestoneReview.findMany({
+      where: { dealVersionId },
+      orderBy: [{ reviewedAt: "asc" }, { id: "asc" }]
+    });
+
+    return records.map(mapDealMilestoneReviewRecord);
   }
 }
 
@@ -1893,6 +1983,7 @@ export class PrismaRelease1Repositories implements Release1Repositories {
   readonly auditLogs: AuditLogRepository;
   readonly counterparties: CounterpartyRepository;
   readonly counterpartyDealVersionAcceptances: CounterpartyDealVersionAcceptanceRepository;
+  readonly dealMilestoneReviews: DealMilestoneReviewRepository;
   readonly dealMilestoneSubmissionFiles: DealMilestoneSubmissionFileRepository;
   readonly dealMilestoneSubmissions: DealMilestoneSubmissionRepository;
   readonly dealVersionAcceptances: DealVersionAcceptanceRepository;
@@ -1918,6 +2009,7 @@ export class PrismaRelease1Repositories implements Release1Repositories {
     this.counterparties = new PrismaCounterpartyRepository(prisma);
     this.counterpartyDealVersionAcceptances =
       new PrismaCounterpartyDealVersionAcceptanceRepository(prisma);
+    this.dealMilestoneReviews = new PrismaDealMilestoneReviewRepository(prisma);
     this.dealMilestoneSubmissionFiles =
       new PrismaDealMilestoneSubmissionFileRepository(prisma);
     this.dealMilestoneSubmissions =

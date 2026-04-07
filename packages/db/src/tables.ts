@@ -13,6 +13,7 @@ export type Release1TableName =
   (typeof release1TableNames)[keyof typeof release1TableNames];
 
 export const release2TableNames = {
+  dealMilestoneReviews: "deal_milestone_reviews",
   counterparties: "counterparties",
   dealMilestoneSubmissionFiles: "deal_milestone_submission_files",
   dealMilestoneSubmissions: "deal_milestone_submissions",
