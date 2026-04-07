@@ -1010,6 +1010,114 @@ test("milestones service derives expired and late-reviewed deadline summaries", 
   );
 });
 
+test("milestones service lists grouped milestone timelines from immutable milestone records", async () => {
+  const services = createServices();
+  const actor = await seedAuthenticatedActor(
+    services.release1Repositories,
+    services.sessionTokenService
+  );
+  const seeded = await seedMilestoneScenario(services, actor, "BUYER");
+
+  await seedFile(services.release1Repositories, {
+    createdByUserId: actor.userId,
+    fileId: "file-1",
+    organizationId: "org-1"
+  });
+
+  const approvedSubmission = await seedCounterpartySellerSubmission(services, seeded, {
+    attachmentFileIds: ["file-1"],
+    dealVersionMilestoneId: seeded.version.version.milestones[0]!.id,
+    reviewDeadlineAt: "2026-04-08T00:00:00.000Z",
+    statementMarkdown: "Design milestone delivered.",
+    submittedAt: "2026-04-01T00:00:00.000Z",
+    submissionNumber: 1
+  });
+  const approvedReview = await seedMilestoneReview(
+    services,
+    seeded,
+    actor,
+    approvedSubmission.id,
+    {
+      dealVersionMilestoneId: seeded.version.version.milestones[0]!.id,
+      reviewedAt: "2026-04-02T00:00:00.000Z"
+    }
+  );
+  await services.release1Repositories.dealMilestoneSettlementRequests.create({
+    dealMilestoneReviewId: approvedReview.id,
+    dealMilestoneSubmissionId: approvedSubmission.id,
+    dealVersionId: seeded.version.version.id,
+    dealVersionMilestoneId: seeded.version.version.milestones[0]!.id,
+    draftDealId: seeded.draft.draft.id,
+    id: "settlement-request-1",
+    kind: "RELEASE",
+    organizationId: "org-1",
+    requestedAt: "2026-04-03T00:00:00.000Z",
+    requestedByUserId: actor.userId,
+    statementMarkdown: "Release approved milestone funds."
+  });
+
+  const expiredSubmission = await seedCounterpartySellerSubmission(services, seeded, {
+    dealVersionMilestoneId: seeded.version.version.milestones[1]!.id,
+    reviewDeadlineAt: "2026-04-04T00:00:00.000Z",
+    statementMarkdown: "Build milestone delivered.",
+    submittedAt: "2026-04-01T12:00:00.000Z",
+    submissionNumber: 1
+  });
+  await services.release1Repositories.dealMilestoneReviewDeadlineExpiries.create({
+    dealMilestoneSubmissionId: expiredSubmission.id,
+    dealVersionId: seeded.version.version.id,
+    dealVersionMilestoneId: seeded.version.version.milestones[1]!.id,
+    deadlineAt: "2026-04-04T00:00:00.000Z",
+    draftDealId: seeded.draft.draft.id,
+    expiredAt: "2026-04-04T00:00:00.000Z",
+    id: "deadline-expiry-1",
+    organizationId: "org-1"
+  });
+
+  const result = await services.milestonesService.listMilestoneTimelines(
+    {
+      dealVersionId: seeded.version.version.id,
+      draftDealId: seeded.draft.draft.id,
+      organizationId: "org-1"
+    },
+    requestMetadata(actor.cookieHeader)
+  );
+
+  assert.equal(result.milestones.length, 2);
+  assert.deepEqual(
+    result.milestones[0]?.events.map((event) => event.kind),
+    ["SUBMISSION_CREATED", "REVIEW_APPROVED", "RELEASE_REQUESTED"]
+  );
+  assert.equal(result.milestones[0]?.latestOccurredAt, "2026-04-03T00:00:00.000Z");
+  assert.equal(result.milestones[0]?.events[0]?.attachmentFiles[0]?.id, "file-1");
+  assert.equal(
+    result.milestones[0]?.events[0]?.submittedByPartySubjectType,
+    "COUNTERPARTY"
+  );
+  assert.equal(result.milestones[0]?.events[1]?.reviewDecision, "APPROVED");
+  assert.equal(result.milestones[0]?.events[1]?.reviewDeadline?.status, "REVIEWED_ON_TIME");
+  assert.equal(result.milestones[0]?.events[2]?.settlementKind, "RELEASE");
+  assert.equal(
+    result.milestones[0]?.events[2]?.statementMarkdown,
+    "Release approved milestone funds."
+  );
+
+  assert.deepEqual(
+    result.milestones[1]?.events.map((event) => event.kind),
+    ["SUBMISSION_CREATED", "REVIEW_DEADLINE_EXPIRED"]
+  );
+  assert.equal(result.milestones[1]?.latestOccurredAt, "2026-04-04T00:00:00.000Z");
+  assert.equal(
+    result.milestones[1]?.events[1]?.dealMilestoneSubmissionId,
+    expiredSubmission.id
+  );
+  assert.equal(result.milestones[1]?.events[1]?.reviewDeadline?.status, "EXPIRED");
+  assert.equal(
+    result.milestones[1]?.events[1]?.reviewDeadline?.expiredAt,
+    "2026-04-04T00:00:00.000Z"
+  );
+});
+
 test("milestones service requires buyer role for milestone reviews", async () => {
   const services = createServices();
   const actor = await seedAuthenticatedActor(

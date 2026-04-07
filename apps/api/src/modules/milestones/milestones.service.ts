@@ -38,11 +38,14 @@ import {
   type CreateDealMilestoneReviewResponse,
   type CreateDealMilestoneSettlementRequestResponse,
   type CreateDealMilestoneSubmissionResponse,
+  type DealMilestoneTimelineEvent,
   type DealMilestoneReviewSummary,
   type DealMilestoneSettlementRequestSummary,
   type DealMilestoneSubmissionSummary,
+  type DealVersionMilestoneTimeline,
   type DealVersionMilestoneSnapshot,
   type DealVersionMilestoneWorkflow,
+  type ListDealVersionMilestoneTimelinesResponse,
   type ListDealVersionMilestoneWorkflowsResponse,
   type MilestoneReviewDeadlineSummary,
   type MilestoneWorkflowState,
@@ -118,6 +121,21 @@ interface CounterpartyMilestoneSubmissionContext {
   versionSellerParty: DealVersionPartyRecord;
 }
 
+interface LoadedMilestoneVersionRecords {
+  deadlineExpiriesBySubmissionId: ReadonlyMap<
+    string,
+    DealMilestoneReviewDeadlineExpiryRecord
+  >;
+  evaluatedAt: string;
+  milestones: DealVersionMilestoneRecord[];
+  reviewsBySubmissionId: ReadonlyMap<string, DealMilestoneReviewRecord>;
+  settlementRequestsByReviewId: ReadonlyMap<
+    string,
+    DealMilestoneSettlementRequestRecord
+  >;
+  submissionsByMilestoneId: ReadonlyMap<string, DealMilestoneSubmissionRecord[]>;
+}
+
 function toMilestoneSnapshot(
   milestone: DealVersionMilestoneRecord
 ): DealVersionMilestoneSnapshot {
@@ -157,6 +175,30 @@ function isIsoTimestampAfter(left: string, right: string): boolean {
   return new Date(left).getTime() > new Date(right).getTime();
 }
 
+function compareIsoTimestamps(left: string, right: string): number {
+  return new Date(left).getTime() - new Date(right).getTime();
+}
+
+function compareTimelineEvents(
+  left: DealMilestoneTimelineEvent,
+  right: DealMilestoneTimelineEvent
+): number {
+  const priority: Record<DealMilestoneTimelineEvent["kind"], number> = {
+    REFUND_REQUESTED: 3,
+    RELEASE_REQUESTED: 3,
+    REVIEW_APPROVED: 1,
+    REVIEW_DEADLINE_EXPIRED: 2,
+    REVIEW_REJECTED: 1,
+    SUBMISSION_CREATED: 0
+  };
+
+  return (
+    compareIsoTimestamps(left.occurredAt, right.occurredAt) ||
+    priority[left.kind] - priority[right.kind] ||
+    left.id.localeCompare(right.id)
+  );
+}
+
 @Injectable()
 export class MilestonesService {
   constructor(
@@ -188,6 +230,28 @@ export class MilestonesService {
 
     return {
       milestones: await this.buildMilestoneWorkflows(access.version.id)
+    };
+  }
+
+  async listMilestoneTimelines(
+    input: unknown,
+    requestMetadata: RequestMetadata
+  ): Promise<ListDealVersionMilestoneTimelinesResponse> {
+    const parsed = dealVersionMilestoneWorkflowParamsSchema.safeParse(input);
+
+    if (!parsed.success) {
+      throw new BadRequestException(parsed.error.flatten());
+    }
+
+    const access = await this.requireWorkflowAccess(
+      parsed.data.organizationId,
+      parsed.data.draftDealId,
+      parsed.data.dealVersionId,
+      requestMetadata
+    );
+
+    return {
+      milestones: await this.buildMilestoneTimelines(access.version.id)
     };
   }
 
@@ -664,64 +728,36 @@ export class MilestonesService {
   private async buildMilestoneWorkflows(
     dealVersionId: string
   ): Promise<DealVersionMilestoneWorkflow[]> {
-    const [milestones, submissions, reviews, settlementRequests, deadlineExpiries] =
-      await Promise.all([
-      this.repositories.dealVersionMilestones.listByDealVersionId(dealVersionId),
-      this.repositories.dealMilestoneSubmissions.listByDealVersionId(dealVersionId),
-      this.repositories.dealMilestoneReviews.listByDealVersionId(dealVersionId),
-      this.repositories.dealMilestoneSettlementRequests.listByDealVersionId(
-        dealVersionId
-      ),
-      this.repositories.dealMilestoneReviewDeadlineExpiries.listByDealVersionId(
-        dealVersionId
-      )
-    ]);
-    const submissionsByMilestoneId = new Map<string, DealMilestoneSubmissionRecord[]>();
-    const reviewsBySubmissionId = new Map<string, DealMilestoneReviewRecord>();
-    const deadlineExpiriesBySubmissionId = new Map<
-      string,
-      DealMilestoneReviewDeadlineExpiryRecord
-    >();
-    const settlementRequestsByReviewId = new Map<
-      string,
-      DealMilestoneSettlementRequestRecord
-    >();
-    const evaluatedAt = new Date().toISOString();
-
-    for (const submission of submissions) {
-      const records =
-        submissionsByMilestoneId.get(submission.dealVersionMilestoneId) ?? [];
-      records.push(submission);
-      submissionsByMilestoneId.set(submission.dealVersionMilestoneId, records);
-    }
-
-    for (const review of reviews) {
-      reviewsBySubmissionId.set(review.dealMilestoneSubmissionId, review);
-    }
-
-    for (const deadlineExpiry of deadlineExpiries) {
-      deadlineExpiriesBySubmissionId.set(
-        deadlineExpiry.dealMilestoneSubmissionId,
-        deadlineExpiry
-      );
-    }
-
-    for (const settlementRequest of settlementRequests) {
-      settlementRequestsByReviewId.set(
-        settlementRequest.dealMilestoneReviewId,
-        settlementRequest
-      );
-    }
+    const records = await this.loadMilestoneVersionRecords(dealVersionId);
 
     return Promise.all(
-      milestones.map((milestone) =>
+      records.milestones.map((milestone) =>
         this.buildMilestoneWorkflow(
           milestone,
-          submissionsByMilestoneId.get(milestone.id) ?? [],
-          deadlineExpiriesBySubmissionId,
-          evaluatedAt,
-          reviewsBySubmissionId,
-          settlementRequestsByReviewId
+          records.submissionsByMilestoneId.get(milestone.id) ?? [],
+          records.deadlineExpiriesBySubmissionId,
+          records.evaluatedAt,
+          records.reviewsBySubmissionId,
+          records.settlementRequestsByReviewId
+        )
+      )
+    );
+  }
+
+  private async buildMilestoneTimelines(
+    dealVersionId: string
+  ): Promise<DealVersionMilestoneTimeline[]> {
+    const records = await this.loadMilestoneVersionRecords(dealVersionId);
+
+    return Promise.all(
+      records.milestones.map((milestone) =>
+        this.buildMilestoneTimeline(
+          milestone,
+          records.submissionsByMilestoneId.get(milestone.id) ?? [],
+          records.deadlineExpiriesBySubmissionId,
+          records.evaluatedAt,
+          records.reviewsBySubmissionId,
+          records.settlementRequestsByReviewId
         )
       )
     );
@@ -765,6 +801,109 @@ export class MilestonesService {
     };
   }
 
+  private async buildMilestoneTimeline(
+    milestone: DealVersionMilestoneRecord,
+    submissions: DealMilestoneSubmissionRecord[],
+    deadlineExpiriesBySubmissionId: ReadonlyMap<
+      string,
+      DealMilestoneReviewDeadlineExpiryRecord
+    >,
+    evaluatedAt: string,
+    reviewsBySubmissionId: ReadonlyMap<string, DealMilestoneReviewRecord>,
+    settlementRequestsByReviewId: ReadonlyMap<
+      string,
+      DealMilestoneSettlementRequestRecord
+    >
+  ): Promise<DealVersionMilestoneTimeline> {
+    const events = await Promise.all(
+      submissions.flatMap((submission) => {
+        const review = reviewsBySubmissionId.get(submission.id) ?? null;
+        const deadlineExpiry =
+          deadlineExpiriesBySubmissionId.get(submission.id) ?? null;
+        const settlementRequest = review
+          ? settlementRequestsByReviewId.get(review.id) ?? null
+          : null;
+
+        return [
+          this.toSubmissionTimelineEvent(
+            submission,
+            review,
+            deadlineExpiry,
+            evaluatedAt
+          ),
+          review
+            ? Promise.resolve(
+                this.toReviewTimelineEvent(
+                  submission,
+                  review,
+                  deadlineExpiry,
+                  evaluatedAt
+                )
+              )
+            : Promise.resolve(null),
+          deadlineExpiry
+            ? Promise.resolve(
+                this.toDeadlineExpiryTimelineEvent(
+                  submission,
+                  review,
+                  deadlineExpiry,
+                  evaluatedAt
+                )
+              )
+            : Promise.resolve(null),
+          settlementRequest && review
+            ? Promise.resolve(
+                this.toSettlementRequestTimelineEvent(
+                  submission,
+                  review,
+                  settlementRequest,
+                  deadlineExpiry,
+                  evaluatedAt
+                )
+              )
+            : Promise.resolve(null)
+        ];
+      })
+    ).then((records) =>
+      records.filter((event): event is DealMilestoneTimelineEvent => event !== null)
+    );
+
+    events.sort(compareTimelineEvents);
+
+    return {
+      events,
+      latestOccurredAt: events[events.length - 1]?.occurredAt ?? null,
+      milestone: toMilestoneSnapshot(milestone)
+    };
+  }
+
+  private async listSubmissionAttachmentFiles(
+    dealMilestoneSubmissionId: string
+  ): Promise<FileRecord[]> {
+    const fileLinks =
+      await this.repositories.dealMilestoneSubmissionFiles.listByDealMilestoneSubmissionId(
+        dealMilestoneSubmissionId
+      );
+
+    return Promise.all(fileLinks.map((link) => this.requireLinkedFile(link)));
+  }
+
+  private toFileSummaries(files: FileRecord[]): DealMilestoneSubmissionSummary["attachmentFiles"] {
+    return files.map((file) => ({
+      byteSize: file.byteSize,
+      category: file.category,
+      createdAt: file.createdAt,
+      createdByUserId: file.createdByUserId,
+      id: file.id,
+      mediaType: file.mediaType,
+      organizationId: file.organizationId,
+      originalFilename: file.originalFilename,
+      sha256Hex: file.sha256Hex,
+      storageKey: file.storageKey,
+      updatedAt: file.updatedAt
+    }));
+  }
+
   private async toSubmissionSummary(
     submission: DealMilestoneSubmissionRecord,
     deadlineExpiry: DealMilestoneReviewDeadlineExpiryRecord | null,
@@ -775,28 +914,10 @@ export class MilestonesService {
       DealMilestoneSettlementRequestRecord
     >
   ): Promise<DealMilestoneSubmissionSummary> {
-    const fileLinks =
-      await this.repositories.dealMilestoneSubmissionFiles.listByDealMilestoneSubmissionId(
-        submission.id
-      );
-    const attachmentFiles = await Promise.all(
-      fileLinks.map((link) => this.requireLinkedFile(link))
-    );
+    const attachmentFiles = await this.listSubmissionAttachmentFiles(submission.id);
 
     return {
-      attachmentFiles: attachmentFiles.map((file) => ({
-        byteSize: file.byteSize,
-        category: file.category,
-        createdAt: file.createdAt,
-        createdByUserId: file.createdByUserId,
-        id: file.id,
-        mediaType: file.mediaType,
-        organizationId: file.organizationId,
-        originalFilename: file.originalFilename,
-        sha256Hex: file.sha256Hex,
-        storageKey: file.storageKey,
-        updatedAt: file.updatedAt
-      })),
+      attachmentFiles: this.toFileSummaries(attachmentFiles),
       dealVersionId: submission.dealVersionId,
       dealVersionMilestoneId: submission.dealVersionMilestoneId,
       draftDealId: submission.draftDealId,
@@ -821,6 +942,42 @@ export class MilestonesService {
       submittedByPartyRole: submission.submittedByPartyRole,
       submittedByPartySubjectType: submission.submittedByPartySubjectType,
       submittedByUserId: submission.submittedByUserId
+    };
+  }
+
+  private async toSubmissionTimelineEvent(
+    submission: DealMilestoneSubmissionRecord,
+    review: DealMilestoneReviewRecord | null,
+    deadlineExpiry: DealMilestoneReviewDeadlineExpiryRecord | null,
+    evaluatedAt: string
+  ): Promise<DealMilestoneTimelineEvent> {
+    const attachmentFiles = await this.listSubmissionAttachmentFiles(submission.id);
+
+    return {
+      actorUserId: submission.submittedByUserId,
+      attachmentFiles: this.toFileSummaries(attachmentFiles),
+      dealMilestoneReviewId: null,
+      dealMilestoneSettlementRequestId: null,
+      dealMilestoneSubmissionId: submission.id,
+      dealVersionId: submission.dealVersionId,
+      dealVersionMilestoneId: submission.dealVersionMilestoneId,
+      draftDealId: submission.draftDealId,
+      id: submission.id,
+      kind: "SUBMISSION_CREATED",
+      occurredAt: submission.submittedAt,
+      organizationId: submission.organizationId,
+      reviewDeadline: this.toReviewDeadlineSummary(
+        submission,
+        review,
+        deadlineExpiry,
+        evaluatedAt
+      ),
+      reviewDecision: null,
+      settlementKind: null,
+      statementMarkdown: submission.statementMarkdown,
+      submittedByCounterpartyId: submission.submittedByCounterpartyId,
+      submittedByPartyRole: submission.submittedByPartyRole,
+      submittedByPartySubjectType: submission.submittedByPartySubjectType
     };
   }
 
@@ -863,6 +1020,113 @@ export class MilestonesService {
     };
   }
 
+  private toReviewTimelineEvent(
+    submission: DealMilestoneSubmissionRecord,
+    review: DealMilestoneReviewRecord,
+    deadlineExpiry: DealMilestoneReviewDeadlineExpiryRecord | null,
+    evaluatedAt: string
+  ): DealMilestoneTimelineEvent {
+    return {
+      actorUserId: review.reviewedByUserId,
+      attachmentFiles: [],
+      dealMilestoneReviewId: review.id,
+      dealMilestoneSettlementRequestId: null,
+      dealMilestoneSubmissionId: submission.id,
+      dealVersionId: review.dealVersionId,
+      dealVersionMilestoneId: review.dealVersionMilestoneId,
+      draftDealId: review.draftDealId,
+      id: review.id,
+      kind:
+        review.decision === "APPROVED" ? "REVIEW_APPROVED" : "REVIEW_REJECTED",
+      occurredAt: review.reviewedAt,
+      organizationId: review.organizationId,
+      reviewDeadline: this.toReviewDeadlineSummary(
+        submission,
+        review,
+        deadlineExpiry,
+        evaluatedAt
+      ),
+      reviewDecision: review.decision,
+      settlementKind: null,
+      statementMarkdown: review.statementMarkdown,
+      submittedByCounterpartyId: null,
+      submittedByPartyRole: null,
+      submittedByPartySubjectType: null
+    };
+  }
+
+  private toDeadlineExpiryTimelineEvent(
+    submission: DealMilestoneSubmissionRecord,
+    review: DealMilestoneReviewRecord | null,
+    deadlineExpiry: DealMilestoneReviewDeadlineExpiryRecord,
+    evaluatedAt: string
+  ): DealMilestoneTimelineEvent {
+    return {
+      actorUserId: null,
+      attachmentFiles: [],
+      dealMilestoneReviewId: review?.id ?? null,
+      dealMilestoneSettlementRequestId: null,
+      dealMilestoneSubmissionId: submission.id,
+      dealVersionId: deadlineExpiry.dealVersionId,
+      dealVersionMilestoneId: deadlineExpiry.dealVersionMilestoneId,
+      draftDealId: deadlineExpiry.draftDealId,
+      id: deadlineExpiry.id,
+      kind: "REVIEW_DEADLINE_EXPIRED",
+      occurredAt: deadlineExpiry.expiredAt,
+      organizationId: deadlineExpiry.organizationId,
+      reviewDeadline: this.toReviewDeadlineSummary(
+        submission,
+        review,
+        deadlineExpiry,
+        evaluatedAt
+      ),
+      reviewDecision: review?.decision ?? null,
+      settlementKind: null,
+      statementMarkdown: null,
+      submittedByCounterpartyId: null,
+      submittedByPartyRole: null,
+      submittedByPartySubjectType: null
+    };
+  }
+
+  private toSettlementRequestTimelineEvent(
+    submission: DealMilestoneSubmissionRecord,
+    review: DealMilestoneReviewRecord,
+    settlementRequest: DealMilestoneSettlementRequestRecord,
+    deadlineExpiry: DealMilestoneReviewDeadlineExpiryRecord | null,
+    evaluatedAt: string
+  ): DealMilestoneTimelineEvent {
+    return {
+      actorUserId: settlementRequest.requestedByUserId,
+      attachmentFiles: [],
+      dealMilestoneReviewId: settlementRequest.dealMilestoneReviewId,
+      dealMilestoneSettlementRequestId: settlementRequest.id,
+      dealMilestoneSubmissionId: settlementRequest.dealMilestoneSubmissionId,
+      dealVersionId: settlementRequest.dealVersionId,
+      dealVersionMilestoneId: settlementRequest.dealVersionMilestoneId,
+      draftDealId: settlementRequest.draftDealId,
+      id: settlementRequest.id,
+      kind:
+        settlementRequest.kind === "RELEASE"
+          ? "RELEASE_REQUESTED"
+          : "REFUND_REQUESTED",
+      occurredAt: settlementRequest.requestedAt,
+      organizationId: settlementRequest.organizationId,
+      reviewDeadline: this.toReviewDeadlineSummary(
+        submission,
+        review,
+        deadlineExpiry,
+        evaluatedAt
+      ),
+      reviewDecision: review.decision,
+      settlementKind: settlementRequest.kind,
+      statementMarkdown: settlementRequest.statementMarkdown,
+      submittedByCounterpartyId: null,
+      submittedByPartyRole: null,
+      submittedByPartySubjectType: null
+    };
+  }
+
   private toReviewDeadlineSummary(
     submission: DealMilestoneSubmissionRecord,
     review: DealMilestoneReviewRecord | null,
@@ -897,6 +1161,67 @@ export class MilestonesService {
       deadlineAt: submission.reviewDeadlineAt,
       expiredAt: null,
       status: "OPEN"
+    };
+  }
+
+  private async loadMilestoneVersionRecords(
+    dealVersionId: string
+  ): Promise<LoadedMilestoneVersionRecords> {
+    const [milestones, submissions, reviews, settlementRequests, deadlineExpiries] =
+      await Promise.all([
+        this.repositories.dealVersionMilestones.listByDealVersionId(dealVersionId),
+        this.repositories.dealMilestoneSubmissions.listByDealVersionId(dealVersionId),
+        this.repositories.dealMilestoneReviews.listByDealVersionId(dealVersionId),
+        this.repositories.dealMilestoneSettlementRequests.listByDealVersionId(
+          dealVersionId
+        ),
+        this.repositories.dealMilestoneReviewDeadlineExpiries.listByDealVersionId(
+          dealVersionId
+        )
+      ]);
+    const submissionsByMilestoneId = new Map<string, DealMilestoneSubmissionRecord[]>();
+    const reviewsBySubmissionId = new Map<string, DealMilestoneReviewRecord>();
+    const deadlineExpiriesBySubmissionId = new Map<
+      string,
+      DealMilestoneReviewDeadlineExpiryRecord
+    >();
+    const settlementRequestsByReviewId = new Map<
+      string,
+      DealMilestoneSettlementRequestRecord
+    >();
+
+    for (const submission of submissions) {
+      const records =
+        submissionsByMilestoneId.get(submission.dealVersionMilestoneId) ?? [];
+      records.push(submission);
+      submissionsByMilestoneId.set(submission.dealVersionMilestoneId, records);
+    }
+
+    for (const review of reviews) {
+      reviewsBySubmissionId.set(review.dealMilestoneSubmissionId, review);
+    }
+
+    for (const deadlineExpiry of deadlineExpiries) {
+      deadlineExpiriesBySubmissionId.set(
+        deadlineExpiry.dealMilestoneSubmissionId,
+        deadlineExpiry
+      );
+    }
+
+    for (const settlementRequest of settlementRequests) {
+      settlementRequestsByReviewId.set(
+        settlementRequest.dealMilestoneReviewId,
+        settlementRequest
+      );
+    }
+
+    return {
+      deadlineExpiriesBySubmissionId,
+      evaluatedAt: new Date().toISOString(),
+      milestones,
+      reviewsBySubmissionId,
+      settlementRequestsByReviewId,
+      submissionsByMilestoneId
     };
   }
 

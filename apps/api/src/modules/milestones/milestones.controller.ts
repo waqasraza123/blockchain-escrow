@@ -4,6 +4,7 @@ import type {
   CreateDealMilestoneReviewResponse,
   CreateDealMilestoneSettlementRequestResponse,
   CreateDealMilestoneSubmissionResponse,
+  ListDealVersionMilestoneTimelinesResponse,
   ListDealVersionMilestoneWorkflowsResponse,
   PrepareCounterpartyDealMilestoneSubmissionResponse
 } from "@blockchain-escrow/shared";
@@ -23,6 +24,19 @@ export class MilestonesController {
     @Req() request: HttpRequestLike
   ): Promise<ListDealVersionMilestoneWorkflowsResponse> {
     return this.milestonesService.listMilestoneWorkflows(
+      { dealVersionId, draftDealId, organizationId },
+      readRequestMetadata(request)
+    );
+  }
+
+  @Get("milestones/timeline")
+  async listMilestoneTimeline(
+    @Param("organizationId") organizationId: string,
+    @Param("draftDealId") draftDealId: string,
+    @Param("dealVersionId") dealVersionId: string,
+    @Req() request: HttpRequestLike
+  ): Promise<ListDealVersionMilestoneTimelinesResponse> {
+    return this.milestonesService.listMilestoneTimelines(
       { dealVersionId, draftDealId, organizationId },
       readRequestMetadata(request)
     );

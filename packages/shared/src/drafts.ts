@@ -202,6 +202,18 @@ export type MilestoneReviewDeadlineStatus = z.infer<
   typeof milestoneReviewDeadlineStatusSchema
 >;
 
+export const milestoneTimelineEventKindSchema = z.enum([
+  "SUBMISSION_CREATED",
+  "REVIEW_APPROVED",
+  "REVIEW_REJECTED",
+  "REVIEW_DEADLINE_EXPIRED",
+  "RELEASE_REQUESTED",
+  "REFUND_REQUESTED"
+]);
+export type MilestoneTimelineEventKind = z.infer<
+  typeof milestoneTimelineEventKindSchema
+>;
+
 export const milestoneSubmissionParamsSchema = z.object({
   dealVersionId: z.string().trim().min(1),
   dealVersionMilestoneId: z.string().trim().min(1),
@@ -359,6 +371,38 @@ export interface DealVersionMilestoneWorkflow {
 
 export interface ListDealVersionMilestoneWorkflowsResponse {
   milestones: DealVersionMilestoneWorkflow[];
+}
+
+export interface DealMilestoneTimelineEvent {
+  actorUserId: EntityId | null;
+  attachmentFiles: FileSummary[];
+  dealMilestoneReviewId: EntityId | null;
+  dealMilestoneSettlementRequestId: EntityId | null;
+  dealMilestoneSubmissionId: EntityId | null;
+  dealVersionId: EntityId;
+  dealVersionMilestoneId: EntityId;
+  draftDealId: EntityId;
+  id: EntityId;
+  kind: MilestoneTimelineEventKind;
+  occurredAt: IsoTimestamp;
+  organizationId: EntityId;
+  reviewDeadline: MilestoneReviewDeadlineSummary | null;
+  reviewDecision: MilestoneReviewDecision | null;
+  settlementKind: MilestoneSettlementRequestKind | null;
+  statementMarkdown: string | null;
+  submittedByCounterpartyId: EntityId | null;
+  submittedByPartyRole: DealPartyRole | null;
+  submittedByPartySubjectType: DealPartySubjectType | null;
+}
+
+export interface DealVersionMilestoneTimeline {
+  latestOccurredAt: IsoTimestamp | null;
+  milestone: DealVersionMilestoneSnapshot;
+  events: DealMilestoneTimelineEvent[];
+}
+
+export interface ListDealVersionMilestoneTimelinesResponse {
+  milestones: DealVersionMilestoneTimeline[];
 }
 
 export interface CreateDealMilestoneSubmissionResponse {
