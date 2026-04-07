@@ -13,6 +13,7 @@ import type {
   IndexedEventName,
   IsoTimestamp,
   JsonObject,
+  MilestoneSettlementRequestKind,
   OrganizationInviteStatus,
   OrganizationRole,
   SessionStatus,
@@ -237,6 +238,20 @@ export interface DealMilestoneReviewRecord {
   organizationId: EntityId;
   reviewedAt: IsoTimestamp;
   reviewedByUserId: EntityId;
+  statementMarkdown: string | null;
+}
+
+export interface DealMilestoneSettlementRequestRecord {
+  dealMilestoneReviewId: EntityId;
+  dealMilestoneSubmissionId: EntityId;
+  dealVersionId: EntityId;
+  dealVersionMilestoneId: EntityId;
+  draftDealId: EntityId;
+  id: EntityId;
+  kind: MilestoneSettlementRequestKind;
+  organizationId: EntityId;
+  requestedAt: IsoTimestamp;
+  requestedByUserId: EntityId;
   statementMarkdown: string | null;
 }
 

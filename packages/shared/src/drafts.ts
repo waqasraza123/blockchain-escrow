@@ -186,6 +186,11 @@ export type MilestoneWorkflowState = z.infer<typeof milestoneWorkflowStateSchema
 export const milestoneReviewDecisionSchema = z.enum(["APPROVED", "REJECTED"]);
 export type MilestoneReviewDecision = z.infer<typeof milestoneReviewDecisionSchema>;
 
+export const milestoneSettlementRequestKindSchema = z.enum(["RELEASE", "REFUND"]);
+export type MilestoneSettlementRequestKind = z.infer<
+  typeof milestoneSettlementRequestKindSchema
+>;
+
 export const milestoneSubmissionParamsSchema = z.object({
   dealVersionId: z.string().trim().min(1),
   dealVersionMilestoneId: z.string().trim().min(1),
@@ -222,6 +227,18 @@ export const milestoneReviewParamsSchema = z.object({
 });
 export type MilestoneReviewParams = z.infer<typeof milestoneReviewParamsSchema>;
 
+export const milestoneSettlementRequestParamsSchema = z.object({
+  dealMilestoneReviewId: z.string().trim().min(1),
+  dealMilestoneSubmissionId: z.string().trim().min(1),
+  dealVersionId: z.string().trim().min(1),
+  dealVersionMilestoneId: z.string().trim().min(1),
+  draftDealId: z.string().trim().min(1),
+  organizationId: z.string().trim().min(1)
+});
+export type MilestoneSettlementRequestParams = z.infer<
+  typeof milestoneSettlementRequestParamsSchema
+>;
+
 export const createMilestoneReviewSchema = z
   .object({
     decision: milestoneReviewDecisionSchema,
@@ -240,6 +257,28 @@ export type CreateMilestoneReviewInput = z.infer<
   typeof createMilestoneReviewSchema
 >;
 
+export const createMilestoneSettlementRequestSchema = z.object({
+  kind: milestoneSettlementRequestKindSchema,
+  statementMarkdown: z.string().trim().min(1).max(10000).optional()
+});
+export type CreateMilestoneSettlementRequestInput = z.infer<
+  typeof createMilestoneSettlementRequestSchema
+>;
+
+export interface DealMilestoneSettlementRequestSummary {
+  dealMilestoneReviewId: EntityId;
+  dealMilestoneSubmissionId: EntityId;
+  dealVersionId: EntityId;
+  dealVersionMilestoneId: EntityId;
+  draftDealId: EntityId;
+  id: EntityId;
+  kind: MilestoneSettlementRequestKind;
+  organizationId: EntityId;
+  requestedAt: IsoTimestamp;
+  requestedByUserId: EntityId;
+  statementMarkdown: string | null;
+}
+
 export interface DealMilestoneReviewSummary {
   decision: MilestoneReviewDecision;
   dealMilestoneSubmissionId: EntityId;
@@ -250,6 +289,7 @@ export interface DealMilestoneReviewSummary {
   organizationId: EntityId;
   reviewedAt: IsoTimestamp;
   reviewedByUserId: EntityId;
+  settlementRequest: DealMilestoneSettlementRequestSummary | null;
   statementMarkdown: string | null;
 }
 
@@ -290,6 +330,11 @@ export interface CreateDealMilestoneSubmissionResponse {
 export interface CreateDealMilestoneReviewResponse {
   milestone: DealVersionMilestoneWorkflow;
   review: DealMilestoneReviewSummary;
+}
+
+export interface CreateDealMilestoneSettlementRequestResponse {
+  milestone: DealVersionMilestoneWorkflow;
+  settlementRequest: DealMilestoneSettlementRequestSummary;
 }
 
 export interface DealVersionDetail extends DealVersionSummary {

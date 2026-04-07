@@ -6,6 +6,7 @@ import {
 } from "@blockchain-escrow/contracts-sdk";
 import type {
   DealMilestoneReviewRecord,
+  DealMilestoneSettlementRequestRecord,
   DealMilestoneSubmissionFileRecord,
   DealMilestoneSubmissionRecord,
   DealVersionMilestoneRecord,
@@ -22,13 +23,17 @@ import type {
 import { hasMinimumOrganizationRole } from "@blockchain-escrow/security";
 import {
   createMilestoneReviewSchema,
+  createMilestoneSettlementRequestSchema,
   createMilestoneSubmissionSchema,
   dealVersionMilestoneWorkflowParamsSchema,
   milestoneReviewParamsSchema,
+  milestoneSettlementRequestParamsSchema,
   milestoneSubmissionParamsSchema,
   type CreateDealMilestoneReviewResponse,
+  type CreateDealMilestoneSettlementRequestResponse,
   type CreateDealMilestoneSubmissionResponse,
   type DealMilestoneReviewSummary,
+  type DealMilestoneSettlementRequestSummary,
   type DealMilestoneSubmissionSummary,
   type DealVersionMilestoneSnapshot,
   type DealVersionMilestoneWorkflow,
@@ -74,6 +79,11 @@ interface MilestoneReviewAccessContext extends MilestoneAccessContext {
   latestSubmission: DealMilestoneSubmissionRecord;
   review: DealMilestoneReviewRecord | null;
   submission: DealMilestoneSubmissionRecord;
+}
+
+interface MilestoneSettlementRequestAccessContext
+  extends MilestoneReviewAccessContext {
+  settlementRequest: DealMilestoneSettlementRequestRecord | null;
 }
 
 function toMilestoneSnapshot(
@@ -333,16 +343,141 @@ export class MilestonesService {
     };
   }
 
+  async createMilestoneSettlementRequest(
+    paramsInput: unknown,
+    bodyInput: unknown,
+    requestMetadata: RequestMetadata
+  ): Promise<CreateDealMilestoneSettlementRequestResponse> {
+    const parsedParams =
+      milestoneSettlementRequestParamsSchema.safeParse(paramsInput);
+    const parsedBody =
+      createMilestoneSettlementRequestSchema.safeParse(bodyInput);
+
+    if (!parsedParams.success) {
+      throw new BadRequestException(parsedParams.error.flatten());
+    }
+
+    if (!parsedBody.success) {
+      throw new BadRequestException(parsedBody.error.flatten());
+    }
+
+    const access = await this.requireMilestoneSettlementRequestAccess(
+      parsedParams.data.organizationId,
+      parsedParams.data.draftDealId,
+      parsedParams.data.dealVersionId,
+      parsedParams.data.dealVersionMilestoneId,
+      parsedParams.data.dealMilestoneSubmissionId,
+      parsedParams.data.dealMilestoneReviewId,
+      requestMetadata
+    );
+
+    if (access.organizationParty.role !== "BUYER") {
+      throw new ForbiddenException("buyer organization party is required");
+    }
+
+    this.assertEscrowIsActive(access.draft, access.linkedAgreement);
+
+    if (access.latestSubmission.id !== access.submission.id) {
+      throw new ConflictException(
+        "only latest reviewed milestone submission can request settlement"
+      );
+    }
+
+    if (!access.review) {
+      throw new NotFoundException("deal milestone review not found");
+    }
+
+    if (access.review.id !== parsedParams.data.dealMilestoneReviewId) {
+      throw new NotFoundException("deal milestone review not found");
+    }
+
+    if (access.settlementRequest) {
+      throw new ConflictException("milestone review already has a settlement request");
+    }
+
+    if (access.submission.submittedByPartyRole !== "SELLER") {
+      throw new ConflictException("milestone submission must originate from the seller party");
+    }
+
+    if (!this.doesSubmissionMatchSellerParty(access.submission, access.sellerParty)) {
+      throw new ConflictException("milestone submission origin does not match seller party");
+    }
+
+    this.assertSettlementKindMatchesReviewDecision(
+      parsedBody.data.kind,
+      access.review.decision
+    );
+
+    const now = new Date().toISOString();
+    const settlementRequest =
+      await this.repositories.dealMilestoneSettlementRequests.create({
+        dealMilestoneReviewId: access.review.id,
+        dealMilestoneSubmissionId: access.submission.id,
+        dealVersionId: access.version.id,
+        dealVersionMilestoneId: access.milestone.id,
+        draftDealId: access.draft.id,
+        id: randomUUID(),
+        kind: parsedBody.data.kind,
+        organizationId: access.organization.id,
+        requestedAt: now,
+        requestedByUserId: access.actor.user.id,
+        statementMarkdown: parsedBody.data.statementMarkdown ?? null
+      });
+
+    await this.repositories.auditLogs.append({
+      action:
+        settlementRequest.kind === "RELEASE"
+          ? "DEAL_MILESTONE_RELEASE_REQUESTED"
+          : "DEAL_MILESTONE_REFUND_REQUESTED",
+      actorUserId: access.actor.user.id,
+      entityId: settlementRequest.id,
+      entityType: "DEAL_MILESTONE_SETTLEMENT_REQUEST",
+      id: randomUUID(),
+      ipAddress: requestMetadata.ipAddress,
+      metadata: {
+        dealMilestoneReviewId: settlementRequest.dealMilestoneReviewId,
+        dealMilestoneSubmissionId: settlementRequest.dealMilestoneSubmissionId,
+        dealVersionId: settlementRequest.dealVersionId,
+        dealVersionMilestoneId: settlementRequest.dealVersionMilestoneId,
+        draftDealId: settlementRequest.draftDealId,
+        kind: settlementRequest.kind
+      },
+      occurredAt: now,
+      organizationId: access.organization.id,
+      userAgent: requestMetadata.userAgent
+    });
+
+    const milestone = await this.buildMilestoneWorkflows(access.version.id).then(
+      (milestones) => milestones.find((record) => record.milestone.id === access.milestone.id)
+    );
+
+    if (!milestone) {
+      throw new NotFoundException("milestone workflow not found");
+    }
+
+    return {
+      milestone,
+      settlementRequest: this.toSettlementRequestSummary(settlementRequest)
+    };
+  }
+
   private async buildMilestoneWorkflows(
     dealVersionId: string
   ): Promise<DealVersionMilestoneWorkflow[]> {
-    const [milestones, submissions, reviews] = await Promise.all([
+    const [milestones, submissions, reviews, settlementRequests] = await Promise.all([
       this.repositories.dealVersionMilestones.listByDealVersionId(dealVersionId),
       this.repositories.dealMilestoneSubmissions.listByDealVersionId(dealVersionId),
-      this.repositories.dealMilestoneReviews.listByDealVersionId(dealVersionId)
+      this.repositories.dealMilestoneReviews.listByDealVersionId(dealVersionId),
+      this.repositories.dealMilestoneSettlementRequests.listByDealVersionId(
+        dealVersionId
+      )
     ]);
     const submissionsByMilestoneId = new Map<string, DealMilestoneSubmissionRecord[]>();
     const reviewsBySubmissionId = new Map<string, DealMilestoneReviewRecord>();
+    const settlementRequestsByReviewId = new Map<
+      string,
+      DealMilestoneSettlementRequestRecord
+    >();
 
     for (const submission of submissions) {
       const records =
@@ -355,12 +490,20 @@ export class MilestonesService {
       reviewsBySubmissionId.set(review.dealMilestoneSubmissionId, review);
     }
 
+    for (const settlementRequest of settlementRequests) {
+      settlementRequestsByReviewId.set(
+        settlementRequest.dealMilestoneReviewId,
+        settlementRequest
+      );
+    }
+
     return Promise.all(
       milestones.map((milestone) =>
         this.buildMilestoneWorkflow(
           milestone,
           submissionsByMilestoneId.get(milestone.id) ?? [],
-          reviewsBySubmissionId
+          reviewsBySubmissionId,
+          settlementRequestsByReviewId
         )
       )
     );
@@ -369,13 +512,18 @@ export class MilestonesService {
   private async buildMilestoneWorkflow(
     milestone: DealVersionMilestoneRecord,
     submissions: DealMilestoneSubmissionRecord[],
-    reviewsBySubmissionId: ReadonlyMap<string, DealMilestoneReviewRecord>
+    reviewsBySubmissionId: ReadonlyMap<string, DealMilestoneReviewRecord>,
+    settlementRequestsByReviewId: ReadonlyMap<
+      string,
+      DealMilestoneSettlementRequestRecord
+    >
   ): Promise<DealVersionMilestoneWorkflow> {
     const submissionSummaries = await Promise.all(
       submissions.map((submission) =>
         this.toSubmissionSummary(
           submission,
-          reviewsBySubmissionId.get(submission.id) ?? null
+          reviewsBySubmissionId.get(submission.id) ?? null,
+          settlementRequestsByReviewId
         )
       )
     );
@@ -393,7 +541,11 @@ export class MilestonesService {
 
   private async toSubmissionSummary(
     submission: DealMilestoneSubmissionRecord,
-    review: DealMilestoneReviewRecord | null
+    review: DealMilestoneReviewRecord | null,
+    settlementRequestsByReviewId: ReadonlyMap<
+      string,
+      DealMilestoneSettlementRequestRecord
+    >
   ): Promise<DealMilestoneSubmissionSummary> {
     const fileLinks =
       await this.repositories.dealMilestoneSubmissionFiles.listByDealMilestoneSubmissionId(
@@ -422,7 +574,12 @@ export class MilestonesService {
       draftDealId: submission.draftDealId,
       id: submission.id,
       organizationId: submission.organizationId,
-      review: review ? this.toReviewSummary(review) : null,
+      review: review
+        ? this.toReviewSummary(
+            review,
+            settlementRequestsByReviewId.get(review.id) ?? null
+          )
+        : null,
       statementMarkdown: submission.statementMarkdown,
       submissionNumber: submission.submissionNumber,
       submittedAt: submission.submittedAt,
@@ -434,7 +591,8 @@ export class MilestonesService {
   }
 
   private toReviewSummary(
-    review: DealMilestoneReviewRecord
+    review: DealMilestoneReviewRecord,
+    settlementRequest: DealMilestoneSettlementRequestRecord | null = null
   ): DealMilestoneReviewSummary {
     return {
       decision: review.decision,
@@ -446,7 +604,28 @@ export class MilestonesService {
       organizationId: review.organizationId,
       reviewedAt: review.reviewedAt,
       reviewedByUserId: review.reviewedByUserId,
+      settlementRequest: settlementRequest
+        ? this.toSettlementRequestSummary(settlementRequest)
+        : null,
       statementMarkdown: review.statementMarkdown
+    };
+  }
+
+  private toSettlementRequestSummary(
+    settlementRequest: DealMilestoneSettlementRequestRecord
+  ): DealMilestoneSettlementRequestSummary {
+    return {
+      dealMilestoneReviewId: settlementRequest.dealMilestoneReviewId,
+      dealMilestoneSubmissionId: settlementRequest.dealMilestoneSubmissionId,
+      dealVersionId: settlementRequest.dealVersionId,
+      dealVersionMilestoneId: settlementRequest.dealVersionMilestoneId,
+      draftDealId: settlementRequest.draftDealId,
+      id: settlementRequest.id,
+      kind: settlementRequest.kind,
+      organizationId: settlementRequest.organizationId,
+      requestedAt: settlementRequest.requestedAt,
+      requestedByUserId: settlementRequest.requestedByUserId,
+      statementMarkdown: settlementRequest.statementMarkdown
     };
   }
 
@@ -615,6 +794,38 @@ export class MilestonesService {
     };
   }
 
+  private async requireMilestoneSettlementRequestAccess(
+    organizationId: string,
+    draftDealId: string,
+    dealVersionId: string,
+    dealVersionMilestoneId: string,
+    dealMilestoneSubmissionId: string,
+    dealMilestoneReviewId: string,
+    requestMetadata: RequestMetadata
+  ): Promise<MilestoneSettlementRequestAccessContext> {
+    const access = await this.requireMilestoneReviewAccess(
+      organizationId,
+      draftDealId,
+      dealVersionId,
+      dealVersionMilestoneId,
+      dealMilestoneSubmissionId,
+      requestMetadata
+    );
+    const settlementRequest =
+      await this.repositories.dealMilestoneSettlementRequests.findByDealMilestoneReviewId(
+        dealMilestoneReviewId
+      );
+
+    if (access.review && access.review.id !== dealMilestoneReviewId) {
+      throw new NotFoundException("deal milestone review not found");
+    }
+
+    return {
+      ...access,
+      settlementRequest
+    };
+  }
+
   private assertEscrowIsActive(
     draft: DraftDealRecord,
     linkedAgreement: EscrowAgreementRecord | null
@@ -651,6 +862,19 @@ export class MilestonesService {
     }
 
     return submission.submittedByCounterpartyId === null;
+  }
+
+  private assertSettlementKindMatchesReviewDecision(
+    kind: DealMilestoneSettlementRequestSummary["kind"],
+    decision: DealMilestoneReviewSummary["decision"]
+  ): void {
+    if (decision === "APPROVED" && kind !== "RELEASE") {
+      throw new ConflictException("approved milestone reviews require release requests");
+    }
+
+    if (decision === "REJECTED" && kind !== "REFUND") {
+      throw new ConflictException("rejected milestone reviews require refund requests");
+    }
   }
 
   private async findLinkedAgreementForDraft(

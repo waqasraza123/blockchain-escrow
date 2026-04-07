@@ -3,6 +3,7 @@ import type {
   CounterpartyRecord,
   CounterpartyDealVersionAcceptanceRecord,
   DealMilestoneReviewRecord,
+  DealMilestoneSettlementRequestRecord,
   DealMilestoneSubmissionFileRecord,
   DealMilestoneSubmissionRecord,
   DealVersionAcceptanceRecord,
@@ -34,6 +35,7 @@ export class InMemoryRelease1Repositories implements Release1Repositories {
   readonly counterpartyRecords: CounterpartyRecord[] = [];
   readonly counterpartyDealVersionAcceptanceRecords: CounterpartyDealVersionAcceptanceRecord[] = [];
   readonly dealMilestoneReviewRecords: DealMilestoneReviewRecord[] = [];
+  readonly dealMilestoneSettlementRequestRecords: DealMilestoneSettlementRequestRecord[] = [];
   readonly dealMilestoneSubmissionFileRecords: DealMilestoneSubmissionFileRecord[] = [];
   readonly dealMilestoneSubmissionRecords: DealMilestoneSubmissionRecord[] = [];
   readonly dealVersionAcceptanceRecords: DealVersionAcceptanceRecord[] = [];
@@ -321,6 +323,32 @@ export class InMemoryRelease1Repositories implements Release1Repositories {
       this.dealMilestoneReviewRecords
         .filter((record) => record.dealVersionId === dealVersionId)
         .sort((left, right) => compareIsoTimestamps(left.reviewedAt, right.reviewedAt))
+  };
+
+  readonly dealMilestoneSettlementRequests = {
+    create: async (
+      record: DealMilestoneSettlementRequestRecord
+    ): Promise<DealMilestoneSettlementRequestRecord> => {
+      this.dealMilestoneSettlementRequestRecords.push(record);
+      return record;
+    },
+    findByDealMilestoneReviewId: async (
+      dealMilestoneReviewId: string
+    ): Promise<DealMilestoneSettlementRequestRecord | null> =>
+      this.dealMilestoneSettlementRequestRecords.find(
+        (record) => record.dealMilestoneReviewId === dealMilestoneReviewId
+      ) ?? null,
+    findById: async (
+      id: string
+    ): Promise<DealMilestoneSettlementRequestRecord | null> =>
+      this.dealMilestoneSettlementRequestRecords.find((record) => record.id === id) ??
+      null,
+    listByDealVersionId: async (
+      dealVersionId: string
+    ): Promise<DealMilestoneSettlementRequestRecord[]> =>
+      this.dealMilestoneSettlementRequestRecords
+        .filter((record) => record.dealVersionId === dealVersionId)
+        .sort((left, right) => compareIsoTimestamps(left.requestedAt, right.requestedAt))
   };
 
   readonly dealMilestoneSubmissionFiles = {

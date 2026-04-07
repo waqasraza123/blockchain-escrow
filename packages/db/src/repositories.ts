@@ -14,6 +14,7 @@ import type {
   CounterpartyRecord,
   CounterpartyDealVersionAcceptanceRecord,
   DealMilestoneReviewRecord,
+  DealMilestoneSettlementRequestRecord,
   DealMilestoneSubmissionFileRecord,
   DealMilestoneSubmissionRecord,
   DealVersionAcceptanceRecord,
@@ -218,6 +219,19 @@ export interface DealMilestoneReviewRepository {
   listByDealVersionId(dealVersionId: EntityId): Promise<DealMilestoneReviewRecord[]>;
 }
 
+export interface DealMilestoneSettlementRequestRepository {
+  create(
+    record: DealMilestoneSettlementRequestRecord
+  ): Promise<DealMilestoneSettlementRequestRecord>;
+  findByDealMilestoneReviewId(
+    dealMilestoneReviewId: EntityId
+  ): Promise<DealMilestoneSettlementRequestRecord | null>;
+  findById(id: EntityId): Promise<DealMilestoneSettlementRequestRecord | null>;
+  listByDealVersionId(
+    dealVersionId: EntityId
+  ): Promise<DealMilestoneSettlementRequestRecord[]>;
+}
+
 export interface DealMilestoneSubmissionFileRepository {
   add(
     record: DealMilestoneSubmissionFileRecord
@@ -400,6 +414,7 @@ export interface Release1Repositories {
   counterparties: CounterpartyRepository;
   counterpartyDealVersionAcceptances: CounterpartyDealVersionAcceptanceRepository;
   dealMilestoneReviews: DealMilestoneReviewRepository;
+  dealMilestoneSettlementRequests: DealMilestoneSettlementRequestRepository;
   dealMilestoneSubmissionFiles: DealMilestoneSubmissionFileRepository;
   dealMilestoneSubmissions: DealMilestoneSubmissionRepository;
   dealVersionAcceptances: DealVersionAcceptanceRepository;

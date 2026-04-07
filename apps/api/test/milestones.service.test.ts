@@ -339,6 +339,34 @@ async function seedCounterpartySellerSubmission(
   return submission;
 }
 
+async function seedMilestoneReview(
+  services: ReturnType<typeof createServices>,
+  seeded: Awaited<ReturnType<typeof seedMilestoneScenario>>,
+  actor: Awaited<ReturnType<typeof seedAuthenticatedActor>>,
+  submissionId: string,
+  options?: {
+    decision?: "APPROVED" | "REJECTED";
+    dealVersionMilestoneId?: string;
+    statementMarkdown?: string | null;
+  }
+) {
+  const now = new Date().toISOString();
+
+  return services.release1Repositories.dealMilestoneReviews.create({
+    decision: options?.decision ?? "APPROVED",
+    dealMilestoneSubmissionId: submissionId,
+    dealVersionId: seeded.version.version.id,
+    dealVersionMilestoneId:
+      options?.dealVersionMilestoneId ?? seeded.version.version.milestones[0]!.id,
+    draftDealId: seeded.draft.draft.id,
+    id: `review-${submissionId}`,
+    organizationId: "org-1",
+    reviewedAt: now,
+    reviewedByUserId: actor.userId,
+    statementMarkdown: options?.statementMarkdown ?? null
+  });
+}
+
 async function expectRejectsWith(
   action: Promise<unknown>,
   expectedName: string,
@@ -833,5 +861,321 @@ test("milestones service only allows reviews for the latest submission on a mile
     ),
     "ConflictException",
     "only latest milestone submission can be reviewed"
+  );
+});
+
+test("milestones service lets buyer-side organizations request release after approval", async () => {
+  const services = createServices();
+  const actor = await seedAuthenticatedActor(
+    services.release1Repositories,
+    services.sessionTokenService
+  );
+  const seeded = await seedMilestoneScenario(services, actor, "BUYER");
+
+  await seedActiveAgreement(services, seeded);
+  const submission = await seedCounterpartySellerSubmission(services, seeded);
+  const review = await services.milestonesService.createMilestoneReview(
+    {
+      dealMilestoneSubmissionId: submission.id,
+      dealVersionId: seeded.version.version.id,
+      dealVersionMilestoneId: seeded.version.version.milestones[0]!.id,
+      draftDealId: seeded.draft.draft.id,
+      organizationId: "org-1"
+    },
+    {
+      decision: "APPROVED"
+    },
+    requestMetadata(actor.cookieHeader)
+  );
+
+  const result = await services.milestonesService.createMilestoneSettlementRequest(
+    {
+      dealMilestoneReviewId: review.review.id,
+      dealMilestoneSubmissionId: submission.id,
+      dealVersionId: seeded.version.version.id,
+      dealVersionMilestoneId: seeded.version.version.milestones[0]!.id,
+      draftDealId: seeded.draft.draft.id,
+      organizationId: "org-1"
+    },
+    {
+      kind: "RELEASE",
+      statementMarkdown: "Release the approved milestone funds."
+    },
+    requestMetadata(actor.cookieHeader)
+  );
+
+  assert.equal(result.settlementRequest.kind, "RELEASE");
+  assert.equal(result.settlementRequest.requestedByUserId, actor.userId);
+  assert.equal(result.milestone.state, "APPROVED");
+  assert.equal(
+    result.milestone.submissions[0]?.review?.settlementRequest?.id,
+    result.settlementRequest.id
+  );
+  assert.equal(
+    result.milestone.submissions[0]?.review?.settlementRequest?.statementMarkdown,
+    "Release the approved milestone funds."
+  );
+
+  const auditLogs = await services.auditService.listByEntity(
+    {
+      entityId: result.settlementRequest.id,
+      entityType: "DEAL_MILESTONE_SETTLEMENT_REQUEST"
+    },
+    requestMetadata(actor.cookieHeader)
+  );
+
+  assert.equal(auditLogs.auditLogs.length, 1);
+  assert.equal(
+    auditLogs.auditLogs[0]?.action,
+    "DEAL_MILESTONE_RELEASE_REQUESTED"
+  );
+});
+
+test("milestones service lets buyer-side organizations request refund after rejection", async () => {
+  const services = createServices();
+  const actor = await seedAuthenticatedActor(
+    services.release1Repositories,
+    services.sessionTokenService
+  );
+  const seeded = await seedMilestoneScenario(services, actor, "BUYER");
+
+  await seedActiveAgreement(services, seeded);
+  const submission = await seedCounterpartySellerSubmission(services, seeded);
+  const review = await services.milestonesService.createMilestoneReview(
+    {
+      dealMilestoneSubmissionId: submission.id,
+      dealVersionId: seeded.version.version.id,
+      dealVersionMilestoneId: seeded.version.version.milestones[0]!.id,
+      draftDealId: seeded.draft.draft.id,
+      organizationId: "org-1"
+    },
+    {
+      decision: "REJECTED",
+      statementMarkdown: "Rejecting this milestone delivery."
+    },
+    requestMetadata(actor.cookieHeader)
+  );
+
+  const result = await services.milestonesService.createMilestoneSettlementRequest(
+    {
+      dealMilestoneReviewId: review.review.id,
+      dealMilestoneSubmissionId: submission.id,
+      dealVersionId: seeded.version.version.id,
+      dealVersionMilestoneId: seeded.version.version.milestones[0]!.id,
+      draftDealId: seeded.draft.draft.id,
+      organizationId: "org-1"
+    },
+    {
+      kind: "REFUND"
+    },
+    requestMetadata(actor.cookieHeader)
+  );
+
+  assert.equal(result.settlementRequest.kind, "REFUND");
+  assert.equal(result.milestone.state, "REJECTED");
+  assert.equal(
+    result.milestone.submissions[0]?.review?.settlementRequest?.kind,
+    "REFUND"
+  );
+});
+
+test("milestones service requires buyer role for settlement requests", async () => {
+  const services = createServices();
+  const actor = await seedAuthenticatedActor(
+    services.release1Repositories,
+    services.sessionTokenService
+  );
+  const seeded = await seedMilestoneScenario(services, actor, "SELLER");
+
+  await seedActiveAgreement(services, seeded);
+  const submission = await services.milestonesService.createMilestoneSubmission(
+    {
+      dealVersionId: seeded.version.version.id,
+      dealVersionMilestoneId: seeded.version.version.milestones[0]!.id,
+      draftDealId: seeded.draft.draft.id,
+      organizationId: "org-1"
+    },
+    {
+      statementMarkdown: "Seller-side evidence."
+    },
+    requestMetadata(actor.cookieHeader)
+  );
+  const review = await seedMilestoneReview(
+    services,
+    seeded,
+    actor,
+    submission.submission.id
+  );
+
+  await expectRejectsWith(
+    services.milestonesService.createMilestoneSettlementRequest(
+      {
+        dealMilestoneReviewId: review.id,
+        dealMilestoneSubmissionId: submission.submission.id,
+        dealVersionId: seeded.version.version.id,
+        dealVersionMilestoneId: seeded.version.version.milestones[0]!.id,
+        draftDealId: seeded.draft.draft.id,
+        organizationId: "org-1"
+      },
+      {
+        kind: "RELEASE"
+      },
+      requestMetadata(actor.cookieHeader)
+    ),
+    "ForbiddenException",
+    "buyer organization party is required"
+  );
+});
+
+test("milestones service enforces settlement kind to match review decision", async () => {
+  const services = createServices();
+  const actor = await seedAuthenticatedActor(
+    services.release1Repositories,
+    services.sessionTokenService
+  );
+  const seeded = await seedMilestoneScenario(services, actor, "BUYER");
+
+  await seedActiveAgreement(services, seeded);
+  const submission = await seedCounterpartySellerSubmission(services, seeded);
+  const review = await services.milestonesService.createMilestoneReview(
+    {
+      dealMilestoneSubmissionId: submission.id,
+      dealVersionId: seeded.version.version.id,
+      dealVersionMilestoneId: seeded.version.version.milestones[0]!.id,
+      draftDealId: seeded.draft.draft.id,
+      organizationId: "org-1"
+    },
+    {
+      decision: "APPROVED"
+    },
+    requestMetadata(actor.cookieHeader)
+  );
+
+  await expectRejectsWith(
+    services.milestonesService.createMilestoneSettlementRequest(
+      {
+        dealMilestoneReviewId: review.review.id,
+        dealMilestoneSubmissionId: submission.id,
+        dealVersionId: seeded.version.version.id,
+        dealVersionMilestoneId: seeded.version.version.milestones[0]!.id,
+        draftDealId: seeded.draft.draft.id,
+        organizationId: "org-1"
+      },
+      {
+        kind: "REFUND"
+      },
+      requestMetadata(actor.cookieHeader)
+    ),
+    "ConflictException",
+    "approved milestone reviews require release requests"
+  );
+});
+
+test("milestones service prevents duplicate settlement requests for the same review", async () => {
+  const services = createServices();
+  const actor = await seedAuthenticatedActor(
+    services.release1Repositories,
+    services.sessionTokenService
+  );
+  const seeded = await seedMilestoneScenario(services, actor, "BUYER");
+
+  await seedActiveAgreement(services, seeded);
+  const submission = await seedCounterpartySellerSubmission(services, seeded);
+  const review = await services.milestonesService.createMilestoneReview(
+    {
+      dealMilestoneSubmissionId: submission.id,
+      dealVersionId: seeded.version.version.id,
+      dealVersionMilestoneId: seeded.version.version.milestones[0]!.id,
+      draftDealId: seeded.draft.draft.id,
+      organizationId: "org-1"
+    },
+    {
+      decision: "APPROVED"
+    },
+    requestMetadata(actor.cookieHeader)
+  );
+
+  await services.milestonesService.createMilestoneSettlementRequest(
+    {
+      dealMilestoneReviewId: review.review.id,
+      dealMilestoneSubmissionId: submission.id,
+      dealVersionId: seeded.version.version.id,
+      dealVersionMilestoneId: seeded.version.version.milestones[0]!.id,
+      draftDealId: seeded.draft.draft.id,
+      organizationId: "org-1"
+    },
+    {
+      kind: "RELEASE"
+    },
+    requestMetadata(actor.cookieHeader)
+  );
+
+  await expectRejectsWith(
+    services.milestonesService.createMilestoneSettlementRequest(
+      {
+        dealMilestoneReviewId: review.review.id,
+        dealMilestoneSubmissionId: submission.id,
+        dealVersionId: seeded.version.version.id,
+        dealVersionMilestoneId: seeded.version.version.milestones[0]!.id,
+        draftDealId: seeded.draft.draft.id,
+        organizationId: "org-1"
+      },
+      {
+        kind: "RELEASE"
+      },
+      requestMetadata(actor.cookieHeader)
+    ),
+    "ConflictException",
+    "milestone review already has a settlement request"
+  );
+});
+
+test("milestones service only allows settlement requests for the latest reviewed submission", async () => {
+  const services = createServices();
+  const actor = await seedAuthenticatedActor(
+    services.release1Repositories,
+    services.sessionTokenService
+  );
+  const seeded = await seedMilestoneScenario(services, actor, "BUYER");
+
+  await seedActiveAgreement(services, seeded);
+  const firstSubmission = await seedCounterpartySellerSubmission(services, seeded, {
+    submissionNumber: 1
+  });
+  const review = await services.milestonesService.createMilestoneReview(
+    {
+      dealMilestoneSubmissionId: firstSubmission.id,
+      dealVersionId: seeded.version.version.id,
+      dealVersionMilestoneId: seeded.version.version.milestones[0]!.id,
+      draftDealId: seeded.draft.draft.id,
+      organizationId: "org-1"
+    },
+    {
+      decision: "APPROVED"
+    },
+    requestMetadata(actor.cookieHeader)
+  );
+  await seedCounterpartySellerSubmission(services, seeded, {
+    statementMarkdown: "Superseding evidence package.",
+    submissionNumber: 2
+  });
+
+  await expectRejectsWith(
+    services.milestonesService.createMilestoneSettlementRequest(
+      {
+        dealMilestoneReviewId: review.review.id,
+        dealMilestoneSubmissionId: firstSubmission.id,
+        dealVersionId: seeded.version.version.id,
+        dealVersionMilestoneId: seeded.version.version.milestones[0]!.id,
+        draftDealId: seeded.draft.draft.id,
+        organizationId: "org-1"
+      },
+      {
+        kind: "RELEASE"
+      },
+      requestMetadata(actor.cookieHeader)
+    ),
+    "ConflictException",
+    "only latest reviewed milestone submission can request settlement"
   );
 });

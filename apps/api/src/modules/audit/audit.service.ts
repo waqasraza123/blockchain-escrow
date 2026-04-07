@@ -3,6 +3,7 @@ import type {
   CounterpartyRecord,
   CounterpartyDealVersionAcceptanceRecord,
   DealMilestoneReviewRecord,
+  DealMilestoneSettlementRequestRecord,
   DealMilestoneSubmissionRecord,
   DealVersionAcceptanceRecord,
   DealVersionRecord,
@@ -157,6 +158,17 @@ export class AuditService {
         return this.repositories.auditLogs.listByEntity(
           "DEAL_MILESTONE_REVIEW",
           review.id
+        );
+      }
+      case "DEAL_MILESTONE_SETTLEMENT_REQUEST": {
+        const settlementRequest =
+          await this.requireDealMilestoneSettlementRequestAccess(
+            actor,
+            params.entityId
+          );
+        return this.repositories.auditLogs.listByEntity(
+          "DEAL_MILESTONE_SETTLEMENT_REQUEST",
+          settlementRequest.id
         );
       }
       case "DEAL_VERSION_ACCEPTANCE": {
@@ -407,6 +419,23 @@ export class AuditService {
 
     await this.requireDraftDealAccess(actor, review.draftDealId);
     return review;
+  }
+
+  private async requireDealMilestoneSettlementRequestAccess(
+    actor: AuthenticatedSessionContext,
+    dealMilestoneSettlementRequestId: string
+  ): Promise<DealMilestoneSettlementRequestRecord> {
+    const settlementRequest =
+      await this.repositories.dealMilestoneSettlementRequests.findById(
+        dealMilestoneSettlementRequestId
+      );
+
+    if (!settlementRequest) {
+      throw new NotFoundException("deal milestone settlement request not found");
+    }
+
+    await this.requireDraftDealAccess(actor, settlementRequest.draftDealId);
+    return settlementRequest;
   }
 
   private async requireCounterpartyDealVersionAcceptanceAccess(

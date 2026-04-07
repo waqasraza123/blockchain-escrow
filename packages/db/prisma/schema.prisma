@@ -31,6 +31,8 @@ enum AuditAction {
   AUTH_NONCE_ISSUED
   AUTH_SESSION_VERIFIED
   COUNTERPARTY_CREATED
+  DEAL_MILESTONE_RELEASE_REQUESTED
+  DEAL_MILESTONE_REFUND_REQUESTED
   DEAL_MILESTONE_REVIEW_APPROVED
   DEAL_MILESTONE_REVIEW_REJECTED
   DEAL_MILESTONE_SUBMISSION_CREATED
@@ -65,8 +67,14 @@ enum MilestoneReviewDecision {
   REJECTED
 }
 
+enum MilestoneSettlementRequestKind {
+  RELEASE
+  REFUND
+}
+
 enum AuditEntityType {
   COUNTERPARTY
+  DEAL_MILESTONE_SETTLEMENT_REQUEST
   DEAL_MILESTONE_REVIEW
   DEAL_MILESTONE_SUBMISSION
   DEAL_VERSION_ACCEPTANCE
@@ -165,6 +173,7 @@ model User {
   organizationsOwned         Organization[]
   counterpartiesCreated      Counterparty[]         @relation("CounterpartyCreatedByUser")
   dealMilestoneReviewsMade   DealMilestoneReview[]  @relation("DealMilestoneReviewReviewedByUser")
+  dealMilestoneSettlementRequestsMade DealMilestoneSettlementRequest[] @relation("DealMilestoneSettlementRequestRequestedByUser")
   draftDealsCreated          DraftDeal[]            @relation("DraftDealCreatedByUser")
   dealVersionAcceptancesMade DealVersionAcceptance[] @relation("DealVersionAcceptanceAcceptedByUser")
   dealVersionsCreated        DealVersion[]          @relation("DealVersionCreatedByUser")
@@ -239,6 +248,7 @@ model Organization {
   createdByUser          User                    @relation(fields: [createdByUserId], references: [id], onDelete: Restrict)
   counterparties         Counterparty[]
   dealMilestoneReviews   DealMilestoneReview[]
+  dealMilestoneSettlementRequests DealMilestoneSettlementRequest[]
   dealMilestoneSubmissions DealMilestoneSubmission[]
   dealVersionAcceptances DealVersionAcceptance[]
   dealVersionParties     DealVersionParty[]      @relation("DealVersionPartyOrganization")
@@ -344,6 +354,7 @@ model DraftDeal {
   createdByUser      User               @relation("DraftDealCreatedByUser", fields: [createdByUserId], references: [id], onDelete: Restrict)
   template           Template?          @relation("DraftDealTemplate", fields: [templateId], references: [id], onDelete: SetNull)
   milestoneSubmissions DealMilestoneSubmission[]
+  milestoneSettlementRequests DealMilestoneSettlementRequest[]
   fundingTransactions FundingTransaction[]
   milestoneReviews   DealMilestoneReview[]
   parties            DraftDealParty[]
@@ -397,6 +408,7 @@ model DealVersion {
   counterpartyAcceptances CounterpartyDealVersionAcceptance[]
   fundingTransactions FundingTransaction[]
   milestoneReviews   DealMilestoneReview[]
+  milestoneSettlementRequests DealMilestoneSettlementRequest[]
   milestoneSubmissions DealMilestoneSubmission[]
   parties            DealVersionParty[]
   milestones         DealVersionMilestone[]
@@ -444,6 +456,7 @@ model DealVersionMilestone {
   createdAt     DateTime    @db.Timestamptz(3)
   dealVersion   DealVersion @relation(fields: [dealVersionId], references: [id], onDelete: Cascade)
   reviews       DealMilestoneReview[]
+  settlementRequests DealMilestoneSettlementRequest[]
   submissions   DealMilestoneSubmission[]
 
   @@unique([dealVersionId, position], map: "deal_version_milestones_deal_version_id_position_key")
@@ -472,6 +485,7 @@ model DealMilestoneSubmission {
   submittedByUser        User?                @relation("DealMilestoneSubmissionSubmittedByUser", fields: [submittedByUserId], references: [id], onDelete: SetNull)
   files                  DealMilestoneSubmissionFile[]
   review                 DealMilestoneReview?
+  settlementRequests     DealMilestoneSettlementRequest[]
 
   @@unique([dealVersionMilestoneId, submissionNumber], map: "deal_milestone_submissions_milestone_id_submission_number_key")
   @@index([organizationId], map: "deal_milestone_submissions_organization_id_idx")
@@ -515,6 +529,7 @@ model DealMilestoneReview {
   dealVersionMilestone      DealVersionMilestone    @relation(fields: [dealVersionMilestoneId], references: [id], onDelete: Cascade)
   dealMilestoneSubmission   DealMilestoneSubmission @relation(fields: [dealMilestoneSubmissionId], references: [id], onDelete: Cascade)
   reviewedByUser            User                    @relation("DealMilestoneReviewReviewedByUser", fields: [reviewedByUserId], references: [id], onDelete: Restrict)
+  settlementRequest         DealMilestoneSettlementRequest?
 
   @@index([organizationId], map: "deal_milestone_reviews_organization_id_idx")
   @@index([draftDealId], map: "deal_milestone_reviews_draft_deal_id_idx")
@@ -523,6 +538,36 @@ model DealMilestoneReview {
   @@index([reviewedByUserId], map: "deal_milestone_reviews_reviewed_by_user_id_idx")
   @@index([dealVersionMilestoneId, reviewedAt], map: "deal_milestone_reviews_milestone_id_reviewed_at_idx")
   @@map("deal_milestone_reviews")
+}
+
+model DealMilestoneSettlementRequest {
+  id                        String                        @id @db.Text
+  organizationId            String                        @db.Text
+  draftDealId               String                        @db.Text
+  dealVersionId             String                        @db.Text
+  dealVersionMilestoneId    String                        @db.Text
+  dealMilestoneSubmissionId String                        @db.Text
+  dealMilestoneReviewId     String                        @unique @db.Text
+  requestedByUserId         String                        @db.Text
+  kind                      MilestoneSettlementRequestKind
+  statementMarkdown         String?                       @db.Text
+  requestedAt               DateTime                      @db.Timestamptz(3)
+  organization              Organization                  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  draftDeal                 DraftDeal                     @relation(fields: [draftDealId], references: [id], onDelete: Cascade)
+  dealVersion               DealVersion                   @relation(fields: [dealVersionId], references: [id], onDelete: Cascade)
+  dealVersionMilestone      DealVersionMilestone          @relation(fields: [dealVersionMilestoneId], references: [id], onDelete: Cascade)
+  dealMilestoneSubmission   DealMilestoneSubmission       @relation(fields: [dealMilestoneSubmissionId], references: [id], onDelete: Cascade)
+  dealMilestoneReview       DealMilestoneReview           @relation(fields: [dealMilestoneReviewId], references: [id], onDelete: Cascade)
+  requestedByUser           User                          @relation("DealMilestoneSettlementRequestRequestedByUser", fields: [requestedByUserId], references: [id], onDelete: Restrict)
+
+  @@index([organizationId], map: "deal_milestone_settlement_requests_organization_id_idx")
+  @@index([draftDealId], map: "deal_milestone_settlement_requests_draft_deal_id_idx")
+  @@index([dealVersionId], map: "deal_milestone_settlement_requests_deal_version_id_idx")
+  @@index([dealVersionMilestoneId], map: "deal_milestone_settlement_requests_milestone_id_idx")
+  @@index([dealMilestoneSubmissionId], map: "deal_milestone_settlement_requests_submission_id_idx")
+  @@index([requestedByUserId], map: "deal_milestone_settlement_requests_requested_by_user_id_idx")
+  @@index([dealVersionMilestoneId, requestedAt], map: "deal_milestone_settlement_requests_milestone_req_at_idx")
+  @@map("deal_milestone_settlement_requests")
 }
 
 model DealVersionFile {
