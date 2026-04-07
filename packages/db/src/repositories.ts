@@ -230,8 +230,24 @@ export interface FundingTransactionRepository {
     transactionHash: HexString
   ): Promise<FundingTransactionRecord | null>;
   findById(id: EntityId): Promise<FundingTransactionRecord | null>;
+  listByChainId(chainId: ChainId): Promise<FundingTransactionRecord[]>;
   listByDealVersionId(dealVersionId: EntityId): Promise<FundingTransactionRecord[]>;
   listByDraftDealId(draftDealId: EntityId): Promise<FundingTransactionRecord[]>;
+  markStalePendingEscalated(
+    id: EntityId,
+    stalePendingEscalatedAt: IsoTimestamp
+  ): Promise<FundingTransactionRecord>;
+  updateReconciliation(
+    id: EntityId,
+    reconciliation: Pick<
+      FundingTransactionRecord,
+      | "reconciledAgreementAddress"
+      | "reconciledAt"
+      | "reconciledConfirmedAt"
+      | "reconciledMatchesTrackedVersion"
+      | "reconciledStatus"
+    >
+  ): Promise<FundingTransactionRecord>;
   markSuperseded(
     id: EntityId,
     supersededByFundingTransactionId: EntityId,

@@ -9,7 +9,7 @@ import type {
   Release1Repositories,
   Release4Repositories
 } from "@blockchain-escrow/db";
-import { buildCanonicalDealId } from "../../api/src/modules/drafts/deal-identity";
+import { buildCanonicalDealId } from "@blockchain-escrow/shared";
 
 function canActivateDraftFromAgreement(
   chainId: number,

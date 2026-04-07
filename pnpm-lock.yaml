@@ -53,6 +53,9 @@ importers:
 
   apps/api:
     dependencies:
+      '@blockchain-escrow/contracts-sdk':
+        specifier: workspace:*
+        version: link:../../packages/contracts-sdk
       '@blockchain-escrow/db':
         specifier: workspace:*
         version: link:../../packages/db
@@ -111,7 +114,17 @@ importers:
         specifier: ^19.0.0
         version: 19.2.4(react@19.2.4)
 
-  apps/worker: {}
+  apps/worker:
+    dependencies:
+      '@blockchain-escrow/contracts-sdk':
+        specifier: workspace:*
+        version: link:../../packages/contracts-sdk
+      '@blockchain-escrow/db':
+        specifier: workspace:*
+        version: link:../../packages/db
+      '@blockchain-escrow/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
 
   packages/contracts: {}
 
@@ -138,6 +151,9 @@ importers:
 
   packages/shared:
     dependencies:
+      viem:
+        specifier: ^2.38.2
+        version: 2.47.6(typescript@5.9.3)(zod@3.25.76)
       zod:
         specifier: ^3.24.2
         version: 3.25.76

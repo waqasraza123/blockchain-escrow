@@ -54,6 +54,15 @@ export type FundingTransactionStatus = z.infer<
   typeof fundingTransactionStatusSchema
 >;
 
+export const fundingTransactionReconciledStatusSchema = z.enum([
+  "CONFIRMED",
+  "FAILED",
+  "MISMATCHED"
+]);
+export type FundingTransactionReconciledStatus = z.infer<
+  typeof fundingTransactionReconciledStatusSchema
+>;
+
 export const fundingTransactionIndexedExecutionStatusSchema = z.enum([
   "SUCCESS",
   "REVERTED"
@@ -128,8 +137,11 @@ export interface FundingTransactionSummary {
   indexedExecutionStatus: FundingTransactionIndexedExecutionStatus | null;
   matchesTrackedVersion: boolean | null;
   organizationId: EntityId;
+  reconciledAt: IsoTimestamp | null;
+  reconciledStatus: FundingTransactionReconciledStatus | null;
   stalePending: boolean | null;
   stalePendingAt: IsoTimestamp | null;
+  stalePendingEscalatedAt: IsoTimestamp | null;
   stalePendingEvaluation: FundingTransactionStalePendingEvaluation | null;
   status: FundingTransactionStatus;
   submittedAt: IsoTimestamp;

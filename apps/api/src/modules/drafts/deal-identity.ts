@@ -8,6 +8,8 @@ import type {
 import type { JsonObject } from "@blockchain-escrow/shared";
 import { keccak256, stringToHex } from "viem";
 
+export { buildCanonicalDealId } from "@blockchain-escrow/shared";
+
 const DEFAULT_CHAIN_ID = 84532;
 
 export const counterpartyAcceptancePrimaryType = "CounterpartyDealVersionAcceptance";
@@ -47,15 +49,6 @@ export function normalizeApiChainId(): number {
 
   const parsed = Number.parseInt(raw, 10);
   return Number.isInteger(parsed) && parsed > 0 ? parsed : DEFAULT_CHAIN_ID;
-}
-
-export function buildCanonicalDealId(
-  organizationId: string,
-  draftDealId: string
-): `0x${string}` {
-  return keccak256(
-    stringToHex(`blockchain-escrow:deal:${organizationId}:${draftDealId}`)
-  );
 }
 
 export function buildCanonicalDealVersionHash(

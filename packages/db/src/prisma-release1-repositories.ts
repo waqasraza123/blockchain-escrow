@@ -11,7 +11,8 @@ import {
   OrganizationInviteStatus as PrismaOrganizationInviteStatus,
   OrganizationRole as PrismaOrganizationRole,
   AuditAction as PrismaAuditAction,
-  AuditEntityType as PrismaAuditEntityType
+  AuditEntityType as PrismaAuditEntityType,
+  FundingTransactionReconciledStatus as PrismaFundingTransactionReconciledStatus
 } from "@prisma/client";
 
 import type {
@@ -450,6 +451,12 @@ function mapFundingTransactionRecord(record: {
   draftDealId: string;
   id: string;
   organizationId: string;
+  reconciledAgreementAddress: string | null;
+  reconciledAt: Date | null;
+  reconciledConfirmedAt: Date | null;
+  reconciledMatchesTrackedVersion: boolean | null;
+  reconciledStatus: PrismaFundingTransactionReconciledStatus | null;
+  stalePendingEscalatedAt: Date | null;
   submittedAt: Date;
   submittedByUserId: string;
   submittedWalletAddress: string;
@@ -464,6 +471,14 @@ function mapFundingTransactionRecord(record: {
     draftDealId: record.draftDealId,
     id: record.id,
     organizationId: record.organizationId,
+    reconciledAgreementAddress:
+      record.reconciledAgreementAddress as FundingTransactionRecord["reconciledAgreementAddress"],
+    reconciledAt: toIsoTimestamp(record.reconciledAt),
+    reconciledConfirmedAt: toIsoTimestamp(record.reconciledConfirmedAt),
+    reconciledMatchesTrackedVersion: record.reconciledMatchesTrackedVersion,
+    reconciledStatus:
+      record.reconciledStatus as FundingTransactionRecord["reconciledStatus"],
+    stalePendingEscalatedAt: toIsoTimestamp(record.stalePendingEscalatedAt),
     submittedAt: toRequiredIsoTimestamp(record.submittedAt),
     submittedByUserId: record.submittedByUserId,
     submittedWalletAddress:
@@ -1341,6 +1356,18 @@ export class PrismaFundingTransactionRepository
         draftDealId: record.draftDealId,
         id: record.id,
         organizationId: record.organizationId,
+        reconciledAgreementAddress: record.reconciledAgreementAddress,
+        reconciledAt: record.reconciledAt ? toDate(record.reconciledAt) : null,
+        reconciledConfirmedAt: record.reconciledConfirmedAt
+          ? toDate(record.reconciledConfirmedAt)
+          : null,
+        reconciledMatchesTrackedVersion: record.reconciledMatchesTrackedVersion,
+        reconciledStatus: record.reconciledStatus
+          ? (record.reconciledStatus as PrismaFundingTransactionReconciledStatus)
+          : null,
+        stalePendingEscalatedAt: record.stalePendingEscalatedAt
+          ? toDate(record.stalePendingEscalatedAt)
+          : null,
         submittedAt: toDate(record.submittedAt),
         submittedByUserId: record.submittedByUserId,
         submittedWalletAddress: record.submittedWalletAddress,
@@ -1378,6 +1405,15 @@ export class PrismaFundingTransactionRepository
     return record ? mapFundingTransactionRecord(record) : null;
   }
 
+  async listByChainId(chainId: number): Promise<FundingTransactionRecord[]> {
+    const records = await this.prisma.fundingTransaction.findMany({
+      orderBy: [{ submittedAt: "desc" }, { id: "desc" }],
+      where: { chainId }
+    });
+
+    return records.map(mapFundingTransactionRecord);
+  }
+
   async listByDealVersionId(dealVersionId: string): Promise<FundingTransactionRecord[]> {
     const records = await this.prisma.fundingTransaction.findMany({
       orderBy: [{ submittedAt: "desc" }, { id: "desc" }],
@@ -1394,6 +1430,51 @@ export class PrismaFundingTransactionRepository
     });
 
     return records.map(mapFundingTransactionRecord);
+  }
+
+  async markStalePendingEscalated(
+    id: string,
+    stalePendingEscalatedAt: string
+  ): Promise<FundingTransactionRecord> {
+    const record = await this.prisma.fundingTransaction.update({
+      data: {
+        stalePendingEscalatedAt: toDate(stalePendingEscalatedAt)
+      },
+      where: { id }
+    });
+
+    return mapFundingTransactionRecord(record);
+  }
+
+  async updateReconciliation(
+    id: string,
+    reconciliation: Pick<
+      FundingTransactionRecord,
+      | "reconciledAgreementAddress"
+      | "reconciledAt"
+      | "reconciledConfirmedAt"
+      | "reconciledMatchesTrackedVersion"
+      | "reconciledStatus"
+    >
+  ): Promise<FundingTransactionRecord> {
+    const record = await this.prisma.fundingTransaction.update({
+      data: {
+        reconciledAgreementAddress: reconciliation.reconciledAgreementAddress,
+        reconciledAt: reconciliation.reconciledAt
+          ? toDate(reconciliation.reconciledAt)
+          : null,
+        reconciledConfirmedAt: reconciliation.reconciledConfirmedAt
+          ? toDate(reconciliation.reconciledConfirmedAt)
+          : null,
+        reconciledMatchesTrackedVersion: reconciliation.reconciledMatchesTrackedVersion,
+        reconciledStatus: reconciliation.reconciledStatus
+          ? (reconciliation.reconciledStatus as PrismaFundingTransactionReconciledStatus)
+          : null
+      },
+      where: { id }
+    });
+
+    return mapFundingTransactionRecord(record);
   }
 
   async markSuperseded(

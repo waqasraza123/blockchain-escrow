@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@blockchain-escrow/contracts-sdk": "workspace:*",
-    "@blockchain-escrow/db": "workspace:*"
+    "@blockchain-escrow/db": "workspace:*",
+    "@blockchain-escrow/shared": "workspace:*"
   }
 }

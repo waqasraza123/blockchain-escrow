@@ -584,6 +584,7 @@ test("funding service records and lists pending funding transactions", async () 
   assert.equal(listed.fundingTransactions[0]?.indexedExecutionStatus, null);
   assert.equal(listed.fundingTransactions[0]?.stalePending, null);
   assert.equal(listed.fundingTransactions[0]?.stalePendingAt, null);
+  assert.equal(listed.fundingTransactions[0]?.stalePendingEscalatedAt, null);
   assert.equal(
     listed.fundingTransactions[0]?.stalePendingEvaluation,
     "INDEXER_CURSOR_MISSING"
@@ -599,6 +600,12 @@ test("funding service marks pending tracked transactions as not stale when the i
     draftDealId: seeded.draft.draft.id,
     id: "funding-tx-fresh",
     organizationId: "org-1",
+    reconciledAgreementAddress: null,
+    reconciledAt: null,
+    reconciledConfirmedAt: null,
+    reconciledMatchesTrackedVersion: null,
+    reconciledStatus: null,
+    stalePendingEscalatedAt: null,
     submittedAt: isoFromNow(-1800),
     submittedByUserId: seeded.actor.userId,
     submittedWalletAddress: seeded.actor.walletAddress,
@@ -626,6 +633,7 @@ test("funding service marks pending tracked transactions as not stale when the i
   assert.equal(listed.fundingTransactions[0]?.status, "PENDING");
   assert.equal(listed.fundingTransactions[0]?.stalePending, false);
   assert.ok(listed.fundingTransactions[0]?.stalePendingAt);
+  assert.equal(listed.fundingTransactions[0]?.stalePendingEscalatedAt, null);
   assert.equal(listed.fundingTransactions[0]?.stalePendingEvaluation, "READY");
 });
 
@@ -638,6 +646,12 @@ test("funding service marks pending tracked transactions as stale when the index
     draftDealId: seeded.draft.draft.id,
     id: "funding-tx-stale",
     organizationId: "org-1",
+    reconciledAgreementAddress: null,
+    reconciledAt: null,
+    reconciledConfirmedAt: null,
+    reconciledMatchesTrackedVersion: null,
+    reconciledStatus: null,
+    stalePendingEscalatedAt: null,
     submittedAt: isoFromNow(-3900),
     submittedByUserId: seeded.actor.userId,
     submittedWalletAddress: seeded.actor.walletAddress,
@@ -665,6 +679,7 @@ test("funding service marks pending tracked transactions as stale when the index
   assert.equal(listed.fundingTransactions[0]?.status, "PENDING");
   assert.equal(listed.fundingTransactions[0]?.stalePending, true);
   assert.ok(listed.fundingTransactions[0]?.stalePendingAt);
+  assert.equal(listed.fundingTransactions[0]?.stalePendingEscalatedAt, null);
   assert.equal(listed.fundingTransactions[0]?.stalePendingEvaluation, "READY");
 });
 
@@ -677,6 +692,12 @@ test("funding service defers stale evaluation when the indexer cursor is stale",
     draftDealId: seeded.draft.draft.id,
     id: "funding-tx-cursor-stale",
     organizationId: "org-1",
+    reconciledAgreementAddress: null,
+    reconciledAt: null,
+    reconciledConfirmedAt: null,
+    reconciledMatchesTrackedVersion: null,
+    reconciledStatus: null,
+    stalePendingEscalatedAt: null,
     submittedAt: isoFromNow(-3900),
     submittedByUserId: seeded.actor.userId,
     submittedWalletAddress: seeded.actor.walletAddress,
@@ -704,9 +725,105 @@ test("funding service defers stale evaluation when the indexer cursor is stale",
   assert.equal(listed.fundingTransactions[0]?.status, "PENDING");
   assert.equal(listed.fundingTransactions[0]?.stalePending, null);
   assert.equal(listed.fundingTransactions[0]?.stalePendingAt, null);
+  assert.equal(listed.fundingTransactions[0]?.stalePendingEscalatedAt, null);
   assert.equal(
     listed.fundingTransactions[0]?.stalePendingEvaluation,
     "INDEXER_CURSOR_STALE"
+  );
+});
+
+test("funding service exposes persisted stale pending escalation metadata", async () => {
+  const seeded = await seedFundingScenario();
+
+  await seeded.services.release1Repositories.fundingTransactions.create({
+    chainId: 84532,
+    dealVersionId: seeded.version.version.id,
+    draftDealId: seeded.draft.draft.id,
+    id: "funding-tx-escalated",
+    organizationId: "org-1",
+    reconciledAgreementAddress: null,
+    reconciledAt: null,
+    reconciledConfirmedAt: null,
+    reconciledMatchesTrackedVersion: null,
+    reconciledStatus: null,
+    stalePendingEscalatedAt: "2026-04-06T12:05:00.000Z",
+    submittedAt: isoFromNow(-3900),
+    submittedByUserId: seeded.actor.userId,
+    submittedWalletAddress: seeded.actor.walletAddress,
+    submittedWalletId: seeded.actor.walletId,
+    supersededAt: null,
+    supersededByFundingTransactionId: null,
+    transactionHash:
+      "0x5151515151515151515151515151515151515151515151515151515151515151"
+  });
+  await upsertRelease4Cursor(seeded.services.release4Repositories, isoFromNow(-60));
+
+  const listed = await seeded.services.fundingService.listFundingTransactions(
+    {
+      dealVersionId: seeded.version.version.id,
+      draftDealId: seeded.draft.draft.id,
+      organizationId: "org-1"
+    },
+    {
+      cookieHeader: seeded.actor.cookieHeader,
+      ipAddress: "127.0.0.1",
+      userAgent: "test-agent"
+    }
+  );
+
+  assert.equal(listed.fundingTransactions[0]?.status, "PENDING");
+  assert.equal(
+    listed.fundingTransactions[0]?.stalePendingEscalatedAt,
+    "2026-04-06T12:05:00.000Z"
+  );
+});
+
+test("funding service exposes persisted worker reconciliation metadata while keeping live status truthful", async () => {
+  const seeded = await seedFundingScenario();
+
+  await seeded.services.release1Repositories.fundingTransactions.create({
+    chainId: 84532,
+    dealVersionId: seeded.version.version.id,
+    draftDealId: seeded.draft.draft.id,
+    id: "funding-tx-reconciled",
+    organizationId: "org-1",
+    reconciledAgreementAddress: "0x7777777777777777777777777777777777777777",
+    reconciledAt: "2026-04-06T12:05:00.000Z",
+    reconciledConfirmedAt: "2026-04-06T12:05:00.000Z",
+    reconciledMatchesTrackedVersion: true,
+    reconciledStatus: "CONFIRMED",
+    stalePendingEscalatedAt: null,
+    submittedAt: isoFromNow(-1800),
+    submittedByUserId: seeded.actor.userId,
+    submittedWalletAddress: seeded.actor.walletAddress,
+    submittedWalletId: seeded.actor.walletId,
+    supersededAt: null,
+    supersededByFundingTransactionId: null,
+    transactionHash:
+      "0x5252525252525252525252525252525252525252525252525252525252525252"
+  });
+  await upsertRelease4Cursor(seeded.services.release4Repositories, isoFromNow(-60));
+
+  const listed = await seeded.services.fundingService.listFundingTransactions(
+    {
+      dealVersionId: seeded.version.version.id,
+      draftDealId: seeded.draft.draft.id,
+      organizationId: "org-1"
+    },
+    {
+      cookieHeader: seeded.actor.cookieHeader,
+      ipAddress: "127.0.0.1",
+      userAgent: "test-agent"
+    }
+  );
+
+  assert.equal(listed.fundingTransactions[0]?.status, "PENDING");
+  assert.equal(listed.fundingTransactions[0]?.agreementAddress, null);
+  assert.equal(listed.fundingTransactions[0]?.confirmedAt, null);
+  assert.equal(listed.fundingTransactions[0]?.reconciledStatus, "CONFIRMED");
+  assert.equal(
+    listed.fundingTransactions[0]?.reconciledAt,
+    "2026-04-06T12:05:00.000Z"
   );
 });
 

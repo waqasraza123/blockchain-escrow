@@ -9,8 +9,8 @@ import type {
   Release1Repositories,
   Release4Repositories
 } from "@blockchain-escrow/db";
+import { buildCanonicalDealId } from "@blockchain-escrow/shared";
 
-import { buildCanonicalDealId } from "../../api/src/modules/drafts/deal-identity";
 import { DraftActivationReconciler } from "../src/draft-activation-reconciler";
 
 async function withContractVersion<T>(

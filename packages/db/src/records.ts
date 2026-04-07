@@ -7,6 +7,7 @@ import type {
   DealState,
   EntityId,
   FileCategory,
+  FundingTransactionReconciledStatus,
   HexString,
   IndexedContractName,
   IndexedEventName,
@@ -242,6 +243,12 @@ export interface FundingTransactionRecord {
   draftDealId: EntityId;
   id: EntityId;
   organizationId: EntityId;
+  reconciledAgreementAddress: WalletAddress | null;
+  reconciledAt: IsoTimestamp | null;
+  reconciledConfirmedAt: IsoTimestamp | null;
+  reconciledMatchesTrackedVersion: boolean | null;
+  reconciledStatus: FundingTransactionReconciledStatus | null;
+  stalePendingEscalatedAt: IsoTimestamp | null;
   submittedAt: IsoTimestamp;
   submittedByUserId: EntityId;
   submittedWalletAddress: WalletAddress;

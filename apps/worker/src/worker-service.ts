@@ -6,6 +6,7 @@ import {
 
 import type { WorkerConfig } from "./config";
 import { DraftActivationReconciler } from "./draft-activation-reconciler";
+import { FundingReconciler } from "./funding-reconciler";
 import { HealthState } from "./health-state";
 
 export class WorkerService {
@@ -13,6 +14,7 @@ export class WorkerService {
   private readonly release1Repositories = createRelease1Repositories(this.prisma);
   private readonly release4Repositories = createPrismaRelease4Repositories(this.prisma);
   private readonly draftActivationReconciler: DraftActivationReconciler;
+  private readonly fundingReconciler: FundingReconciler;
   private intervalHandle: NodeJS.Timeout | null = null;
   private isRunning = false;
 
@@ -24,6 +26,12 @@ export class WorkerService {
       this.release1Repositories,
       this.release4Repositories,
       this.config.chainId
+    );
+    this.fundingReconciler = new FundingReconciler(
+      this.release1Repositories,
+      this.release4Repositories,
+      this.config.chainId,
+      this.config.fundingReconciliation
     );
   }
 
@@ -58,7 +66,14 @@ export class WorkerService {
     this.healthState.markRunStarted(startedAt);
 
     try {
-      const summary = await this.draftActivationReconciler.reconcileOnce();
+      const [draftActivationSummary, fundingSummary] = await Promise.all([
+        this.draftActivationReconciler.reconcileOnce(),
+        this.fundingReconciler.reconcileOnce()
+      ]);
+      const summary = {
+        ...draftActivationSummary,
+        ...fundingSummary
+      };
       this.healthState.markRunCompleted(new Date().toISOString(), summary);
     } catch (error) {
       this.healthState.markRunFailed(error);

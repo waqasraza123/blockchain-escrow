@@ -311,6 +311,10 @@ export class InMemoryRelease1Repositories implements Release1Repositories {
       ) ?? null,
     findById: async (id: string): Promise<FundingTransactionRecord | null> =>
       this.fundingTransactionRecords.find((record) => record.id === id) ?? null,
+    listByChainId: async (chainId: number): Promise<FundingTransactionRecord[]> =>
+      this.fundingTransactionRecords
+        .filter((record) => record.chainId === chainId)
+        .sort((left, right) => compareIsoTimestamps(right.submittedAt, left.submittedAt)),
     listByDealVersionId: async (
       dealVersionId: string
     ): Promise<FundingTransactionRecord[]> =>
@@ -323,6 +327,46 @@ export class InMemoryRelease1Repositories implements Release1Repositories {
       this.fundingTransactionRecords
         .filter((record) => record.draftDealId === draftDealId)
         .sort((left, right) => compareIsoTimestamps(right.submittedAt, left.submittedAt)),
+    markStalePendingEscalated: async (
+      id: string,
+      stalePendingEscalatedAt: string
+    ): Promise<FundingTransactionRecord> => {
+      const record = this.fundingTransactionRecords.find((entry) => entry.id === id);
+
+      if (!record) {
+        throw new Error(`Funding transaction not found: ${id}`);
+      }
+
+      record.stalePendingEscalatedAt = stalePendingEscalatedAt;
+
+      return record;
+    },
+    updateReconciliation: async (
+      id: string,
+      reconciliation: Pick<
+        FundingTransactionRecord,
+        | "reconciledAgreementAddress"
+        | "reconciledAt"
+        | "reconciledConfirmedAt"
+        | "reconciledMatchesTrackedVersion"
+        | "reconciledStatus"
+      >
+    ): Promise<FundingTransactionRecord> => {
+      const record = this.fundingTransactionRecords.find((entry) => entry.id === id);
+
+      if (!record) {
+        throw new Error(`Funding transaction not found: ${id}`);
+      }
+
+      record.reconciledAgreementAddress = reconciliation.reconciledAgreementAddress;
+      record.reconciledAt = reconciliation.reconciledAt;
+      record.reconciledConfirmedAt = reconciliation.reconciledConfirmedAt;
+      record.reconciledMatchesTrackedVersion =
+        reconciliation.reconciledMatchesTrackedVersion;
+      record.reconciledStatus = reconciliation.reconciledStatus;
+
+      return record;
+    },
     markSuperseded: async (
       id: string,
       supersededByFundingTransactionId: string,

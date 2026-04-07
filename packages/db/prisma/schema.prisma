@@ -38,6 +38,8 @@ enum AuditAction {
   DEAL_VERSION_CREATED
   DRAFT_DEAL_CREATED
   FILE_CREATED
+  FUNDING_TRANSACTION_RECONCILIATION_UPDATED
+  FUNDING_TRANSACTION_STALE_PENDING
   FUNDING_TRANSACTION_SUPERSEDED
   FUNDING_TRANSACTION_SUBMITTED
   ORGANIZATION_CREATED
@@ -47,6 +49,12 @@ enum AuditAction {
   ORGANIZATION_MEMBER_REMOVED
   ORGANIZATION_MEMBER_ROLE_UPDATED
   TEMPLATE_CREATED
+}
+
+enum FundingTransactionReconciledStatus {
+  CONFIRMED
+  FAILED
+  MISMATCHED
 }
 
 enum AuditEntityType {
@@ -490,7 +498,13 @@ model FundingTransaction {
   submittedWalletAddress     String               @db.Text
   chainId                    Int
   transactionHash            String               @db.Text
+  reconciledStatus           FundingTransactionReconciledStatus?
+  reconciledAgreementAddress String?              @db.Text
+  reconciledAt               DateTime?            @db.Timestamptz(3)
+  reconciledConfirmedAt      DateTime?            @db.Timestamptz(3)
+  reconciledMatchesTrackedVersion Boolean?
   submittedAt                DateTime             @db.Timestamptz(3)
+  stalePendingEscalatedAt    DateTime?            @db.Timestamptz(3)
   supersededAt               DateTime?            @db.Timestamptz(3)
   supersededByFundingTransactionId String?        @db.Text
   organization               Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
@@ -502,6 +516,7 @@ model FundingTransaction {
   supersededFundingTransactions FundingTransaction[] @relation("FundingTransactionSupersession")
 
   @@unique([chainId, transactionHash], map: "funding_transactions_chain_id_transaction_hash_key")
+  @@index([chainId], map: "funding_transactions_chain_id_idx")
   @@index([organizationId], map: "funding_transactions_organization_id_idx")
   @@index([draftDealId], map: "funding_transactions_draft_deal_id_idx")
   @@index([dealVersionId], map: "funding_transactions_deal_version_id_idx")

@@ -1,6 +1,10 @@
 export interface WorkerRunSnapshot {
   readonly activatedDraftCount: number;
+  readonly clearedFundingReconciliationCount: number;
+  readonly reconciledFundingTransactionCount: number;
   readonly scannedDraftCount: number;
+  readonly scannedFundingTransactionCount: number;
+  readonly stalePendingEscalationCount: number;
 }
 
 export interface WorkerHealthSnapshot {

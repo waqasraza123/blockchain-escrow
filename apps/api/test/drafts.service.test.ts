@@ -1165,6 +1165,12 @@ test("drafts service blocks new version snapshots after funding starts", async (
     draftDealId: seeded.draft.draft.id,
     id: "funding-tx-1",
     organizationId: "org-1",
+    reconciledAgreementAddress: null,
+    reconciledAt: null,
+    reconciledConfirmedAt: null,
+    reconciledMatchesTrackedVersion: null,
+    reconciledStatus: null,
+    stalePendingEscalatedAt: null,
     submittedAt: new Date().toISOString(),
     submittedByUserId: actor.userId,
     submittedWalletAddress: actor.walletAddress,
@@ -1212,6 +1218,12 @@ test("drafts service exposes tracked funding progress on detail responses", asyn
     draftDealId: seeded.draft.draft.id,
     id: "funding-tx-2",
     organizationId: "org-1",
+    reconciledAgreementAddress: null,
+    reconciledAt: null,
+    reconciledConfirmedAt: null,
+    reconciledMatchesTrackedVersion: null,
+    reconciledStatus: null,
+    stalePendingEscalatedAt: null,
     submittedAt: "2026-04-06T12:00:00.000Z",
     submittedByUserId: actor.userId,
     submittedWalletAddress: actor.walletAddress,
@@ -1254,6 +1266,7 @@ test("drafts service exposes tracked funding progress on detail responses", asyn
   assert.equal(detail.versions[0]?.fundingTransactions[0]?.indexedExecutionStatus, null);
   assert.equal(detail.versions[0]?.fundingTransactions[0]?.stalePending, null);
   assert.equal(detail.versions[0]?.fundingTransactions[0]?.stalePendingAt, null);
+  assert.equal(detail.versions[0]?.fundingTransactions[0]?.stalePendingEscalatedAt, null);
   assert.equal(
     detail.versions[0]?.fundingTransactions[0]?.stalePendingEvaluation,
     "INDEXER_CURSOR_MISSING"
@@ -1276,6 +1289,12 @@ test("drafts service exposes stale pending funding metadata when the release4 cu
     draftDealId: seeded.draft.draft.id,
     id: "funding-tx-stale-detail",
     organizationId: "org-1",
+    reconciledAgreementAddress: null,
+    reconciledAt: null,
+    reconciledConfirmedAt: null,
+    reconciledMatchesTrackedVersion: null,
+    reconciledStatus: null,
+    stalePendingEscalatedAt: null,
     submittedAt: isoFromNow(-3900),
     submittedByUserId: actor.userId,
     submittedWalletAddress: actor.walletAddress,
@@ -1307,9 +1326,111 @@ test("drafts service exposes stale pending funding metadata when the release4 cu
   assert.equal(detail.versions[0]?.fundingTransactions[0]?.status, "PENDING");
   assert.equal(detail.versions[0]?.fundingTransactions[0]?.stalePending, true);
   assert.ok(detail.versions[0]?.fundingTransactions[0]?.stalePendingAt);
+  assert.equal(detail.versions[0]?.fundingTransactions[0]?.stalePendingEscalatedAt, null);
   assert.equal(
     detail.versions[0]?.fundingTransactions[0]?.stalePendingEvaluation,
     "READY"
+  );
+});
+
+test("drafts service exposes persisted stale pending escalation metadata on funding transactions", async () => {
+  const { draftsService, release4Repositories, repositories, sessionTokenService } =
+    createDraftsService();
+  const actor = await seedAuthenticatedActor(repositories, sessionTokenService);
+  const seeded = await seedDraftVersionScenario(draftsService, repositories, actor);
+
+  await repositories.fundingTransactions.create({
+    chainId: 84532,
+    dealVersionId: seeded.version.version.id,
+    draftDealId: seeded.draft.draft.id,
+    id: "funding-tx-escalated-detail",
+    organizationId: "org-1",
+    reconciledAgreementAddress: null,
+    reconciledAt: null,
+    reconciledConfirmedAt: null,
+    reconciledMatchesTrackedVersion: null,
+    reconciledStatus: null,
+    stalePendingEscalatedAt: "2026-04-06T12:05:00.000Z",
+    submittedAt: isoFromNow(-3900),
+    submittedByUserId: actor.userId,
+    submittedWalletAddress: actor.walletAddress,
+    submittedWalletId: actor.walletId,
+    supersededAt: null,
+    supersededByFundingTransactionId: null,
+    transactionHash:
+      "0x6868686868686868686868686868686868686868686868686868686868686868"
+  });
+  await upsertRelease4Cursor(release4Repositories, isoFromNow(-60));
+
+  const detail = await draftsService.getDraft(
+    {
+      draftDealId: seeded.draft.draft.id,
+      organizationId: "org-1"
+    },
+    {
+      cookieHeader: actor.cookieHeader,
+      ipAddress: "127.0.0.1",
+      userAgent: "test-agent"
+    }
+  );
+
+  assert.equal(
+    detail.versions[0]?.fundingTransactions[0]?.stalePendingEscalatedAt,
+    "2026-04-06T12:05:00.000Z"
+  );
+});
+
+test("drafts service exposes persisted worker reconciliation metadata while keeping live funding status truthful", async () => {
+  const { draftsService, release4Repositories, repositories, sessionTokenService } =
+    createDraftsService();
+  const actor = await seedAuthenticatedActor(repositories, sessionTokenService);
+  const seeded = await seedDraftVersionScenario(draftsService, repositories, actor);
+
+  await repositories.fundingTransactions.create({
+    chainId: 84532,
+    dealVersionId: seeded.version.version.id,
+    draftDealId: seeded.draft.draft.id,
+    id: "funding-tx-reconciled-detail",
+    organizationId: "org-1",
+    reconciledAgreementAddress: "0x7777777777777777777777777777777777777777",
+    reconciledAt: "2026-04-06T12:05:00.000Z",
+    reconciledConfirmedAt: "2026-04-06T12:05:00.000Z",
+    reconciledMatchesTrackedVersion: true,
+    reconciledStatus: "CONFIRMED",
+    stalePendingEscalatedAt: null,
+    submittedAt: isoFromNow(-1800),
+    submittedByUserId: actor.userId,
+    submittedWalletAddress: actor.walletAddress,
+    submittedWalletId: actor.walletId,
+    supersededAt: null,
+    supersededByFundingTransactionId: null,
+    transactionHash:
+      "0x6969696969696969696969696969696969696969696969696969696969696969"
+  });
+  await upsertRelease4Cursor(release4Repositories, isoFromNow(-60));
+
+  const detail = await draftsService.getDraft(
+    {
+      draftDealId: seeded.draft.draft.id,
+      organizationId: "org-1"
+    },
+    {
+      cookieHeader: actor.cookieHeader,
+      ipAddress: "127.0.0.1",
+      userAgent: "test-agent"
+    }
+  );
+
+  assert.equal(detail.versions[0]?.fundingTransactions[0]?.status, "PENDING");
+  assert.equal(detail.versions[0]?.fundingTransactions[0]?.agreementAddress, null);
+  assert.equal(detail.versions[0]?.fundingTransactions[0]?.confirmedAt, null);
+  assert.equal(
+    detail.versions[0]?.fundingTransactions[0]?.reconciledStatus,
+    "CONFIRMED"
+  );
+  assert.equal(
+    detail.versions[0]?.fundingTransactions[0]?.reconciledAt,
+    "2026-04-06T12:05:00.000Z"
   );
 });
 
@@ -1324,6 +1445,12 @@ test("drafts service exposes superseded tracked funding submissions on detail re
     draftDealId: seeded.draft.draft.id,
     id: "funding-tx-4",
     organizationId: "org-1",
+    reconciledAgreementAddress: null,
+    reconciledAt: null,
+    reconciledConfirmedAt: null,
+    reconciledMatchesTrackedVersion: null,
+    reconciledStatus: null,
+    stalePendingEscalatedAt: null,
     submittedAt: "2026-04-06T12:15:00.000Z",
     submittedByUserId: actor.userId,
     submittedWalletAddress: actor.walletAddress,
@@ -1339,6 +1466,12 @@ test("drafts service exposes superseded tracked funding submissions on detail re
     draftDealId: seeded.draft.draft.id,
     id: "funding-tx-5",
     organizationId: "org-1",
+    reconciledAgreementAddress: null,
+    reconciledAt: null,
+    reconciledConfirmedAt: null,
+    reconciledMatchesTrackedVersion: null,
+    reconciledStatus: null,
+    stalePendingEscalatedAt: null,
     submittedAt: "2026-04-06T12:16:00.000Z",
     submittedByUserId: actor.userId,
     submittedWalletAddress: actor.walletAddress,
@@ -1395,6 +1528,12 @@ test("drafts service exposes failed tracked funding progress from indexed revert
     draftDealId: seeded.draft.draft.id,
     id: "funding-tx-3",
     organizationId: "org-1",
+    reconciledAgreementAddress: null,
+    reconciledAt: null,
+    reconciledConfirmedAt: null,
+    reconciledMatchesTrackedVersion: null,
+    reconciledStatus: null,
+    stalePendingEscalatedAt: null,
     submittedAt: "2026-04-06T12:10:00.000Z",
     submittedByUserId: actor.userId,
     submittedWalletAddress: actor.walletAddress,
