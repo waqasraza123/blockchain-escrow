@@ -38,6 +38,10 @@ function parseOptionalString(value: string | undefined): string | null {
   return normalized && normalized.length > 0 ? normalized : null;
 }
 
+function normalizeBaseUrl(value: string | undefined, fallback: string): string {
+  return (parseOptionalString(value) ?? fallback).replace(/\/+$/u, "");
+}
+
 export interface WorkerFundingReconciliationConfiguration {
   readonly indexerFreshnessTtlSeconds: number;
   readonly pendingStaleAfterSeconds: number;
@@ -50,10 +54,19 @@ export interface WorkerMilestoneSettlementExecutionReconciliationConfiguration {
   readonly release4CursorKey: string;
 }
 
+export interface WorkerOperatorAlertConfiguration {
+  readonly indexerBaseUrl: string;
+  readonly indexerFreshnessTtlSeconds: number;
+  readonly release4CursorKey: string;
+  readonly requestTimeoutMs: number;
+  readonly unresolvedDisputeAfterSeconds: number;
+}
+
 export interface WorkerConfig {
   readonly chainId: number;
   readonly fundingReconciliation: WorkerFundingReconciliationConfiguration;
   readonly milestoneSettlementExecutionReconciliation: WorkerMilestoneSettlementExecutionReconciliationConfiguration;
+  readonly operatorAlerts: WorkerOperatorAlertConfiguration;
   readonly pollIntervalMs: number;
   readonly port: number;
   readonly runOnce: boolean;
@@ -99,6 +112,30 @@ export function loadWorkerConfig(): WorkerConfig {
         parseOptionalString(process.env.WORKER_RELEASE4_CURSOR_KEY) ??
         parseOptionalString(process.env.API_RELEASE4_CURSOR_KEY) ??
         `release4:${manifest.network}`
+    },
+    operatorAlerts: {
+      indexerBaseUrl: normalizeBaseUrl(
+        process.env.WORKER_OPERATOR_ALERT_INDEXER_BASE_URL ??
+          process.env.OPERATOR_INDEXER_BASE_URL,
+        "http://127.0.0.1:4200"
+      ),
+      indexerFreshnessTtlSeconds: parsePositiveInteger(
+        "WORKER_OPERATOR_ALERT_INDEXER_FRESHNESS_TTL_SECONDS",
+        parsePositiveInteger("FUNDING_INDEXER_FRESHNESS_TTL_SECONDS", 300)
+      ),
+      release4CursorKey:
+        parseOptionalString(process.env.WORKER_OPERATOR_ALERT_RELEASE4_CURSOR_KEY) ??
+        parseOptionalString(process.env.WORKER_RELEASE4_CURSOR_KEY) ??
+        parseOptionalString(process.env.API_RELEASE4_CURSOR_KEY) ??
+        `release4:${manifest.network}`,
+      requestTimeoutMs: parsePositiveInteger(
+        "WORKER_OPERATOR_ALERT_REQUEST_TIMEOUT_MS",
+        3000
+      ),
+      unresolvedDisputeAfterSeconds: parsePositiveInteger(
+        "WORKER_OPERATOR_ALERT_UNRESOLVED_DISPUTE_AFTER_SECONDS",
+        86400
+      )
     },
     pollIntervalMs: parsePositiveInteger("WORKER_POLL_INTERVAL_MS", 15000),
     port: parsePositiveInteger("WORKER_PORT", 4100),

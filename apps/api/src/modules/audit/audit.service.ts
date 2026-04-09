@@ -276,6 +276,14 @@ export class AuditService {
           invite.id
         );
       }
+      case "OPERATOR_ALERT":
+      case "COMPLIANCE_CHECKPOINT":
+      case "COMPLIANCE_CASE":
+      case "COMPLIANCE_CASE_NOTE":
+      case "PROTOCOL_PROPOSAL_DRAFT":
+        throw new ForbiddenException(
+          "audit logs for operator-only entities are not available on this surface"
+        );
       default:
         return this.assertNever(params.entityType);
     }

@@ -171,6 +171,10 @@ export class InMemoryRelease1Repositories implements Release1Repositories {
     },
     findById: async (id: string): Promise<DraftDealRecord | null> =>
       this.draftDealRecords.find((record) => record.id === id) ?? null,
+    listAll: async (): Promise<DraftDealRecord[]> =>
+      [...this.draftDealRecords].sort((left, right) =>
+        compareIsoTimestamps(left.createdAt, right.createdAt)
+      ),
     listByOrganizationId: async (
       organizationId: string
     ): Promise<DraftDealRecord[]> =>
@@ -243,6 +247,10 @@ export class InMemoryRelease1Repositories implements Release1Repositories {
       this.dealVersionRecords
         .filter((record) => record.draftDealId === draftDealId)
         .sort((left, right) => right.versionNumber - left.versionNumber)[0] ?? null,
+    listAll: async (): Promise<DealVersionRecord[]> =>
+      [...this.dealVersionRecords].sort((left, right) =>
+        compareIsoTimestamps(left.createdAt, right.createdAt)
+      ),
     listByDraftDealId: async (
       draftDealId: string
     ): Promise<DealVersionRecord[]> =>
@@ -354,6 +362,10 @@ export class InMemoryRelease1Repositories implements Release1Repositories {
       ) ?? null,
     findById: async (id: string): Promise<DealMilestoneDisputeRecord | null> =>
       this.dealMilestoneDisputeRecords.find((record) => record.id === id) ?? null,
+    listAll: async (): Promise<DealMilestoneDisputeRecord[]> =>
+      [...this.dealMilestoneDisputeRecords].sort((left, right) =>
+        compareIsoTimestamps(left.openedAt, right.openedAt)
+      ),
     listByDealVersionId: async (
       dealVersionId: string
     ): Promise<DealMilestoneDisputeRecord[]> =>
@@ -919,6 +931,10 @@ export class InMemoryRelease1Repositories implements Release1Repositories {
       this.organizationRecords.find((record) => record.id === id) ?? null,
     findBySlug: async (slug: string): Promise<OrganizationRecord | null> =>
       this.organizationRecords.find((record) => record.slug === slug) ?? null,
+    listAll: async (): Promise<OrganizationRecord[]> =>
+      [...this.organizationRecords].sort((left, right) =>
+        compareIsoTimestamps(left.createdAt, right.createdAt)
+      ),
     listByUserId: async (userId: string): Promise<OrganizationRecord[]> => {
       const organizationIds = new Set(
         this.organizationMemberRecords

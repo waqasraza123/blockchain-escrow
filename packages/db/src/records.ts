@@ -13,10 +13,20 @@ import type {
   IndexedEventName,
   IsoTimestamp,
   JsonObject,
+  OperatorAlertKind,
+  OperatorAlertSeverity,
+  OperatorAlertStatus,
+  OperatorRole,
+  OperatorSubjectType,
   MilestoneSettlementRequestKind,
   MilestoneSettlementRequestSource,
+  ComplianceCaseStatus,
+  ComplianceCheckpointKind,
+  ComplianceCheckpointStatus,
   OrganizationInviteStatus,
   OrganizationRole,
+  ProtocolProposalAction,
+  ProtocolProposalTarget,
   SessionStatus,
   SettlementCurrency,
   TemplateSummary,
@@ -58,6 +68,16 @@ export interface SessionRecord {
   revokedAt: IsoTimestamp | null;
   status: SessionStatus;
   tokenHash: string;
+  userId: EntityId;
+  walletId: EntityId;
+}
+
+export interface OperatorAccountRecord {
+  active: boolean;
+  createdAt: IsoTimestamp;
+  id: EntityId;
+  role: OperatorRole;
+  updatedAt: IsoTimestamp;
   userId: EntityId;
   walletId: EntityId;
 }
@@ -105,6 +125,95 @@ export interface AuditLogRecord {
   occurredAt: IsoTimestamp;
   organizationId: EntityId | null;
   userAgent: string | null;
+}
+
+export interface OperatorAlertRecord {
+  acknowledgedAt: IsoTimestamp | null;
+  acknowledgedByOperatorAccountId: EntityId | null;
+  agreementAddress: WalletAddress | null;
+  assignedOperatorAccountId: EntityId | null;
+  dealVersionId: EntityId | null;
+  description: string;
+  draftDealId: EntityId | null;
+  fingerprint: string;
+  firstDetectedAt: IsoTimestamp;
+  id: EntityId;
+  kind: OperatorAlertKind;
+  lastDetectedAt: IsoTimestamp;
+  linkedComplianceCaseId: EntityId | null;
+  metadata: JsonObject | null;
+  organizationId: EntityId | null;
+  resolvedAt: IsoTimestamp | null;
+  resolvedByOperatorAccountId: EntityId | null;
+  severity: OperatorAlertSeverity;
+  status: OperatorAlertStatus;
+  subjectId: EntityId;
+  subjectLabel: string | null;
+  subjectType: OperatorSubjectType;
+}
+
+export interface ComplianceCheckpointRecord {
+  agreementAddress: WalletAddress | null;
+  createdAt: IsoTimestamp;
+  createdByOperatorAccountId: EntityId;
+  dealVersionId: EntityId | null;
+  decidedAt: IsoTimestamp | null;
+  decidedByOperatorAccountId: EntityId | null;
+  decisionNote: string | null;
+  draftDealId: EntityId | null;
+  id: EntityId;
+  kind: ComplianceCheckpointKind;
+  linkedComplianceCaseId: EntityId | null;
+  note: string;
+  organizationId: EntityId | null;
+  status: ComplianceCheckpointStatus;
+  subjectId: EntityId;
+  subjectLabel: string | null;
+  subjectType: OperatorSubjectType;
+}
+
+export interface ComplianceCaseRecord {
+  agreementAddress: WalletAddress | null;
+  assignedOperatorAccountId: EntityId | null;
+  createdAt: IsoTimestamp;
+  createdByOperatorAccountId: EntityId;
+  dealVersionId: EntityId | null;
+  draftDealId: EntityId | null;
+  id: EntityId;
+  linkedAlertId: EntityId | null;
+  linkedCheckpointId: EntityId | null;
+  organizationId: EntityId | null;
+  resolvedAt: IsoTimestamp | null;
+  severity: OperatorAlertSeverity;
+  status: ComplianceCaseStatus;
+  subjectId: EntityId;
+  subjectLabel: string | null;
+  subjectType: OperatorSubjectType;
+  summary: string;
+  title: string;
+  updatedAt: IsoTimestamp;
+}
+
+export interface ComplianceCaseNoteRecord {
+  authorOperatorAccountId: EntityId;
+  bodyMarkdown: string;
+  complianceCaseId: EntityId;
+  createdAt: IsoTimestamp;
+  id: EntityId;
+}
+
+export interface ProtocolProposalDraftRecord {
+  action: ProtocolProposalAction;
+  calldata: HexString;
+  chainId: ChainId;
+  createdAt: IsoTimestamp;
+  createdByOperatorAccountId: EntityId;
+  description: string;
+  id: EntityId;
+  input: JsonObject;
+  target: ProtocolProposalTarget;
+  targetAddress: WalletAddress;
+  value: string;
 }
 
 export interface CounterpartyRecord {

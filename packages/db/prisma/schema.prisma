@@ -19,6 +19,13 @@ enum OrganizationRole {
   MEMBER
 }
 
+enum OperatorRole {
+  VIEWER
+  COMPLIANCE
+  PROTOCOL_ADMIN
+  SUPER_ADMIN
+}
+
 enum OrganizationInviteStatus {
   PENDING
   ACCEPTED
@@ -30,6 +37,12 @@ enum AuditAction {
   AUTH_LOGOUT
   AUTH_NONCE_ISSUED
   AUTH_SESSION_VERIFIED
+  COMPLIANCE_CASE_ASSIGNED
+  COMPLIANCE_CASE_CREATED
+  COMPLIANCE_CASE_NOTE_ADDED
+  COMPLIANCE_CASE_STATUS_UPDATED
+  COMPLIANCE_CHECKPOINT_CREATED
+  COMPLIANCE_CHECKPOINT_DECIDED
   COUNTERPARTY_CREATED
   DEAL_MILESTONE_DISPUTE_ARBITRATOR_ASSIGNED
   DEAL_MILESTONE_DISPUTE_DECISION_SUBMITTED
@@ -63,6 +76,9 @@ enum AuditAction {
   ORGANIZATION_INVITE_CREATED
   ORGANIZATION_MEMBER_REMOVED
   ORGANIZATION_MEMBER_ROLE_UPDATED
+  OPERATOR_ALERT_ACKNOWLEDGED
+  OPERATOR_ALERT_RESOLVED
+  PROTOCOL_PROPOSAL_DRAFT_CREATED
   TEMPLATE_CREATED
 }
 
@@ -87,7 +103,84 @@ enum MilestoneSettlementRequestSource {
   ARBITRATOR_DECISION
 }
 
+enum OperatorAlertKind {
+  FUNDING_TRANSACTION_STALE_PENDING
+  FUNDING_TRANSACTION_FAILED
+  FUNDING_TRANSACTION_MISMATCHED
+  SETTLEMENT_EXECUTION_STALE_PENDING
+  SETTLEMENT_EXECUTION_FAILED
+  SETTLEMENT_EXECUTION_MISMATCHED
+  DISPUTE_UNRESOLVED
+  SERVICE_UNHEALTHY
+  INDEXER_CURSOR_STALE
+  INDEXER_DRIFT_FAILURE
+}
+
+enum OperatorAlertSeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum OperatorAlertStatus {
+  OPEN
+  ACKNOWLEDGED
+  RESOLVED
+}
+
+enum OperatorSubjectType {
+  DRAFT_DEAL
+  ESCROW_AGREEMENT
+  DEAL_MILESTONE_DISPUTE
+  FUNDING_TRANSACTION
+  DEAL_MILESTONE_SETTLEMENT_EXECUTION_TRANSACTION
+  SYSTEM
+}
+
+enum ComplianceCheckpointKind {
+  SANCTIONS
+}
+
+enum ComplianceCheckpointStatus {
+  PENDING
+  CLEARED
+  BLOCKED
+}
+
+enum ComplianceCaseStatus {
+  OPEN
+  IN_REVIEW
+  ESCALATED
+  RESOLVED
+}
+
+enum ProtocolProposalTarget {
+  TokenAllowlist
+  ArbitratorRegistry
+  ProtocolConfig
+}
+
+enum ProtocolProposalAction {
+  ALLOW_TOKEN
+  DISALLOW_TOKEN
+  APPROVE_ARBITRATOR
+  REVOKE_ARBITRATOR
+  SET_TOKEN_ALLOWLIST
+  SET_ARBITRATOR_REGISTRY
+  SET_FEE_VAULT
+  SET_TREASURY
+  SET_PROTOCOL_FEE_BPS
+  PAUSE_CREATE_ESCROW
+  UNPAUSE_CREATE_ESCROW
+  PAUSE_FUNDING
+  UNPAUSE_FUNDING
+}
+
 enum AuditEntityType {
+  COMPLIANCE_CASE
+  COMPLIANCE_CASE_NOTE
+  COMPLIANCE_CHECKPOINT
   COUNTERPARTY
   DEAL_MILESTONE_DISPUTE
   DEAL_MILESTONE_DISPUTE_ASSIGNMENT
@@ -105,6 +198,8 @@ enum AuditEntityType {
   ORGANIZATION
   ORGANIZATION_INVITE
   ORGANIZATION_MEMBER
+  OPERATOR_ALERT
+  PROTOCOL_PROPOSAL_DRAFT
   SESSION
   TEMPLATE
   USER
@@ -192,6 +287,7 @@ model User {
   sessions                   Session[]
   wallets                    Wallet[]
   organizationsOwned         Organization[]
+  operatorAccounts           OperatorAccount[]
   counterpartiesCreated      Counterparty[]         @relation("CounterpartyCreatedByUser")
   dealMilestoneDisputeAssignmentsMade DealMilestoneDisputeAssignment[] @relation("DealMilestoneDisputeAssignmentAssignedByUser")
   dealMilestoneDisputesOpened DealMilestoneDispute[] @relation("DealMilestoneDisputeOpenedByUser")
@@ -221,6 +317,7 @@ model Wallet {
   createdAt             DateTime                @db.Timestamptz(3)
   updatedAt             DateTime                @db.Timestamptz(3)
   user                  User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  operatorAccounts      OperatorAccount[]
   sessions              Session[]
   dealVersionAcceptances DealVersionAcceptance[] @relation("DealVersionAcceptanceSignerWallet")
   dealMilestoneSettlementExecutionTransactionsSubmitted DealMilestoneSettlementExecutionTransaction[] @relation("DealMilestoneSettlementExecutionTransactionSubmittedWallet")
@@ -263,6 +360,33 @@ model Session {
   @@map("sessions")
 }
 
+model OperatorAccount {
+  id         String       @id @db.Text
+  userId     String       @db.Text
+  walletId   String       @db.Text
+  role       OperatorRole
+  active     Boolean
+  createdAt  DateTime     @db.Timestamptz(3)
+  updatedAt  DateTime     @db.Timestamptz(3)
+  user       User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  wallet     Wallet       @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  acknowledgedAlerts OperatorAlert[] @relation("OperatorAlertAcknowledgedByOperator")
+  assignedAlerts OperatorAlert[]     @relation("OperatorAlertAssignedOperator")
+  resolvedAlerts OperatorAlert[]     @relation("OperatorAlertResolvedByOperator")
+  assignedComplianceCases ComplianceCase[] @relation("ComplianceCaseAssignedOperator")
+  createdComplianceCases ComplianceCase[]   @relation("ComplianceCaseCreatedByOperator")
+  complianceCaseNotes ComplianceCaseNote[]  @relation("ComplianceCaseNoteAuthoredByOperator")
+  createdComplianceCheckpoints ComplianceCheckpoint[] @relation("ComplianceCheckpointCreatedByOperator")
+  decidedComplianceCheckpoints ComplianceCheckpoint[] @relation("ComplianceCheckpointDecidedByOperator")
+  createdProtocolProposalDrafts ProtocolProposalDraft[]
+
+  @@unique([walletId], map: "operator_accounts_wallet_id_key")
+  @@index([userId], map: "operator_accounts_user_id_idx")
+  @@index([role], map: "operator_accounts_role_idx")
+  @@index([active], map: "operator_accounts_active_idx")
+  @@map("operator_accounts")
+}
+
 model Organization {
   id                     String                  @id @db.Text
   createdByUserId        String                  @db.Text
@@ -288,6 +412,9 @@ model Organization {
   draftDeals             DraftDeal[]
   files                  StoredFile[]
   fundingTransactions    FundingTransaction[]
+  complianceCases        ComplianceCase[]
+  complianceCheckpoints  ComplianceCheckpoint[]
+  operatorAlerts         OperatorAlert[]
   templates              Template[]
   members                OrganizationMember[]
   invites                OrganizationInvite[]
@@ -979,6 +1106,141 @@ model AuditLog {
   @@index([organizationId], map: "audit_logs_organization_id_idx")
   @@index([actorUserId], map: "audit_logs_actor_user_id_idx")
   @@map("audit_logs")
+}
+
+model OperatorAlert {
+  id                             String                @id @db.Text
+  fingerprint                    String                @unique @db.Text
+  kind                           OperatorAlertKind
+  severity                       OperatorAlertSeverity
+  status                         OperatorAlertStatus
+  description                    String                @db.Text
+  metadata                       Json?
+  subjectType                    OperatorSubjectType
+  subjectId                      String                @db.Text
+  organizationId                 String?               @db.Text
+  draftDealId                    String?               @db.Text
+  dealVersionId                  String?               @db.Text
+  agreementAddress               String?               @db.Text
+  subjectLabel                   String?               @db.Text
+  assignedOperatorAccountId      String?               @db.Text
+  linkedComplianceCaseId         String?               @db.Text
+  acknowledgedAt                 DateTime?             @db.Timestamptz(3)
+  acknowledgedByOperatorAccountId String?              @db.Text
+  resolvedAt                     DateTime?             @db.Timestamptz(3)
+  resolvedByOperatorAccountId    String?               @db.Text
+  firstDetectedAt                DateTime              @db.Timestamptz(3)
+  lastDetectedAt                 DateTime              @db.Timestamptz(3)
+  organization                   Organization?         @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  assignedOperatorAccount        OperatorAccount?      @relation("OperatorAlertAssignedOperator", fields: [assignedOperatorAccountId], references: [id], onDelete: SetNull)
+  linkedComplianceCaseRecord     ComplianceCase?       @relation("ComplianceCaseLinkedAlert")
+  acknowledgedByOperatorAccount  OperatorAccount?      @relation("OperatorAlertAcknowledgedByOperator", fields: [acknowledgedByOperatorAccountId], references: [id], onDelete: SetNull)
+  resolvedByOperatorAccount      OperatorAccount?      @relation("OperatorAlertResolvedByOperator", fields: [resolvedByOperatorAccountId], references: [id], onDelete: SetNull)
+
+  @@index([kind], map: "operator_alerts_kind_idx")
+  @@index([status], map: "operator_alerts_status_idx")
+  @@index([organizationId], map: "operator_alerts_organization_id_idx")
+  @@index([subjectType, subjectId], map: "operator_alerts_subject_idx")
+  @@index([lastDetectedAt], map: "operator_alerts_last_detected_at_idx")
+  @@map("operator_alerts")
+}
+
+model ComplianceCheckpoint {
+  id                        String                     @id @db.Text
+  kind                      ComplianceCheckpointKind
+  status                    ComplianceCheckpointStatus
+  subjectType               OperatorSubjectType
+  subjectId                 String                     @db.Text
+  organizationId            String?                    @db.Text
+  draftDealId               String?                    @db.Text
+  dealVersionId             String?                    @db.Text
+  agreementAddress          String?                    @db.Text
+  subjectLabel              String?                    @db.Text
+  note                      String                     @db.Text
+  decisionNote              String?                    @db.Text
+  createdByOperatorAccountId String                    @db.Text
+  decidedByOperatorAccountId String?                   @db.Text
+  linkedComplianceCaseId    String?                    @db.Text
+  createdAt                 DateTime                   @db.Timestamptz(3)
+  decidedAt                 DateTime?                  @db.Timestamptz(3)
+  organization              Organization?              @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  createdByOperatorAccount  OperatorAccount            @relation("ComplianceCheckpointCreatedByOperator", fields: [createdByOperatorAccountId], references: [id], onDelete: Restrict)
+  decidedByOperatorAccount  OperatorAccount?           @relation("ComplianceCheckpointDecidedByOperator", fields: [decidedByOperatorAccountId], references: [id], onDelete: SetNull)
+  linkedComplianceCaseRecord ComplianceCase?           @relation("ComplianceCaseLinkedCheckpoint")
+
+  @@index([status], map: "compliance_checkpoints_status_idx")
+  @@index([organizationId], map: "compliance_checkpoints_organization_id_idx")
+  @@index([subjectType, subjectId], map: "compliance_checkpoints_subject_idx")
+  @@index([createdAt], map: "compliance_checkpoints_created_at_idx")
+  @@map("compliance_checkpoints")
+}
+
+model ComplianceCase {
+  id                       String                  @id @db.Text
+  title                    String                  @db.Text
+  summary                  String                  @db.Text
+  severity                 OperatorAlertSeverity
+  status                   ComplianceCaseStatus
+  subjectType              OperatorSubjectType
+  subjectId                String                  @db.Text
+  organizationId           String?                 @db.Text
+  draftDealId              String?                 @db.Text
+  dealVersionId            String?                 @db.Text
+  agreementAddress         String?                 @db.Text
+  subjectLabel             String?                 @db.Text
+  createdByOperatorAccountId String                @db.Text
+  assignedOperatorAccountId String?                @db.Text
+  linkedAlertId            String?                 @unique @db.Text
+  linkedCheckpointId       String?                 @unique @db.Text
+  createdAt                DateTime                @db.Timestamptz(3)
+  updatedAt                DateTime                @db.Timestamptz(3)
+  resolvedAt               DateTime?               @db.Timestamptz(3)
+  organization             Organization?           @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  createdByOperatorAccount OperatorAccount         @relation("ComplianceCaseCreatedByOperator", fields: [createdByOperatorAccountId], references: [id], onDelete: Restrict)
+  assignedOperatorAccount  OperatorAccount?        @relation("ComplianceCaseAssignedOperator", fields: [assignedOperatorAccountId], references: [id], onDelete: SetNull)
+  linkedAlert              OperatorAlert?          @relation("ComplianceCaseLinkedAlert", fields: [linkedAlertId], references: [id], onDelete: SetNull)
+  linkedCheckpoint         ComplianceCheckpoint?   @relation("ComplianceCaseLinkedCheckpoint", fields: [linkedCheckpointId], references: [id], onDelete: SetNull)
+  notes                    ComplianceCaseNote[]
+
+  @@index([status], map: "compliance_cases_status_idx")
+  @@index([organizationId], map: "compliance_cases_organization_id_idx")
+  @@index([subjectType, subjectId], map: "compliance_cases_subject_idx")
+  @@index([createdAt], map: "compliance_cases_created_at_idx")
+  @@map("compliance_cases")
+}
+
+model ComplianceCaseNote {
+  id                      String          @id @db.Text
+  complianceCaseId        String          @db.Text
+  authorOperatorAccountId String          @db.Text
+  bodyMarkdown            String          @db.Text
+  createdAt               DateTime        @db.Timestamptz(3)
+  complianceCase          ComplianceCase  @relation(fields: [complianceCaseId], references: [id], onDelete: Cascade)
+  authorOperatorAccount   OperatorAccount @relation("ComplianceCaseNoteAuthoredByOperator", fields: [authorOperatorAccountId], references: [id], onDelete: Restrict)
+
+  @@index([complianceCaseId], map: "compliance_case_notes_case_id_idx")
+  @@index([createdAt], map: "compliance_case_notes_created_at_idx")
+  @@map("compliance_case_notes")
+}
+
+model ProtocolProposalDraft {
+  id                       String                 @id @db.Text
+  chainId                  Int
+  target                   ProtocolProposalTarget
+  action                   ProtocolProposalAction
+  description              String                 @db.Text
+  input                    Json
+  targetAddress            String                 @db.Text
+  calldata                 String                 @db.Text
+  value                    String                 @db.Text
+  createdAt                DateTime               @db.Timestamptz(3)
+  createdByOperatorAccountId String               @db.Text
+  createdByOperatorAccount OperatorAccount        @relation(fields: [createdByOperatorAccountId], references: [id], onDelete: Restrict)
+
+  @@index([chainId], map: "protocol_proposal_drafts_chain_id_idx")
+  @@index([target], map: "protocol_proposal_drafts_target_idx")
+  @@index([createdAt], map: "protocol_proposal_drafts_created_at_idx")
+  @@map("protocol_proposal_drafts")
 }
 
 model ChainCursor {

@@ -40,6 +40,18 @@ export const release2TableNames = {
 export type Release2TableName =
   (typeof release2TableNames)[keyof typeof release2TableNames];
 
+export const release8TableNames = {
+  complianceCaseNotes: "compliance_case_notes",
+  complianceCases: "compliance_cases",
+  complianceCheckpoints: "compliance_checkpoints",
+  operatorAccounts: "operator_accounts",
+  operatorAlerts: "operator_alerts",
+  protocolProposalDrafts: "protocol_proposal_drafts"
+} as const;
+
+export type Release8TableName =
+  (typeof release8TableNames)[keyof typeof release8TableNames];
+
 export const release4TableNames = {
   arbitratorRegistryEntryProjections: "arbitrator_registry_entry_projections",
   chainCursors: "chain_cursors",

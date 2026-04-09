@@ -1,9 +1,11 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 
+import "./globals.css";
+
 export const metadata: Metadata = {
-  title: "blockchain-escrow admin",
-  description: "Operator console scaffold"
+  title: "Operator Console",
+  description: "Internal operator console for blockchain-escrow"
 };
 
 type RootLayoutProps = {

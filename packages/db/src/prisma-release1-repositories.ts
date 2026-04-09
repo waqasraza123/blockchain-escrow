@@ -1134,6 +1134,14 @@ export class PrismaOrganizationRepository implements OrganizationRepository {
     return record ? mapOrganizationRecord(record) : null;
   }
 
+  async listAll(): Promise<OrganizationRecord[]> {
+    const records = await this.prisma.organization.findMany({
+      orderBy: { createdAt: "asc" }
+    });
+
+    return records.map(mapOrganizationRecord);
+  }
+
   async listByUserId(userId: string): Promise<OrganizationRecord[]> {
     const records = await this.prisma.organization.findMany({
       where: {
@@ -1334,6 +1342,14 @@ export class PrismaDraftDealRepository implements DraftDealRepository {
     return record ? mapDraftDealRecord(record) : null;
   }
 
+  async listAll(): Promise<DraftDealRecord[]> {
+    const records = await this.prisma.draftDeal.findMany({
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }]
+    });
+
+    return records.map(mapDraftDealRecord);
+  }
+
   async listByOrganizationId(organizationId: string): Promise<DraftDealRecord[]> {
     const records = await this.prisma.draftDeal.findMany({
       where: { organizationId },
@@ -1469,6 +1485,14 @@ export class PrismaDealVersionRepository implements DealVersionRepository {
     });
 
     return record ? mapDealVersionRecord(record) : null;
+  }
+
+  async listAll(): Promise<DealVersionRecord[]> {
+    const records = await this.prisma.dealVersion.findMany({
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }]
+    });
+
+    return records.map(mapDealVersionRecord);
   }
 
   async listByDraftDealId(draftDealId: string): Promise<DealVersionRecord[]> {
@@ -1765,6 +1789,14 @@ export class PrismaDealMilestoneDisputeRepository
     });
 
     return record ? mapDealMilestoneDisputeRecord(record) : null;
+  }
+
+  async listAll(): Promise<DealMilestoneDisputeRecord[]> {
+    const records = await (this.prisma as any).dealMilestoneDispute.findMany({
+      orderBy: [{ openedAt: "asc" }, { id: "asc" }]
+    });
+
+    return records.map(mapDealMilestoneDisputeRecord);
   }
 
   async listByDealVersionId(

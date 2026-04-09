@@ -1,7 +1,8 @@
 import {
   createPrismaClient,
   createPrismaRelease4Repositories,
-  createRelease1Repositories
+  createRelease1Repositories,
+  createRelease8Repositories
 } from "@blockchain-escrow/db";
 
 import type { WorkerConfig } from "./config";
@@ -12,17 +13,20 @@ import { HealthState } from "./health-state";
 import { MilestoneReviewDeadlineReconciler } from "./milestone-review-deadline-reconciler";
 import { MilestoneSettlementExecutionReconciler } from "./milestone-settlement-execution-reconciler";
 import { MilestoneSettlementPreparationReconciler } from "./milestone-settlement-preparation-reconciler";
+import { OperatorAlertReconciler } from "./operator-alert-reconciler";
 
 export class WorkerService {
   private readonly prisma = createPrismaClient();
   private readonly release1Repositories = createRelease1Repositories(this.prisma);
   private readonly release4Repositories = createPrismaRelease4Repositories(this.prisma);
+  private readonly release8Repositories = createRelease8Repositories(this.prisma);
   private readonly draftCustodyStateReconciler: DraftCustodyStateReconciler;
   private readonly draftActivationReconciler: DraftActivationReconciler;
   private readonly fundingReconciler: FundingReconciler;
   private readonly milestoneReviewDeadlineReconciler: MilestoneReviewDeadlineReconciler;
   private readonly milestoneSettlementExecutionReconciler: MilestoneSettlementExecutionReconciler;
   private readonly milestoneSettlementPreparationReconciler: MilestoneSettlementPreparationReconciler;
+  private readonly operatorAlertReconciler: OperatorAlertReconciler;
   private intervalHandle: NodeJS.Timeout | null = null;
   private isRunning = false;
 
@@ -61,6 +65,13 @@ export class WorkerService {
         this.release4Repositories,
         this.config.chainId
       );
+    this.operatorAlertReconciler = new OperatorAlertReconciler(
+      this.release1Repositories,
+      this.release4Repositories,
+      this.release8Repositories,
+      this.config.chainId,
+      this.config.operatorAlerts
+    );
   }
 
   async start(): Promise<void> {
@@ -98,6 +109,7 @@ export class WorkerService {
         draftCustodyStateSummary,
         draftActivationSummary,
         fundingSummary,
+        operatorAlertSummary,
         milestoneReviewDeadlineSummary,
         milestoneSettlementExecutionSummary,
         milestoneSettlementPreparationSummary
@@ -105,6 +117,7 @@ export class WorkerService {
         this.draftCustodyStateReconciler.reconcileOnce(),
         this.draftActivationReconciler.reconcileOnce(),
         this.fundingReconciler.reconcileOnce(),
+        this.operatorAlertReconciler.reconcileOnce(),
         this.milestoneReviewDeadlineReconciler.reconcileOnce(),
         this.milestoneSettlementExecutionReconciler.reconcileOnce(),
         this.milestoneSettlementPreparationReconciler.reconcileOnce()
@@ -113,6 +126,7 @@ export class WorkerService {
         ...draftCustodyStateSummary,
         ...draftActivationSummary,
         ...fundingSummary,
+        ...operatorAlertSummary,
         ...milestoneReviewDeadlineSummary,
         ...milestoneSettlementExecutionSummary,
         ...milestoneSettlementPreparationSummary

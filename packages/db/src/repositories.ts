@@ -10,6 +10,9 @@ import type {
   ArbitratorRegistryEntryRecord,
   AuditLogRecord,
   ChainCursorRecord,
+  ComplianceCaseNoteRecord,
+  ComplianceCaseRecord,
+  ComplianceCheckpointRecord,
   ContractOwnershipRecord,
   CounterpartyRecord,
   CounterpartyDealVersionAcceptanceRecord,
@@ -42,7 +45,10 @@ import type {
   OrganizationInviteRecord,
   OrganizationMemberRecord,
   OrganizationRecord,
+  OperatorAccountRecord,
+  OperatorAlertRecord,
   ProtocolConfigStateRecord,
+  ProtocolProposalDraftRecord,
   SessionRecord,
   TemplateRecord,
   TokenAllowlistEntryRecord,
@@ -83,10 +89,18 @@ export interface SessionRepository {
   touch(id: EntityId): Promise<SessionRecord | null>;
 }
 
+export interface OperatorAccountRepository {
+  create(record: OperatorAccountRecord): Promise<OperatorAccountRecord>;
+  findActiveByUserId(userId: EntityId): Promise<OperatorAccountRecord | null>;
+  findActiveByWalletId(walletId: EntityId): Promise<OperatorAccountRecord | null>;
+  findById(id: EntityId): Promise<OperatorAccountRecord | null>;
+}
+
 export interface OrganizationRepository {
   create(record: OrganizationRecord): Promise<OrganizationRecord>;
   findById(id: EntityId): Promise<OrganizationRecord | null>;
   findBySlug(slug: string): Promise<OrganizationRecord | null>;
+  listAll(): Promise<OrganizationRecord[]>;
   listByUserId(userId: EntityId): Promise<OrganizationRecord[]>;
 }
 
@@ -131,6 +145,50 @@ export interface AuditLogRepository {
   ): Promise<AuditLogRecord[]>;
 }
 
+export interface OperatorAlertRepository {
+  create(record: OperatorAlertRecord): Promise<OperatorAlertRecord>;
+  findByFingerprint(fingerprint: string): Promise<OperatorAlertRecord | null>;
+  findById(id: EntityId): Promise<OperatorAlertRecord | null>;
+  listAll(): Promise<OperatorAlertRecord[]>;
+  update(
+    id: EntityId,
+    updates: Partial<Omit<OperatorAlertRecord, "id" | "fingerprint" | "firstDetectedAt">>
+  ): Promise<OperatorAlertRecord>;
+}
+
+export interface ComplianceCheckpointRepository {
+  create(record: ComplianceCheckpointRecord): Promise<ComplianceCheckpointRecord>;
+  findById(id: EntityId): Promise<ComplianceCheckpointRecord | null>;
+  listAll(): Promise<ComplianceCheckpointRecord[]>;
+  update(
+    id: EntityId,
+    updates: Partial<Omit<ComplianceCheckpointRecord, "id" | "createdAt" | "createdByOperatorAccountId">>
+  ): Promise<ComplianceCheckpointRecord>;
+}
+
+export interface ComplianceCaseRepository {
+  create(record: ComplianceCaseRecord): Promise<ComplianceCaseRecord>;
+  findById(id: EntityId): Promise<ComplianceCaseRecord | null>;
+  listAll(): Promise<ComplianceCaseRecord[]>;
+  update(
+    id: EntityId,
+    updates: Partial<Omit<ComplianceCaseRecord, "id" | "createdAt" | "createdByOperatorAccountId">>
+  ): Promise<ComplianceCaseRecord>;
+}
+
+export interface ComplianceCaseNoteRepository {
+  create(record: ComplianceCaseNoteRecord): Promise<ComplianceCaseNoteRecord>;
+  listByComplianceCaseId(
+    complianceCaseId: EntityId
+  ): Promise<ComplianceCaseNoteRecord[]>;
+}
+
+export interface ProtocolProposalDraftRepository {
+  create(record: ProtocolProposalDraftRecord): Promise<ProtocolProposalDraftRecord>;
+  findById(id: EntityId): Promise<ProtocolProposalDraftRecord | null>;
+  listAll(): Promise<ProtocolProposalDraftRecord[]>;
+}
+
 export interface CounterpartyRepository {
   create(record: CounterpartyRecord): Promise<CounterpartyRecord>;
   findById(id: EntityId): Promise<CounterpartyRecord | null>;
@@ -164,6 +222,7 @@ export interface TemplateRepository {
 export interface DraftDealRepository {
   create(record: DraftDealRecord): Promise<DraftDealRecord>;
   findById(id: EntityId): Promise<DraftDealRecord | null>;
+  listAll(): Promise<DraftDealRecord[]>;
   listByOrganizationId(organizationId: EntityId): Promise<DraftDealRecord[]>;
   listByStates(states: DraftDealRecord["state"][]): Promise<DraftDealRecord[]>;
   updateState(
@@ -189,6 +248,7 @@ export interface DealVersionRepository {
   findLatestByDraftDealId(
     draftDealId: EntityId
   ): Promise<DealVersionRecord | null>;
+  listAll(): Promise<DealVersionRecord[]>;
   listByDraftDealId(draftDealId: EntityId): Promise<DealVersionRecord[]>;
 }
 
@@ -245,6 +305,7 @@ export interface DealMilestoneDisputeRepository {
     dealMilestoneReviewId: EntityId
   ): Promise<DealMilestoneDisputeRecord | null>;
   findById(id: EntityId): Promise<DealMilestoneDisputeRecord | null>;
+  listAll(): Promise<DealMilestoneDisputeRecord[]>;
   listByDealVersionId(dealVersionId: EntityId): Promise<DealMilestoneDisputeRecord[]>;
 }
 
@@ -570,4 +631,13 @@ export interface Release1Repositories {
   users: UserRepository;
   walletNonces: WalletNonceRepository;
   wallets: WalletRepository;
+}
+
+export interface Release8Repositories {
+  complianceCaseNotes: ComplianceCaseNoteRepository;
+  complianceCases: ComplianceCaseRepository;
+  complianceCheckpoints: ComplianceCheckpointRepository;
+  operatorAccounts: OperatorAccountRepository;
+  operatorAlerts: OperatorAlertRepository;
+  protocolProposalDrafts: ProtocolProposalDraftRepository;
 }

@@ -1,5 +1,7 @@
 export interface WorkerRunSnapshot {
   readonly activatedDraftCount: number;
+  readonly activeOperatorAlertCount: number;
+  readonly autoResolvedOperatorAlertCount: number;
   readonly blockedMilestoneSettlementPreparationCount: number;
   readonly clearedFundingReconciliationCount: number;
   readonly clearedMilestoneSettlementExecutionReconciliationCount: number;
@@ -8,6 +10,7 @@ export interface WorkerRunSnapshot {
   readonly reconciledDraftCustodyStateCount: number;
   readonly reconciledFundingTransactionCount: number;
   readonly reconciledMilestoneSettlementExecutionTransactionCount: number;
+  readonly reopenedOperatorAlertCount: number;
   readonly scannedDraftCustodyStateCount: number;
   readonly scannedDraftCount: number;
   readonly scannedFundingTransactionCount: number;
@@ -16,6 +19,7 @@ export interface WorkerRunSnapshot {
   readonly scannedMilestoneSettlementDraftCount: number;
   readonly scannedMilestoneSettlementExecutionTransactionCount: number;
   readonly scannedMilestoneSettlementRequestCount: number;
+  readonly scannedOperatorAlertSourceCount: number;
   readonly stalePendingMilestoneSettlementExecutionCount: number;
   readonly stalePendingEscalationCount: number;
 }

@@ -1,0 +1,1694 @@
+import { randomUUID } from "node:crypto";
+
+import {
+  contractArtifacts,
+  getDeploymentManifestByChainId
+} from "@blockchain-escrow/contracts-sdk";
+import type {
+  ComplianceCaseRecord,
+  ComplianceCheckpointRecord,
+  OperatorAccountRecord,
+  OperatorAlertRecord,
+  Release1Repositories,
+  Release4Repositories,
+  Release8Repositories,
+  WalletRecord,
+  DraftDealRecord
+} from "@blockchain-escrow/db";
+import {
+  acknowledgeOperatorAlertSchema,
+  addComplianceCaseNoteSchema,
+  assignComplianceCaseSchema,
+  complianceCaseParamsSchema,
+  complianceCheckpointParamsSchema,
+  createComplianceCaseSchema,
+  createComplianceCheckpointSchema,
+  createProtocolProposalDraftSchema,
+  decideComplianceCheckpointSchema,
+  listComplianceCasesParamsSchema,
+  listOperatorAlertsParamsSchema,
+  operatorAlertActionParamsSchema,
+  operatorSearchParamsSchema,
+  protocolProposalDraftParamsSchema,
+  resolveOperatorAlertSchema,
+  updateComplianceCaseStatusSchema
+} from "@blockchain-escrow/shared";
+import type {
+  ComplianceCaseDetailResponse,
+  ComplianceCaseSummary,
+  ComplianceCheckpointSummary,
+  JsonObject,
+  ProtocolProposalTarget,
+  CreateComplianceCaseInput,
+  CreateComplianceCheckpointInput,
+  CreateProtocolProposalDraftInput,
+  ListComplianceCasesParams,
+  ListComplianceCasesResponse,
+  ListComplianceCheckpointsResponse,
+  ListOperatorAlertsParams,
+  ListOperatorAlertsResponse,
+  ListProtocolProposalDraftsResponse,
+  OperatorDashboardCard,
+  OperatorDashboardResponse,
+  OperatorHealthResponse,
+  OperatorPermissionSet,
+  OperatorReconciliationResponse,
+  OperatorSearchHit,
+  OperatorSearchParams,
+  OperatorSearchResponse,
+  OperatorSessionResponse,
+  OperatorSubjectSummary,
+  ProtocolProposalAction,
+  ProtocolProposalDraftDetailResponse,
+  ProtocolProposalDraftSummary,
+  RemoteServiceHealth,
+  ResolveOperatorAlertInput,
+  UpdateComplianceCaseStatusInput,
+  AcknowledgeOperatorAlertInput,
+  AddComplianceCaseNoteInput,
+  AssignComplianceCaseInput,
+  ComplianceCaseParams,
+  ComplianceCheckpointParams,
+  DecideComplianceCheckpointInput,
+  OperatorAlertActionParams,
+  ProtocolProposalDraftParams
+} from "@blockchain-escrow/shared";
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  Inject,
+  Injectable,
+  NotFoundException
+} from "@nestjs/common";
+import { encodeFunctionData, type Abi } from "viem";
+
+import { buildCanonicalDealId } from "../drafts/deal-identity";
+import {
+  RELEASE1_REPOSITORIES,
+  RELEASE4_REPOSITORIES,
+  RELEASE8_REPOSITORIES
+} from "../../infrastructure/tokens";
+import type { RequestMetadata } from "../auth/auth.http";
+import { AuthenticatedSessionService } from "../auth/authenticated-session.service";
+import {
+  OPERATOR_CONFIGURATION,
+  type OperatorConfiguration
+} from "./operator.tokens";
+
+type OperatorContext = {
+  operatorAccount: OperatorAccountRecord;
+  permissions: OperatorPermissionSet;
+  requestMetadata: RequestMetadata;
+  sessionWallet: WalletRecord;
+};
+
+type RemoteHealthProbe = {
+  details: JsonObject | null;
+  live: boolean;
+  ready: boolean;
+};
+
+function parseInput<T>(
+  schema: { safeParse(input: unknown): { success: true; data: T } | { success: false; error: { flatten(): unknown } } },
+  input: unknown
+): T {
+  const parsed = schema.safeParse(input);
+
+  if (!parsed.success) {
+    throw new BadRequestException(parsed.error.flatten());
+  }
+
+  return parsed.data;
+}
+
+function lowerCaseIncludes(value: string | null | undefined, query: string): boolean {
+  return Boolean(value && value.toLowerCase().includes(query));
+}
+
+function buildPermissions(role: OperatorAccountRecord["role"]): OperatorPermissionSet {
+  return {
+    canManageCases: role === "COMPLIANCE" || role === "SUPER_ADMIN",
+    canManageCheckpoints: role === "COMPLIANCE" || role === "SUPER_ADMIN",
+    canManageProtocolProposals:
+      role === "PROTOCOL_ADMIN" || role === "SUPER_ADMIN",
+    canResolveAlerts: role === "COMPLIANCE" || role === "SUPER_ADMIN",
+    canViewOperatorConsole: true
+  };
+}
+
+function buildSubjectSummary(input: {
+  agreementAddress?: string | null;
+  dealVersionId?: string | null;
+  draftDealId?: string | null;
+  label?: string | null;
+  organizationId?: string | null;
+  subjectId: string;
+  subjectType: OperatorSubjectSummary["subjectType"];
+}): OperatorSubjectSummary {
+  return {
+    agreementAddress: (input.agreementAddress ?? null) as OperatorSubjectSummary["agreementAddress"],
+    dealVersionId: input.dealVersionId ?? null,
+    draftDealId: input.draftDealId ?? null,
+    label: input.label ?? null,
+    organizationId: input.organizationId ?? null,
+    subjectId: input.subjectId,
+    subjectType: input.subjectType
+  };
+}
+
+function normalizeAgreementAddress(
+  address: string | null | undefined
+): `0x${string}` | null {
+  if (!address) {
+    return null;
+  }
+
+  return address.toLowerCase() as `0x${string}`;
+}
+
+function findDraftByCanonicalDealId(
+  drafts: readonly DraftDealRecord[],
+  canonicalDealId: string
+): DraftDealRecord | null {
+  return (
+    drafts.find(
+      (draft) =>
+        buildCanonicalDealId(draft.organizationId, draft.id) === canonicalDealId
+    ) ?? null
+  );
+}
+
+function toAlertSummary(record: OperatorAlertRecord): ListOperatorAlertsResponse["alerts"][number] {
+  return {
+    acknowledgedAt: record.acknowledgedAt,
+    acknowledgedByOperatorAccountId: record.acknowledgedByOperatorAccountId,
+    assignedOperatorAccountId: record.assignedOperatorAccountId,
+    description: record.description,
+    firstDetectedAt: record.firstDetectedAt,
+    id: record.id,
+    kind: record.kind,
+    lastDetectedAt: record.lastDetectedAt,
+    metadata: record.metadata,
+    resolvedAt: record.resolvedAt,
+    resolvedByOperatorAccountId: record.resolvedByOperatorAccountId,
+    severity: record.severity,
+    status: record.status,
+    subject: buildSubjectSummary({
+      agreementAddress: record.agreementAddress,
+      dealVersionId: record.dealVersionId,
+      draftDealId: record.draftDealId,
+      label: record.subjectLabel,
+      organizationId: record.organizationId,
+      subjectId: record.subjectId,
+      subjectType: record.subjectType
+    })
+  };
+}
+
+function toCheckpointSummary(
+  record: ComplianceCheckpointRecord
+): ComplianceCheckpointSummary {
+  return {
+    createdAt: record.createdAt,
+    createdByOperatorAccountId: record.createdByOperatorAccountId,
+    decisionNote: record.decisionNote,
+    decidedAt: record.decidedAt,
+    decidedByOperatorAccountId: record.decidedByOperatorAccountId,
+    id: record.id,
+    kind: record.kind,
+    linkedComplianceCaseId: record.linkedComplianceCaseId,
+    note: record.note,
+    status: record.status,
+    subject: buildSubjectSummary({
+      agreementAddress: record.agreementAddress,
+      dealVersionId: record.dealVersionId,
+      draftDealId: record.draftDealId,
+      label: record.subjectLabel,
+      organizationId: record.organizationId,
+      subjectId: record.subjectId,
+      subjectType: record.subjectType
+    })
+  };
+}
+
+function toCaseSummary(record: ComplianceCaseRecord): ComplianceCaseSummary {
+  return {
+    assignedOperatorAccountId: record.assignedOperatorAccountId,
+    createdAt: record.createdAt,
+    createdByOperatorAccountId: record.createdByOperatorAccountId,
+    id: record.id,
+    lastNoteAt: null,
+    linkedAlertId: record.linkedAlertId,
+    linkedCheckpointId: record.linkedCheckpointId,
+    severity: record.severity,
+    status: record.status,
+    subject: buildSubjectSummary({
+      agreementAddress: record.agreementAddress,
+      dealVersionId: record.dealVersionId,
+      draftDealId: record.draftDealId,
+      label: record.subjectLabel,
+      organizationId: record.organizationId,
+      subjectId: record.subjectId,
+      subjectType: record.subjectType
+    }),
+    summary: record.summary,
+    title: record.title
+  };
+}
+
+function toProtocolProposalSummary(
+  record: {
+    action: ProtocolProposalDraftSummary["action"];
+    calldata: ProtocolProposalDraftSummary["calldata"];
+    chainId: number;
+    createdAt: string;
+    createdByOperatorAccountId: string;
+    description: string;
+    id: string;
+    input: ProtocolProposalDraftSummary["input"];
+    target: ProtocolProposalDraftSummary["target"];
+    targetAddress: ProtocolProposalDraftSummary["targetAddress"];
+    value: string;
+  }
+): ProtocolProposalDraftSummary {
+  return {
+    action: record.action,
+    calldata: record.calldata,
+    chainId: record.chainId,
+    createdAt: record.createdAt,
+    createdByOperatorAccountId: record.createdByOperatorAccountId,
+    description: record.description,
+    id: record.id,
+    input: record.input,
+    target: record.target,
+    targetAddress: record.targetAddress,
+    value: record.value
+  };
+}
+
+@Injectable()
+export class OperatorService {
+  constructor(
+    @Inject(RELEASE1_REPOSITORIES)
+    private readonly release1Repositories: Release1Repositories,
+    @Inject(RELEASE4_REPOSITORIES)
+    private readonly release4Repositories: Release4Repositories,
+    @Inject(RELEASE8_REPOSITORIES)
+    private readonly release8Repositories: Release8Repositories,
+    private readonly authenticatedSessionService: AuthenticatedSessionService,
+    @Inject(OPERATOR_CONFIGURATION)
+    private readonly configuration: OperatorConfiguration
+  ) {}
+
+  async getSession(
+    requestMetadata: RequestMetadata
+  ): Promise<OperatorSessionResponse> {
+    const context = await this.requireOperatorContext(requestMetadata);
+
+    return {
+      operator: {
+        createdAt: context.operatorAccount.createdAt,
+        id: context.operatorAccount.id,
+        role: context.operatorAccount.role,
+        updatedAt: context.operatorAccount.updatedAt,
+        userId: context.operatorAccount.userId,
+        walletAddress: context.sessionWallet.address,
+        walletId: context.operatorAccount.walletId
+      },
+      permissions: context.permissions
+    };
+  }
+
+  async search(
+    input: unknown,
+    requestMetadata: RequestMetadata
+  ): Promise<OperatorSearchResponse> {
+    const params = parseInput(operatorSearchParamsSchema, input);
+    await this.requireOperatorContext(requestMetadata);
+    const query = params.q.trim().toLowerCase();
+    const hits: OperatorSearchHit[] = [];
+
+    const [
+      draftDeals,
+      dealVersions,
+      disputes,
+      agreements,
+      fundingTransactions,
+      settlementTransactions
+    ] = await Promise.all([
+      this.release1Repositories.draftDeals.listAll(),
+      this.release1Repositories.dealVersions.listAll(),
+      this.release1Repositories.dealMilestoneDisputes.listAll(),
+      this.release4Repositories.escrowAgreements.listByChainId(this.configuration.chainId),
+      this.release1Repositories.fundingTransactions.listByChainId(this.configuration.chainId),
+      this.release1Repositories.dealMilestoneSettlementExecutionTransactions.listByChainId(
+        this.configuration.chainId
+      )
+    ]);
+
+    for (const draft of draftDeals) {
+      const canonicalDealId = buildCanonicalDealId(draft.organizationId, draft.id);
+      if (
+        lowerCaseIncludes(draft.id, query) ||
+        lowerCaseIncludes(canonicalDealId, query) ||
+        lowerCaseIncludes(draft.title, query) ||
+        lowerCaseIncludes(draft.summary, query)
+      ) {
+        hits.push({
+          entityType: "DRAFT_DEAL",
+          id: draft.id,
+          organizationId: draft.organizationId,
+          primaryIdentifier: canonicalDealId,
+          route: `/search?q=${encodeURIComponent(canonicalDealId)}`,
+          status: draft.state,
+          subtitle: draft.summary ?? draft.id,
+          title: draft.title
+        });
+      }
+    }
+
+    for (const version of dealVersions) {
+      if (
+        lowerCaseIncludes(version.id, query) ||
+        lowerCaseIncludes(version.title, query) ||
+        lowerCaseIncludes(version.summary, query)
+      ) {
+        hits.push({
+          entityType: "DEAL_VERSION",
+          id: version.id,
+          organizationId: version.organizationId,
+          primaryIdentifier: version.id,
+          route: `/search?q=${encodeURIComponent(version.id)}`,
+          status: `v${version.versionNumber}`,
+          subtitle: version.summary ?? version.id,
+          title: version.title
+        });
+      }
+    }
+
+    for (const dispute of disputes) {
+      if (
+        lowerCaseIncludes(dispute.id, query) ||
+        lowerCaseIncludes(dispute.statementMarkdown, query)
+      ) {
+        const decision =
+          await this.release1Repositories.dealMilestoneDisputeDecisions.findByDealMilestoneDisputeId(
+            dispute.id
+          );
+        hits.push({
+          entityType: "DEAL_MILESTONE_DISPUTE",
+          id: dispute.id,
+          organizationId: dispute.organizationId,
+          primaryIdentifier: dispute.id,
+          route: `/cases?subjectId=${dispute.id}&subjectType=DEAL_MILESTONE_DISPUTE`,
+          status: decision ? "RESOLVED" : "OPEN",
+          subtitle: dispute.statementMarkdown,
+          title: `Milestone dispute ${dispute.id}`
+        });
+      }
+    }
+
+    for (const agreement of agreements) {
+      const linkedDraft = findDraftByCanonicalDealId(draftDeals, agreement.dealId);
+
+      if (
+        lowerCaseIncludes(agreement.agreementAddress, query) ||
+        lowerCaseIncludes(agreement.dealId, query) ||
+        lowerCaseIncludes(agreement.dealVersionHash, query)
+      ) {
+        hits.push({
+          entityType: "ESCROW_AGREEMENT",
+          id: agreement.agreementAddress,
+          organizationId: linkedDraft?.organizationId ?? null,
+          primaryIdentifier: agreement.agreementAddress,
+          route: `/search?q=${encodeURIComponent(agreement.agreementAddress)}`,
+          status: agreement.funded ? "FUNDED" : "PENDING_FUNDING",
+          subtitle: linkedDraft?.title ?? agreement.dealId,
+          title: `Agreement ${agreement.agreementAddress}`
+        });
+      }
+    }
+
+    for (const transaction of fundingTransactions) {
+      if (
+        lowerCaseIncludes(transaction.id, query) ||
+        lowerCaseIncludes(transaction.transactionHash, query)
+      ) {
+        hits.push({
+          entityType: "FUNDING_TRANSACTION",
+          id: transaction.id,
+          organizationId: transaction.organizationId,
+          primaryIdentifier: transaction.transactionHash,
+          route: `/reconciliation?entityId=${transaction.id}`,
+          status: transaction.reconciledStatus ?? "PENDING",
+          subtitle: transaction.id,
+          title: `Funding transaction ${transaction.transactionHash}`
+        });
+      }
+    }
+
+    for (const transaction of settlementTransactions) {
+      if (
+        lowerCaseIncludes(transaction.id, query) ||
+        lowerCaseIncludes(transaction.transactionHash, query)
+      ) {
+        hits.push({
+          entityType: "DEAL_MILESTONE_SETTLEMENT_EXECUTION_TRANSACTION",
+          id: transaction.id,
+          organizationId: transaction.organizationId,
+          primaryIdentifier: transaction.transactionHash,
+          route: `/reconciliation?entityId=${transaction.id}`,
+          status: transaction.reconciledStatus ?? "PENDING",
+          subtitle: transaction.id,
+          title: `Settlement execution ${transaction.transactionHash}`
+        });
+      }
+    }
+
+    return {
+      hits: hits.slice(0, 100)
+    };
+  }
+
+  async getDashboard(
+    requestMetadata: RequestMetadata
+  ): Promise<OperatorDashboardResponse> {
+    await this.requireOperatorContext(requestMetadata);
+    const [health, reconciliation, alerts, checkpoints, cases] = await Promise.all([
+      this.getHealth(requestMetadata),
+      this.getReconciliation(requestMetadata),
+      this.listAlerts({}, requestMetadata),
+      this.listCheckpoints(requestMetadata),
+      this.listCases({}, requestMetadata)
+    ]);
+
+    const cards: OperatorDashboardCard[] = [
+      { key: "open_alerts", value: alerts.alerts.filter((alert) => alert.status !== "RESOLVED").length },
+      { key: "open_cases", value: cases.cases.filter((entry) => entry.status !== "RESOLVED").length },
+      {
+        key: "pending_checkpoints",
+        value: checkpoints.checkpoints.filter((entry) => entry.status === "PENDING").length
+      },
+      { key: "stale_funding", value: reconciliation.staleFundingCount },
+      {
+        key: "stale_settlement",
+        value: reconciliation.staleSettlementExecutionCount
+      },
+      { key: "open_disputes", value: reconciliation.openDisputeCount }
+    ];
+
+    return {
+      cards,
+      health,
+      recentAlerts: alerts.alerts.slice(0, 10),
+      reconciliation
+    };
+  }
+
+  async getHealth(
+    requestMetadata: RequestMetadata
+  ): Promise<OperatorHealthResponse> {
+    await this.requireOperatorContext(requestMetadata);
+    const [workerProbe, indexerProbe, cursor] = await Promise.all([
+      this.probeRemoteHealth(this.configuration.workerBaseUrl),
+      this.probeRemoteHealth(this.configuration.indexerBaseUrl),
+      this.release4Repositories.chainCursors.findByChainIdAndCursorKey(
+        this.configuration.chainId,
+        this.configuration.release4CursorKey
+      )
+    ]);
+
+    const nowMs = Date.now();
+    const cursorFresh =
+      cursor != null &&
+      nowMs - new Date(cursor.updatedAt).getTime() <=
+        this.configuration.indexerFreshnessTtlSeconds * 1000;
+    const manifest = getDeploymentManifestByChainId(this.configuration.chainId);
+
+    return {
+      api: {
+        details: { ready: true },
+        ready: true,
+        service: "api",
+        status: "HEALTHY"
+      },
+      cursorFresh,
+      cursorUpdatedAt: cursor?.updatedAt ?? null,
+      indexer: this.toRemoteServiceHealth("indexer", indexerProbe),
+      manifest: manifest
+        ? {
+            chainId: manifest.chainId,
+            contractVersion: manifest.contractVersion,
+            deploymentStartBlock: manifest.deploymentStartBlock,
+            network: manifest.network
+          }
+        : null,
+      worker: this.toRemoteServiceHealth("worker", workerProbe)
+    };
+  }
+
+  async getReconciliation(
+    requestMetadata: RequestMetadata
+  ): Promise<OperatorReconciliationResponse> {
+    await this.requireOperatorContext(requestMetadata);
+    const [fundingTransactions, settlementTransactions, disputes, alerts, checkpoints, cases] =
+      await Promise.all([
+        this.release1Repositories.fundingTransactions.listByChainId(this.configuration.chainId),
+        this.release1Repositories.dealMilestoneSettlementExecutionTransactions.listByChainId(
+          this.configuration.chainId
+        ),
+        this.release1Repositories.dealMilestoneDisputes.listAll(),
+        this.release8Repositories.operatorAlerts.listAll(),
+        this.release8Repositories.complianceCheckpoints.listAll(),
+        this.release8Repositories.complianceCases.listAll()
+      ]);
+
+    const staleFunding = fundingTransactions.filter(
+      (entry) =>
+        entry.stalePendingEscalatedAt !== null && entry.reconciledStatus === null
+    );
+    const failedFunding = fundingTransactions.filter(
+      (entry) => entry.reconciledStatus === "FAILED"
+    );
+    const mismatchedFunding = fundingTransactions.filter(
+      (entry) => entry.reconciledStatus === "MISMATCHED"
+    );
+    const staleSettlement = settlementTransactions.filter(
+      (entry) =>
+        entry.stalePendingEscalatedAt !== null && entry.reconciledStatus === null
+    );
+    const failedSettlement = settlementTransactions.filter(
+      (entry) => entry.reconciledStatus === "FAILED"
+    );
+    const mismatchedSettlement = settlementTransactions.filter(
+      (entry) => entry.reconciledStatus === "MISMATCHED"
+    );
+
+    let openDisputeCount = 0;
+    for (const dispute of disputes) {
+      const decision =
+        await this.release1Repositories.dealMilestoneDisputeDecisions.findByDealMilestoneDisputeId(
+          dispute.id
+        );
+      if (!decision) {
+        openDisputeCount += 1;
+      }
+    }
+
+    const queue = [
+      ...staleFunding.map((entry) => ({
+        agreementAddress: entry.reconciledAgreementAddress,
+        entityId: entry.id,
+        kind: "FUNDING_TRANSACTION_STALE_PENDING",
+        organizationId: entry.organizationId,
+        status: "STALE_PENDING",
+        subject: buildSubjectSummary({
+          draftDealId: entry.draftDealId,
+          organizationId: entry.organizationId,
+          subjectId: entry.id,
+          subjectType: "FUNDING_TRANSACTION"
+        }),
+        updatedAt: entry.stalePendingEscalatedAt ?? entry.submittedAt
+      })),
+      ...failedFunding.map((entry) => ({
+        agreementAddress: entry.reconciledAgreementAddress,
+        entityId: entry.id,
+        kind: "FUNDING_TRANSACTION_FAILED",
+        organizationId: entry.organizationId,
+        status: "FAILED",
+        subject: buildSubjectSummary({
+          draftDealId: entry.draftDealId,
+          organizationId: entry.organizationId,
+          subjectId: entry.id,
+          subjectType: "FUNDING_TRANSACTION"
+        }),
+        updatedAt: entry.reconciledAt ?? entry.submittedAt
+      })),
+      ...mismatchedFunding.map((entry) => ({
+        agreementAddress: entry.reconciledAgreementAddress,
+        entityId: entry.id,
+        kind: "FUNDING_TRANSACTION_MISMATCHED",
+        organizationId: entry.organizationId,
+        status: "MISMATCHED",
+        subject: buildSubjectSummary({
+          draftDealId: entry.draftDealId,
+          organizationId: entry.organizationId,
+          subjectId: entry.id,
+          subjectType: "FUNDING_TRANSACTION"
+        }),
+        updatedAt: entry.reconciledAt ?? entry.submittedAt
+      })),
+      ...staleSettlement.map((entry) => ({
+        agreementAddress: entry.reconciledAgreementAddress,
+        entityId: entry.id,
+        kind: "SETTLEMENT_EXECUTION_STALE_PENDING",
+        organizationId: entry.organizationId,
+        status: "STALE_PENDING",
+        subject: buildSubjectSummary({
+          agreementAddress: entry.reconciledAgreementAddress,
+          dealVersionId: entry.dealVersionId,
+          draftDealId: entry.draftDealId,
+          organizationId: entry.organizationId,
+          subjectId: entry.id,
+          subjectType: "DEAL_MILESTONE_SETTLEMENT_EXECUTION_TRANSACTION"
+        }),
+        updatedAt: entry.stalePendingEscalatedAt ?? entry.submittedAt
+      })),
+      ...failedSettlement.map((entry) => ({
+        agreementAddress: entry.reconciledAgreementAddress,
+        entityId: entry.id,
+        kind: "SETTLEMENT_EXECUTION_FAILED",
+        organizationId: entry.organizationId,
+        status: "FAILED",
+        subject: buildSubjectSummary({
+          agreementAddress: entry.reconciledAgreementAddress,
+          dealVersionId: entry.dealVersionId,
+          draftDealId: entry.draftDealId,
+          organizationId: entry.organizationId,
+          subjectId: entry.id,
+          subjectType: "DEAL_MILESTONE_SETTLEMENT_EXECUTION_TRANSACTION"
+        }),
+        updatedAt: entry.reconciledAt ?? entry.submittedAt
+      })),
+      ...mismatchedSettlement.map((entry) => ({
+        agreementAddress: entry.reconciledAgreementAddress,
+        entityId: entry.id,
+        kind: "SETTLEMENT_EXECUTION_MISMATCHED",
+        organizationId: entry.organizationId,
+        status: "MISMATCHED",
+        subject: buildSubjectSummary({
+          agreementAddress: entry.reconciledAgreementAddress,
+          dealVersionId: entry.dealVersionId,
+          draftDealId: entry.draftDealId,
+          organizationId: entry.organizationId,
+          subjectId: entry.id,
+          subjectType: "DEAL_MILESTONE_SETTLEMENT_EXECUTION_TRANSACTION"
+        }),
+        updatedAt: entry.reconciledAt ?? entry.submittedAt
+      }))
+    ].sort(
+      (left, right) =>
+        new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime()
+    );
+
+    return {
+      failedFundingCount: failedFunding.length,
+      failedSettlementExecutionCount: failedSettlement.length,
+      mismatchedFundingCount: mismatchedFunding.length,
+      mismatchedSettlementExecutionCount: mismatchedSettlement.length,
+      openDisputeCount,
+      queue: queue.slice(0, 100),
+      staleFundingCount: staleFunding.length,
+      staleSettlementExecutionCount: staleSettlement.length,
+      unresolvedOperatorReviewCount:
+        alerts.filter((entry) => entry.status !== "RESOLVED").length +
+        checkpoints.filter((entry) => entry.status === "PENDING").length +
+        cases.filter((entry) => entry.status !== "RESOLVED").length
+    };
+  }
+
+  async listAlerts(
+    input: unknown,
+    requestMetadata: RequestMetadata
+  ): Promise<ListOperatorAlertsResponse> {
+    const params = parseInput(listOperatorAlertsParamsSchema, input);
+    await this.requireOperatorContext(requestMetadata);
+    const alerts = await this.release8Repositories.operatorAlerts.listAll();
+
+    return {
+      alerts: alerts
+        .filter((entry) => !params.kind || entry.kind === params.kind)
+        .filter((entry) => !params.status || entry.status === params.status)
+        .map(toAlertSummary)
+    };
+  }
+
+  async acknowledgeAlert(
+    paramsInput: unknown,
+    input: unknown,
+    requestMetadata: RequestMetadata
+  ): Promise<ListOperatorAlertsResponse["alerts"][number]> {
+    const params = parseInput(operatorAlertActionParamsSchema, paramsInput);
+    const parsedInput = parseInput(acknowledgeOperatorAlertSchema, input);
+    const context = await this.requireOperatorContext(requestMetadata);
+    this.requireAlertPermission(context.permissions);
+    const alert = await this.requireAlert(params.alertId);
+    const now = new Date().toISOString();
+
+    const updated = await this.release8Repositories.operatorAlerts.update(alert.id, {
+      acknowledgedAt: now,
+      acknowledgedByOperatorAccountId: context.operatorAccount.id,
+      metadata: {
+        ...(alert.metadata ?? {}),
+        acknowledgedNote: parsedInput.note ?? null
+      },
+      status: alert.status === "RESOLVED" ? "OPEN" : "ACKNOWLEDGED"
+    });
+
+    await this.release1Repositories.auditLogs.append({
+      action: "OPERATOR_ALERT_ACKNOWLEDGED",
+      actorUserId: context.operatorAccount.userId,
+      entityId: updated.id,
+      entityType: "OPERATOR_ALERT",
+      id: randomUUID(),
+      ipAddress: context.requestMetadata.ipAddress,
+      metadata: {
+        note: parsedInput.note ?? null,
+        status: updated.status
+      },
+      occurredAt: now,
+      organizationId: updated.organizationId,
+      userAgent: context.requestMetadata.userAgent
+    });
+
+    return toAlertSummary(updated);
+  }
+
+  async resolveAlert(
+    paramsInput: unknown,
+    input: unknown,
+    requestMetadata: RequestMetadata
+  ): Promise<ListOperatorAlertsResponse["alerts"][number]> {
+    const params = parseInput(operatorAlertActionParamsSchema, paramsInput);
+    const parsedInput = parseInput(resolveOperatorAlertSchema, input);
+    const context = await this.requireOperatorContext(requestMetadata);
+    this.requireAlertPermission(context.permissions);
+    const alert = await this.requireAlert(params.alertId);
+    const now = new Date().toISOString();
+
+    const updated = await this.release8Repositories.operatorAlerts.update(alert.id, {
+      acknowledgedAt: alert.acknowledgedAt ?? now,
+      acknowledgedByOperatorAccountId:
+        alert.acknowledgedByOperatorAccountId ?? context.operatorAccount.id,
+      metadata: {
+        ...(alert.metadata ?? {}),
+        resolutionNote: parsedInput.note
+      },
+      resolvedAt: now,
+      resolvedByOperatorAccountId: context.operatorAccount.id,
+      status: "RESOLVED"
+    });
+
+    await this.release1Repositories.auditLogs.append({
+      action: "OPERATOR_ALERT_RESOLVED",
+      actorUserId: context.operatorAccount.userId,
+      entityId: updated.id,
+      entityType: "OPERATOR_ALERT",
+      id: randomUUID(),
+      ipAddress: context.requestMetadata.ipAddress,
+      metadata: {
+        note: parsedInput.note
+      },
+      occurredAt: now,
+      organizationId: updated.organizationId,
+      userAgent: context.requestMetadata.userAgent
+    });
+
+    return toAlertSummary(updated);
+  }
+
+  async listCheckpoints(
+    requestMetadata: RequestMetadata
+  ): Promise<ListComplianceCheckpointsResponse> {
+    await this.requireOperatorContext(requestMetadata);
+    const checkpoints = await this.release8Repositories.complianceCheckpoints.listAll();
+
+    return {
+      checkpoints: checkpoints.map(toCheckpointSummary)
+    };
+  }
+
+  async createCheckpoint(
+    input: unknown,
+    requestMetadata: RequestMetadata
+  ): Promise<ComplianceCheckpointSummary> {
+    const parsedInput = parseInput(createComplianceCheckpointSchema, input);
+    const context = await this.requireOperatorContext(requestMetadata);
+    this.requireCheckpointPermission(context.permissions);
+    const subject = await this.loadSubjectSummary(
+      parsedInput.subjectType,
+      parsedInput.subjectId
+    );
+    const now = new Date().toISOString();
+
+    const checkpoint = await this.release8Repositories.complianceCheckpoints.create({
+      agreementAddress: subject.agreementAddress,
+      createdAt: now,
+      createdByOperatorAccountId: context.operatorAccount.id,
+      dealVersionId: subject.dealVersionId,
+      decidedAt: null,
+      decidedByOperatorAccountId: null,
+      decisionNote: null,
+      draftDealId: subject.draftDealId,
+      id: randomUUID(),
+      kind: parsedInput.kind,
+      linkedComplianceCaseId: null,
+      note: parsedInput.note,
+      organizationId: subject.organizationId,
+      status: "PENDING",
+      subjectId: parsedInput.subjectId,
+      subjectLabel: subject.label,
+      subjectType: parsedInput.subjectType
+    });
+
+    await this.release1Repositories.auditLogs.append({
+      action: "COMPLIANCE_CHECKPOINT_CREATED",
+      actorUserId: context.operatorAccount.userId,
+      entityId: checkpoint.id,
+      entityType: "COMPLIANCE_CHECKPOINT",
+      id: randomUUID(),
+      ipAddress: context.requestMetadata.ipAddress,
+      metadata: {
+        kind: checkpoint.kind,
+        subjectId: checkpoint.subjectId,
+        subjectType: checkpoint.subjectType
+      },
+      occurredAt: now,
+      organizationId: checkpoint.organizationId,
+      userAgent: context.requestMetadata.userAgent
+    });
+
+    return toCheckpointSummary(checkpoint);
+  }
+
+  async decideCheckpoint(
+    paramsInput: unknown,
+    input: unknown,
+    requestMetadata: RequestMetadata
+  ): Promise<ComplianceCheckpointSummary> {
+    const params = parseInput(complianceCheckpointParamsSchema, paramsInput);
+    const parsedInput = parseInput(decideComplianceCheckpointSchema, input);
+    const context = await this.requireOperatorContext(requestMetadata);
+    this.requireCheckpointPermission(context.permissions);
+    const checkpoint = await this.requireCheckpoint(params.checkpointId);
+    const now = new Date().toISOString();
+
+    const updated = await this.release8Repositories.complianceCheckpoints.update(
+      checkpoint.id,
+      {
+        decidedAt: now,
+        decidedByOperatorAccountId: context.operatorAccount.id,
+        decisionNote: parsedInput.note,
+        status: parsedInput.status
+      }
+    );
+
+    await this.release1Repositories.auditLogs.append({
+      action: "COMPLIANCE_CHECKPOINT_DECIDED",
+      actorUserId: context.operatorAccount.userId,
+      entityId: updated.id,
+      entityType: "COMPLIANCE_CHECKPOINT",
+      id: randomUUID(),
+      ipAddress: context.requestMetadata.ipAddress,
+      metadata: {
+        note: parsedInput.note,
+        status: parsedInput.status
+      },
+      occurredAt: now,
+      organizationId: updated.organizationId,
+      userAgent: context.requestMetadata.userAgent
+    });
+
+    return toCheckpointSummary(updated);
+  }
+
+  async listCases(
+    input: unknown,
+    requestMetadata: RequestMetadata
+  ): Promise<ListComplianceCasesResponse> {
+    const params = parseInput(listComplianceCasesParamsSchema, input);
+    await this.requireOperatorContext(requestMetadata);
+    const cases = await this.release8Repositories.complianceCases.listAll();
+    const notes = await Promise.all(
+      cases.map((entry) =>
+        this.release8Repositories.complianceCaseNotes.listByComplianceCaseId(entry.id)
+      )
+    );
+
+    return {
+      cases: cases
+        .filter((entry) => !params.status || entry.status === params.status)
+        .map((entry, index) => {
+          const caseNotes = notes[index] ?? [];
+
+          return {
+            ...toCaseSummary(entry),
+            lastNoteAt: caseNotes.at(-1)?.createdAt ?? null
+          };
+        })
+    };
+  }
+
+  async createCase(
+    input: unknown,
+    requestMetadata: RequestMetadata
+  ): Promise<ComplianceCaseSummary> {
+    const parsedInput = parseInput(createComplianceCaseSchema, input);
+    const context = await this.requireOperatorContext(requestMetadata);
+    this.requireCasePermission(context.permissions);
+    const subject = await this.loadSubjectSummary(
+      parsedInput.subjectType,
+      parsedInput.subjectId
+    );
+    const now = new Date().toISOString();
+
+    if (parsedInput.alertId) {
+      await this.requireAlert(parsedInput.alertId);
+    }
+
+    if (parsedInput.checkpointId) {
+      await this.requireCheckpoint(parsedInput.checkpointId);
+    }
+
+    const created = await this.release8Repositories.complianceCases.create({
+      agreementAddress: subject.agreementAddress,
+      assignedOperatorAccountId: null,
+      createdAt: now,
+      createdByOperatorAccountId: context.operatorAccount.id,
+      dealVersionId: subject.dealVersionId,
+      draftDealId: subject.draftDealId,
+      id: randomUUID(),
+      linkedAlertId: parsedInput.alertId ?? null,
+      linkedCheckpointId: parsedInput.checkpointId ?? null,
+      organizationId: subject.organizationId,
+      resolvedAt: null,
+      severity: parsedInput.severity,
+      status: "OPEN",
+      subjectId: parsedInput.subjectId,
+      subjectLabel: subject.label,
+      subjectType: parsedInput.subjectType,
+      summary: parsedInput.summary,
+      title: parsedInput.title,
+      updatedAt: now
+    });
+
+    if (created.linkedAlertId) {
+      await this.release8Repositories.operatorAlerts.update(created.linkedAlertId, {
+        linkedComplianceCaseId: created.id
+      });
+    }
+
+    if (created.linkedCheckpointId) {
+      await this.release8Repositories.complianceCheckpoints.update(
+        created.linkedCheckpointId,
+        {
+          linkedComplianceCaseId: created.id
+        }
+      );
+    }
+
+    await this.release1Repositories.auditLogs.append({
+      action: "COMPLIANCE_CASE_CREATED",
+      actorUserId: context.operatorAccount.userId,
+      entityId: created.id,
+      entityType: "COMPLIANCE_CASE",
+      id: randomUUID(),
+      ipAddress: context.requestMetadata.ipAddress,
+      metadata: {
+        linkedAlertId: created.linkedAlertId,
+        linkedCheckpointId: created.linkedCheckpointId,
+        severity: created.severity,
+        subjectId: created.subjectId,
+        subjectType: created.subjectType
+      },
+      occurredAt: now,
+      organizationId: created.organizationId,
+      userAgent: context.requestMetadata.userAgent
+    });
+
+    return toCaseSummary(created);
+  }
+
+  async getCase(
+    paramsInput: unknown,
+    requestMetadata: RequestMetadata
+  ): Promise<ComplianceCaseDetailResponse> {
+    const params = parseInput(complianceCaseParamsSchema, paramsInput);
+    await this.requireOperatorContext(requestMetadata);
+    const record = await this.requireCase(params.caseId);
+    const notes = await this.release8Repositories.complianceCaseNotes.listByComplianceCaseId(
+      record.id
+    );
+
+    return {
+      case: {
+        ...toCaseSummary(record),
+        lastNoteAt: notes.at(-1)?.createdAt ?? null
+      },
+      notes: notes.map((note) => ({
+        authorOperatorAccountId: note.authorOperatorAccountId,
+        bodyMarkdown: note.bodyMarkdown,
+        createdAt: note.createdAt,
+        id: note.id
+      }))
+    };
+  }
+
+  async addCaseNote(
+    paramsInput: unknown,
+    input: unknown,
+    requestMetadata: RequestMetadata
+  ): Promise<ComplianceCaseDetailResponse> {
+    const params = parseInput(complianceCaseParamsSchema, paramsInput);
+    const parsedInput = parseInput(addComplianceCaseNoteSchema, input);
+    const context = await this.requireOperatorContext(requestMetadata);
+    this.requireCasePermission(context.permissions);
+    const existing = await this.requireCase(params.caseId);
+    const now = new Date().toISOString();
+
+    await this.release8Repositories.complianceCaseNotes.create({
+      authorOperatorAccountId: context.operatorAccount.id,
+      bodyMarkdown: parsedInput.bodyMarkdown,
+      complianceCaseId: existing.id,
+      createdAt: now,
+      id: randomUUID()
+    });
+    await this.release8Repositories.complianceCases.update(existing.id, {
+      updatedAt: now
+    });
+
+    await this.release1Repositories.auditLogs.append({
+      action: "COMPLIANCE_CASE_NOTE_ADDED",
+      actorUserId: context.operatorAccount.userId,
+      entityId: existing.id,
+      entityType: "COMPLIANCE_CASE",
+      id: randomUUID(),
+      ipAddress: context.requestMetadata.ipAddress,
+      metadata: {
+        noteLength: parsedInput.bodyMarkdown.length
+      },
+      occurredAt: now,
+      organizationId: existing.organizationId,
+      userAgent: context.requestMetadata.userAgent
+    });
+
+    return this.getCase(params, requestMetadata);
+  }
+
+  async assignCase(
+    paramsInput: unknown,
+    input: unknown,
+    requestMetadata: RequestMetadata
+  ): Promise<ComplianceCaseSummary> {
+    const params = parseInput(complianceCaseParamsSchema, paramsInput);
+    const parsedInput = parseInput(assignComplianceCaseSchema, input);
+    const context = await this.requireOperatorContext(requestMetadata);
+    this.requireCasePermission(context.permissions);
+    const existing = await this.requireCase(params.caseId);
+    const now = new Date().toISOString();
+
+    if (parsedInput.assignedOperatorAccountId) {
+      const operator = await this.release8Repositories.operatorAccounts.findById(
+        parsedInput.assignedOperatorAccountId
+      );
+      if (!operator || !operator.active) {
+        throw new NotFoundException("operator account not found");
+      }
+    }
+
+    const updated = await this.release8Repositories.complianceCases.update(existing.id, {
+      assignedOperatorAccountId: parsedInput.assignedOperatorAccountId,
+      updatedAt: now
+    });
+
+    await this.release1Repositories.auditLogs.append({
+      action: "COMPLIANCE_CASE_ASSIGNED",
+      actorUserId: context.operatorAccount.userId,
+      entityId: updated.id,
+      entityType: "COMPLIANCE_CASE",
+      id: randomUUID(),
+      ipAddress: context.requestMetadata.ipAddress,
+      metadata: {
+        assignedOperatorAccountId: parsedInput.assignedOperatorAccountId
+      },
+      occurredAt: now,
+      organizationId: updated.organizationId,
+      userAgent: context.requestMetadata.userAgent
+    });
+
+    const notes = await this.release8Repositories.complianceCaseNotes.listByComplianceCaseId(
+      updated.id
+    );
+
+    return {
+      ...toCaseSummary(updated),
+      lastNoteAt: notes.at(-1)?.createdAt ?? null
+    };
+  }
+
+  async updateCaseStatus(
+    paramsInput: unknown,
+    input: unknown,
+    requestMetadata: RequestMetadata
+  ): Promise<ComplianceCaseSummary> {
+    const params = parseInput(complianceCaseParamsSchema, paramsInput);
+    const parsedInput = parseInput(updateComplianceCaseStatusSchema, input);
+    const context = await this.requireOperatorContext(requestMetadata);
+    this.requireCasePermission(context.permissions);
+    const existing = await this.requireCase(params.caseId);
+    const now = new Date().toISOString();
+
+    const updated = await this.release8Repositories.complianceCases.update(existing.id, {
+      resolvedAt: parsedInput.status === "RESOLVED" ? now : null,
+      status: parsedInput.status,
+      updatedAt: now
+    });
+
+    await this.release1Repositories.auditLogs.append({
+      action: "COMPLIANCE_CASE_STATUS_UPDATED",
+      actorUserId: context.operatorAccount.userId,
+      entityId: updated.id,
+      entityType: "COMPLIANCE_CASE",
+      id: randomUUID(),
+      ipAddress: context.requestMetadata.ipAddress,
+      metadata: {
+        status: parsedInput.status
+      },
+      occurredAt: now,
+      organizationId: updated.organizationId,
+      userAgent: context.requestMetadata.userAgent
+    });
+
+    const notes = await this.release8Repositories.complianceCaseNotes.listByComplianceCaseId(
+      updated.id
+    );
+
+    return {
+      ...toCaseSummary(updated),
+      lastNoteAt: notes.at(-1)?.createdAt ?? null
+    };
+  }
+
+  async listProtocolProposals(
+    requestMetadata: RequestMetadata
+  ): Promise<ListProtocolProposalDraftsResponse> {
+    await this.requireOperatorContext(requestMetadata);
+    const proposals = await this.release8Repositories.protocolProposalDrafts.listAll();
+
+    return {
+      proposals: proposals.map(toProtocolProposalSummary)
+    };
+  }
+
+  async createProtocolProposalDraft(
+    input: unknown,
+    requestMetadata: RequestMetadata
+  ): Promise<ProtocolProposalDraftDetailResponse> {
+    const parsedInput = parseInput(createProtocolProposalDraftSchema, input);
+    const context = await this.requireOperatorContext(requestMetadata);
+    this.requireProtocolAdminPermission(context.permissions);
+    const manifest = getDeploymentManifestByChainId(parsedInput.chainId);
+
+    if (!manifest) {
+      throw new ConflictException("deployment manifest is unavailable");
+    }
+
+    const { calldata, targetAddress } =
+      await this.buildProtocolProposalCalldata(parsedInput);
+    const now = new Date().toISOString();
+    const proposal = await this.release8Repositories.protocolProposalDrafts.create({
+      action: parsedInput.action,
+      calldata,
+      chainId: parsedInput.chainId,
+      createdAt: now,
+      createdByOperatorAccountId: context.operatorAccount.id,
+      description: parsedInput.description,
+      id: randomUUID(),
+      input: parsedInput.input,
+      target: parsedInput.target,
+      targetAddress,
+      value: "0"
+    });
+
+    await this.release1Repositories.auditLogs.append({
+      action: "PROTOCOL_PROPOSAL_DRAFT_CREATED",
+      actorUserId: context.operatorAccount.userId,
+      entityId: proposal.id,
+      entityType: "PROTOCOL_PROPOSAL_DRAFT",
+      id: randomUUID(),
+      ipAddress: context.requestMetadata.ipAddress,
+      metadata: {
+        action: proposal.action,
+        chainId: proposal.chainId,
+        target: proposal.target,
+        targetAddress: proposal.targetAddress
+      },
+      occurredAt: now,
+      organizationId: null,
+      userAgent: context.requestMetadata.userAgent
+    });
+
+    return {
+      proposal: toProtocolProposalSummary(proposal)
+    };
+  }
+
+  async getProtocolProposalDraft(
+    paramsInput: unknown,
+    requestMetadata: RequestMetadata
+  ): Promise<ProtocolProposalDraftDetailResponse> {
+    const params = parseInput(protocolProposalDraftParamsSchema, paramsInput);
+    await this.requireOperatorContext(requestMetadata);
+    const proposal = await this.release8Repositories.protocolProposalDrafts.findById(
+      params.proposalId
+    );
+
+    if (!proposal) {
+      throw new NotFoundException("protocol proposal draft not found");
+    }
+
+    return {
+      proposal: toProtocolProposalSummary(proposal)
+    };
+  }
+
+  private async buildProtocolProposalCalldata(
+    input: CreateProtocolProposalDraftInput
+  ): Promise<{ calldata: `0x${string}`; targetAddress: `0x${string}` }> {
+    const targetAddress = await this.resolveProtocolTargetAddress(
+      input.chainId,
+      input.target
+    );
+
+    switch (input.action) {
+      case "ALLOW_TOKEN":
+      case "DISALLOW_TOKEN": {
+        this.assertProtocolActionTarget(input.action, input.target, "TokenAllowlist");
+        const token = this.requireAddressInput(input.input, "token");
+        return {
+          calldata: encodeFunctionData({
+            abi: contractArtifacts.TokenAllowlist.abi as Abi,
+            args: [token, input.action === "ALLOW_TOKEN"],
+            functionName: "setTokenAllowed"
+          }),
+          targetAddress
+        };
+      }
+      case "APPROVE_ARBITRATOR":
+      case "REVOKE_ARBITRATOR": {
+        this.assertProtocolActionTarget(
+          input.action,
+          input.target,
+          "ArbitratorRegistry"
+        );
+        const arbitrator = this.requireAddressInput(input.input, "arbitrator");
+        return {
+          calldata: encodeFunctionData({
+            abi: contractArtifacts.ArbitratorRegistry.abi as Abi,
+            args: [arbitrator, input.action === "APPROVE_ARBITRATOR"],
+            functionName: "setArbitratorApproved"
+          }),
+          targetAddress
+        };
+      }
+      case "SET_TOKEN_ALLOWLIST":
+        this.assertProtocolActionTarget(input.action, input.target, "ProtocolConfig");
+        return {
+          calldata: encodeFunctionData({
+            abi: contractArtifacts.ProtocolConfig.abi as Abi,
+            args: [this.requireAddressInput(input.input, "newTokenAllowlist")],
+            functionName: "setTokenAllowlist"
+          }),
+          targetAddress
+        };
+      case "SET_ARBITRATOR_REGISTRY":
+        this.assertProtocolActionTarget(input.action, input.target, "ProtocolConfig");
+        return {
+          calldata: encodeFunctionData({
+            abi: contractArtifacts.ProtocolConfig.abi as Abi,
+            args: [this.requireAddressInput(input.input, "newArbitratorRegistry")],
+            functionName: "setArbitratorRegistry"
+          }),
+          targetAddress
+        };
+      case "SET_FEE_VAULT":
+        this.assertProtocolActionTarget(input.action, input.target, "ProtocolConfig");
+        return {
+          calldata: encodeFunctionData({
+            abi: contractArtifacts.ProtocolConfig.abi as Abi,
+            args: [this.requireAddressInput(input.input, "newFeeVault")],
+            functionName: "setFeeVault"
+          }),
+          targetAddress
+        };
+      case "SET_TREASURY":
+        this.assertProtocolActionTarget(input.action, input.target, "ProtocolConfig");
+        return {
+          calldata: encodeFunctionData({
+            abi: contractArtifacts.ProtocolConfig.abi as Abi,
+            args: [this.requireAddressInput(input.input, "newTreasury")],
+            functionName: "setTreasury"
+          }),
+          targetAddress
+        };
+      case "SET_PROTOCOL_FEE_BPS":
+        this.assertProtocolActionTarget(input.action, input.target, "ProtocolConfig");
+        return {
+          calldata: encodeFunctionData({
+            abi: contractArtifacts.ProtocolConfig.abi as Abi,
+            args: [this.requireNumberInput(input.input, "newProtocolFeeBps")],
+            functionName: "setProtocolFeeBps"
+          }),
+          targetAddress
+        };
+      case "PAUSE_CREATE_ESCROW":
+      case "UNPAUSE_CREATE_ESCROW":
+        this.assertProtocolActionTarget(input.action, input.target, "ProtocolConfig");
+        return {
+          calldata: encodeFunctionData({
+            abi: contractArtifacts.ProtocolConfig.abi as Abi,
+            args: [input.action === "PAUSE_CREATE_ESCROW"],
+            functionName: "setCreateEscrowPaused"
+          }),
+          targetAddress
+        };
+      case "PAUSE_FUNDING":
+      case "UNPAUSE_FUNDING":
+        this.assertProtocolActionTarget(input.action, input.target, "ProtocolConfig");
+        return {
+          calldata: encodeFunctionData({
+            abi: contractArtifacts.ProtocolConfig.abi as Abi,
+            args: [input.action === "PAUSE_FUNDING"],
+            functionName: "setFundingPaused"
+          }),
+          targetAddress
+        };
+      default:
+        throw new ConflictException("unsupported protocol proposal action");
+    }
+  }
+
+  private async resolveProtocolTargetAddress(
+    chainId: number,
+    target: ProtocolProposalTarget
+  ): Promise<`0x${string}`> {
+    const manifest = getDeploymentManifestByChainId(chainId);
+    if (!manifest) {
+      throw new ConflictException("deployment manifest is unavailable");
+    }
+
+    if (target === "ProtocolConfig") {
+      const address = manifest.contracts.ProtocolConfig;
+      if (!address) {
+        throw new ConflictException("protocol config address is unavailable");
+      }
+      return address;
+    }
+
+    const protocolConfigAddress = manifest.contracts.ProtocolConfig;
+    if (!protocolConfigAddress) {
+      throw new ConflictException("protocol config address is unavailable");
+    }
+
+    const state = await this.release4Repositories.protocolConfigStates.findByChainIdAndAddress(
+      chainId,
+      protocolConfigAddress
+    );
+
+    if (target === "TokenAllowlist") {
+      const address = state?.tokenAllowlistAddress ?? manifest.contracts.TokenAllowlist;
+      if (!address) {
+        throw new ConflictException("token allowlist address is unavailable");
+      }
+      return address;
+    }
+
+    const address =
+      state?.arbitratorRegistryAddress ?? manifest.contracts.ArbitratorRegistry;
+    if (!address) {
+      throw new ConflictException("arbitrator registry address is unavailable");
+    }
+
+    return address;
+  }
+
+  private assertProtocolActionTarget(
+    action: ProtocolProposalAction,
+    actualTarget: CreateProtocolProposalDraftInput["target"],
+    expectedTarget: ProtocolProposalTarget
+  ): void {
+    if (actualTarget !== expectedTarget) {
+      throw new ConflictException(
+        `protocol proposal action ${action} requires target ${expectedTarget}`
+      );
+    }
+  }
+
+  private requireAddressInput(
+    input: CreateProtocolProposalDraftInput["input"],
+    key: string
+  ): `0x${string}` {
+    const value = input[key];
+    if (typeof value !== "string" || !value.startsWith("0x")) {
+      throw new ConflictException(`expected ${key} to be a hex address string`);
+    }
+
+    return value as `0x${string}`;
+  }
+
+  private requireNumberInput(
+    input: CreateProtocolProposalDraftInput["input"],
+    key: string
+  ): number {
+    const value = input[key];
+    if (typeof value !== "number" || !Number.isInteger(value) || value < 0) {
+      throw new ConflictException(`expected ${key} to be a non-negative integer`);
+    }
+
+    return value;
+  }
+
+  private async requireOperatorContext(
+    requestMetadata: RequestMetadata
+  ): Promise<OperatorContext> {
+    const session = await this.authenticatedSessionService.requireContext(
+      requestMetadata.cookieHeader
+    );
+    const operatorAccount =
+      await this.release8Repositories.operatorAccounts.findActiveByWalletId(
+        session.wallet.id
+      );
+
+    if (
+      !operatorAccount ||
+      operatorAccount.userId !== session.user.id ||
+      !operatorAccount.active
+    ) {
+      throw new ForbiddenException("operator access is required");
+    }
+
+    return {
+      operatorAccount,
+      permissions: buildPermissions(operatorAccount.role),
+      requestMetadata,
+      sessionWallet: session.wallet
+    };
+  }
+
+  private async requireAlert(alertId: string): Promise<OperatorAlertRecord> {
+    const alert = await this.release8Repositories.operatorAlerts.findById(alertId);
+    if (!alert) {
+      throw new NotFoundException("operator alert not found");
+    }
+
+    return alert;
+  }
+
+  private async requireCheckpoint(
+    checkpointId: string
+  ): Promise<ComplianceCheckpointRecord> {
+    const checkpoint =
+      await this.release8Repositories.complianceCheckpoints.findById(checkpointId);
+    if (!checkpoint) {
+      throw new NotFoundException("compliance checkpoint not found");
+    }
+
+    return checkpoint;
+  }
+
+  private async requireCase(caseId: string): Promise<ComplianceCaseRecord> {
+    const record = await this.release8Repositories.complianceCases.findById(caseId);
+    if (!record) {
+      throw new NotFoundException("compliance case not found");
+    }
+
+    return record;
+  }
+
+  private requireAlertPermission(permissions: OperatorPermissionSet): void {
+    if (!permissions.canResolveAlerts) {
+      throw new ForbiddenException("operator permissions are insufficient");
+    }
+  }
+
+  private requireCheckpointPermission(permissions: OperatorPermissionSet): void {
+    if (!permissions.canManageCheckpoints) {
+      throw new ForbiddenException("operator permissions are insufficient");
+    }
+  }
+
+  private requireCasePermission(permissions: OperatorPermissionSet): void {
+    if (!permissions.canManageCases) {
+      throw new ForbiddenException("operator permissions are insufficient");
+    }
+  }
+
+  private requireProtocolAdminPermission(
+    permissions: OperatorPermissionSet
+  ): void {
+    if (!permissions.canManageProtocolProposals) {
+      throw new ForbiddenException("operator permissions are insufficient");
+    }
+  }
+
+  private async loadSubjectSummary(
+    subjectType: OperatorSubjectSummary["subjectType"],
+    subjectId: string
+  ): Promise<OperatorSubjectSummary> {
+    switch (subjectType) {
+      case "DRAFT_DEAL": {
+        const draft = await this.release1Repositories.draftDeals.findById(subjectId);
+        if (!draft) {
+          break;
+        }
+
+        return buildSubjectSummary({
+          draftDealId: draft.id,
+          label: draft.title,
+          organizationId: draft.organizationId,
+          subjectId: draft.id,
+          subjectType
+        });
+      }
+      case "DEAL_MILESTONE_DISPUTE": {
+        const dispute =
+          await this.release1Repositories.dealMilestoneDisputes.findById(subjectId);
+        if (!dispute) {
+          break;
+        }
+
+        return buildSubjectSummary({
+          dealVersionId: dispute.dealVersionId,
+          draftDealId: dispute.draftDealId,
+          label: dispute.statementMarkdown,
+          organizationId: dispute.organizationId,
+          subjectId: dispute.id,
+          subjectType
+        });
+      }
+      case "FUNDING_TRANSACTION": {
+        const transaction =
+          await this.release1Repositories.fundingTransactions.findById(subjectId);
+        if (!transaction) {
+          break;
+        }
+
+        return buildSubjectSummary({
+          agreementAddress: transaction.reconciledAgreementAddress,
+          dealVersionId: transaction.dealVersionId,
+          draftDealId: transaction.draftDealId,
+          label: transaction.transactionHash,
+          organizationId: transaction.organizationId,
+          subjectId: transaction.id,
+          subjectType
+        });
+      }
+      case "DEAL_MILESTONE_SETTLEMENT_EXECUTION_TRANSACTION": {
+        const transaction =
+          await this.release1Repositories.dealMilestoneSettlementExecutionTransactions.findById(
+            subjectId
+          );
+        if (!transaction) {
+          break;
+        }
+
+        return buildSubjectSummary({
+          agreementAddress: transaction.reconciledAgreementAddress,
+          dealVersionId: transaction.dealVersionId,
+          draftDealId: transaction.draftDealId,
+          label: transaction.transactionHash,
+          organizationId: transaction.organizationId,
+          subjectId: transaction.id,
+          subjectType
+        });
+      }
+      case "ESCROW_AGREEMENT": {
+        const normalizedAddress = normalizeAgreementAddress(subjectId);
+
+        if (!normalizedAddress) {
+          break;
+        }
+
+        const agreement =
+          await this.release4Repositories.escrowAgreements.findByChainIdAndAddress(
+            this.configuration.chainId,
+            normalizedAddress
+          );
+        if (!agreement) {
+          break;
+        }
+
+        const drafts = await this.release1Repositories.draftDeals.listAll();
+        const linkedDraft = findDraftByCanonicalDealId(drafts, agreement.dealId);
+
+        return buildSubjectSummary({
+          agreementAddress: agreement.agreementAddress,
+          draftDealId: linkedDraft?.id ?? null,
+          label: linkedDraft?.title ?? agreement.agreementAddress,
+          organizationId: linkedDraft?.organizationId ?? null,
+          subjectId: agreement.agreementAddress,
+          subjectType
+        });
+      }
+    }
+
+    throw new NotFoundException("operator subject not found");
+  }
+
+  private async probeRemoteHealth(baseUrl: string): Promise<RemoteHealthProbe> {
+    const signal = AbortSignal.timeout(this.configuration.requestTimeoutMs);
+
+    try {
+      const [liveResponse, readyResponse] = await Promise.all([
+        fetch(`${baseUrl}/health/live`, { signal }),
+        fetch(`${baseUrl}/health/ready`, { signal })
+      ]);
+
+      let details: JsonObject | null = null;
+
+      try {
+        const json = (await readyResponse.json()) as unknown;
+        if (json && typeof json === "object" && !Array.isArray(json)) {
+          details = json as JsonObject;
+        }
+      } catch {
+        details = null;
+      }
+
+      return {
+        details,
+        live: liveResponse.ok,
+        ready: readyResponse.ok
+      };
+    } catch {
+      return {
+        details: null,
+        live: false,
+        ready: false
+      };
+    }
+  }
+
+  private toRemoteServiceHealth(
+    service: RemoteServiceHealth["service"],
+    probe: RemoteHealthProbe
+  ): RemoteServiceHealth {
+    return {
+      details: probe.details,
+      ready: probe.ready,
+      service,
+      status: probe.live ? (probe.ready ? "HEALTHY" : "UNHEALTHY") : "UNREACHABLE"
+    };
+  }
+}

@@ -119,6 +119,7 @@ function createSettlementRequest(
   overrides: Partial<DealMilestoneSettlementRequestRecord> = {}
 ): DealMilestoneSettlementRequestRecord {
   return {
+    dealMilestoneDisputeId: null,
     dealMilestoneReviewId: review.id,
     dealMilestoneSubmissionId: submission.id,
     dealVersionId: version.id,
@@ -128,7 +129,9 @@ function createSettlementRequest(
     kind: "RELEASE",
     organizationId: draft.organizationId,
     requestedAt: "2026-04-08T03:00:00.000Z",
+    requestedByArbitratorAddress: null,
     requestedByUserId: "user-2",
+    source: "BUYER_REVIEW",
     statementMarkdown: "Release funds.",
     ...overrides
   };
