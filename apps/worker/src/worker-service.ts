@@ -5,18 +5,24 @@ import {
 } from "@blockchain-escrow/db";
 
 import type { WorkerConfig } from "./config";
+import { DraftCustodyStateReconciler } from "./draft-custody-state-reconciler";
 import { DraftActivationReconciler } from "./draft-activation-reconciler";
 import { FundingReconciler } from "./funding-reconciler";
 import { HealthState } from "./health-state";
 import { MilestoneReviewDeadlineReconciler } from "./milestone-review-deadline-reconciler";
+import { MilestoneSettlementExecutionReconciler } from "./milestone-settlement-execution-reconciler";
+import { MilestoneSettlementPreparationReconciler } from "./milestone-settlement-preparation-reconciler";
 
 export class WorkerService {
   private readonly prisma = createPrismaClient();
   private readonly release1Repositories = createRelease1Repositories(this.prisma);
   private readonly release4Repositories = createPrismaRelease4Repositories(this.prisma);
+  private readonly draftCustodyStateReconciler: DraftCustodyStateReconciler;
   private readonly draftActivationReconciler: DraftActivationReconciler;
   private readonly fundingReconciler: FundingReconciler;
   private readonly milestoneReviewDeadlineReconciler: MilestoneReviewDeadlineReconciler;
+  private readonly milestoneSettlementExecutionReconciler: MilestoneSettlementExecutionReconciler;
+  private readonly milestoneSettlementPreparationReconciler: MilestoneSettlementPreparationReconciler;
   private intervalHandle: NodeJS.Timeout | null = null;
   private isRunning = false;
 
@@ -24,6 +30,11 @@ export class WorkerService {
     private readonly config: WorkerConfig,
     private readonly healthState: HealthState
   ) {
+    this.draftCustodyStateReconciler = new DraftCustodyStateReconciler(
+      this.release1Repositories,
+      this.release4Repositories,
+      this.config.chainId
+    );
     this.draftActivationReconciler = new DraftActivationReconciler(
       this.release1Repositories,
       this.release4Repositories,
@@ -37,6 +48,19 @@ export class WorkerService {
     );
     this.milestoneReviewDeadlineReconciler =
       new MilestoneReviewDeadlineReconciler(this.release1Repositories);
+    this.milestoneSettlementExecutionReconciler =
+      new MilestoneSettlementExecutionReconciler(
+        this.release1Repositories,
+        this.release4Repositories,
+        this.config.chainId,
+        this.config.milestoneSettlementExecutionReconciliation
+      );
+    this.milestoneSettlementPreparationReconciler =
+      new MilestoneSettlementPreparationReconciler(
+        this.release1Repositories,
+        this.release4Repositories,
+        this.config.chainId
+      );
   }
 
   async start(): Promise<void> {
@@ -70,16 +94,28 @@ export class WorkerService {
     this.healthState.markRunStarted(startedAt);
 
     try {
-      const [draftActivationSummary, fundingSummary, milestoneReviewDeadlineSummary] =
-        await Promise.all([
+      const [
+        draftCustodyStateSummary,
+        draftActivationSummary,
+        fundingSummary,
+        milestoneReviewDeadlineSummary,
+        milestoneSettlementExecutionSummary,
+        milestoneSettlementPreparationSummary
+      ] = await Promise.all([
+        this.draftCustodyStateReconciler.reconcileOnce(),
         this.draftActivationReconciler.reconcileOnce(),
         this.fundingReconciler.reconcileOnce(),
-        this.milestoneReviewDeadlineReconciler.reconcileOnce()
+        this.milestoneReviewDeadlineReconciler.reconcileOnce(),
+        this.milestoneSettlementExecutionReconciler.reconcileOnce(),
+        this.milestoneSettlementPreparationReconciler.reconcileOnce()
       ]);
       const summary = {
+        ...draftCustodyStateSummary,
         ...draftActivationSummary,
         ...fundingSummary,
-        ...milestoneReviewDeadlineSummary
+        ...milestoneReviewDeadlineSummary,
+        ...milestoneSettlementExecutionSummary,
+        ...milestoneSettlementPreparationSummary
       };
       this.healthState.markRunCompleted(new Date().toISOString(), summary);
     } catch (error) {

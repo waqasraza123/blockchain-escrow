@@ -423,6 +423,98 @@ test("audit service lists draft deal logs for organization members", async () =>
   assert.equal(response.auditLogs[0]?.action, "DRAFT_DEAL_CREATED");
 });
 
+test("audit service lists settlement execution transaction logs for organization members", async () => {
+  const { auditService, repositories, sessionTokenService } = createAuditService();
+  const actor = await seedAuthenticatedActor(repositories, sessionTokenService);
+  const now = new Date().toISOString();
+
+  await repositories.organizations.create({
+    createdAt: now,
+    createdByUserId: actor.userId,
+    id: "org-1",
+    name: "Acme",
+    slug: "acme",
+    updatedAt: now
+  });
+  await repositories.organizationMembers.add({
+    createdAt: now,
+    id: "member-1",
+    organizationId: "org-1",
+    role: "OWNER",
+    updatedAt: now,
+    userId: actor.userId
+  });
+  await repositories.draftDeals.create({
+    createdAt: now,
+    createdByUserId: actor.userId,
+    id: "draft-1",
+    organizationId: "org-1",
+    settlementCurrency: "USDC",
+    state: "ACTIVE",
+    summary: null,
+    templateId: null,
+    title: "Website Rebuild",
+    updatedAt: now
+  });
+  await repositories.dealMilestoneSettlementExecutionTransactions.create({
+    chainId: 84532,
+    dealMilestoneReviewId: "review-1",
+    dealMilestoneSettlementRequestId: "settlement-request-1",
+    dealMilestoneSubmissionId: "submission-1",
+    dealVersionId: "deal-version-1",
+    dealVersionMilestoneId: "milestone-1",
+    draftDealId: "draft-1",
+    id: "settlement-execution-tx-1",
+    organizationId: "org-1",
+    reconciledAgreementAddress: null,
+    reconciledAt: null,
+    reconciledConfirmedAt: null,
+    reconciledMatchesTrackedAgreement: null,
+    reconciledStatus: null,
+    stalePendingEscalatedAt: null,
+    submittedAt: now,
+    submittedByUserId: actor.userId,
+    submittedWalletAddress: actor.walletAddress,
+    submittedWalletId: actor.walletId,
+    supersededAt: null,
+    supersededByDealMilestoneSettlementExecutionTransactionId: null,
+    transactionHash: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  });
+  await repositories.auditLogs.append({
+    action: "DEAL_MILESTONE_SETTLEMENT_EXECUTION_TRANSACTION_SUBMITTED",
+    actorUserId: actor.userId,
+    entityId: "settlement-execution-tx-1",
+    entityType: "DEAL_MILESTONE_SETTLEMENT_EXECUTION_TRANSACTION",
+    id: "audit-settlement-execution-tx-1",
+    ipAddress: "127.0.0.1",
+    metadata: {
+      transactionHash:
+        "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    occurredAt: now,
+    organizationId: "org-1",
+    userAgent: "test-agent"
+  });
+
+  const response = await auditService.listByEntity(
+    {
+      entityId: "settlement-execution-tx-1",
+      entityType: "DEAL_MILESTONE_SETTLEMENT_EXECUTION_TRANSACTION"
+    },
+    {
+      cookieHeader: actor.cookieHeader,
+      ipAddress: "127.0.0.1",
+      userAgent: "test-agent"
+    }
+  );
+
+  assert.equal(response.auditLogs.length, 1);
+  assert.equal(
+    response.auditLogs[0]?.action,
+    "DEAL_MILESTONE_SETTLEMENT_EXECUTION_TRANSACTION_SUBMITTED"
+  );
+});
+
 test("audit service lists deal version logs for organization members", async () => {
   const { auditService, repositories, sessionTokenService } = createAuditService();
   const actor = await seedAuthenticatedActor(repositories, sessionTokenService);

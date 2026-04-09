@@ -12,7 +12,10 @@ import {
 } from "../src/modules/drafts/deal-identity";
 import { DraftsService } from "../src/modules/drafts/drafts.service";
 import { MilestonesService } from "../src/modules/milestones/milestones.service";
-import type { MilestoneReviewConfiguration } from "../src/modules/milestones/milestones.tokens";
+import type {
+  MilestoneReviewConfiguration,
+  MilestoneSettlementExecutionReconciliationConfiguration
+} from "../src/modules/milestones/milestones.tokens";
 import type { RequestMetadata } from "../src/modules/auth/auth.http";
 import type { FundingReconciliationConfiguration } from "../src/modules/funding/funding.tokens";
 import {
@@ -29,6 +32,9 @@ const counterpartyAccount = privateKeyToAccount(
 const alternateCounterpartyAccount = privateKeyToAccount(
   "0x0dbbe8d4c1fdb23f4d4cf8f3668a5985bce4a35d7473f2c452ecf72edb5d2d57"
 );
+const arbitratorAccount = privateKeyToAccount(
+  "0x59c6995e998f97a5a0044966f0945382d7f1f6e0c42b4ed44c8a3b77e7d1f123"
+);
 const fundingReconciliationConfiguration: FundingReconciliationConfiguration = {
   indexerFreshnessTtlSeconds: 300,
   pendingStaleAfterSeconds: 3600,
@@ -37,6 +43,12 @@ const fundingReconciliationConfiguration: FundingReconciliationConfiguration = {
 const milestoneReviewConfiguration: MilestoneReviewConfiguration = {
   reviewDeadlineSeconds: 7 * 24 * 60 * 60
 };
+const milestoneSettlementExecutionReconciliationConfiguration: MilestoneSettlementExecutionReconciliationConfiguration =
+  {
+    indexerFreshnessTtlSeconds: 300,
+    pendingStaleAfterSeconds: 3600,
+    release4CursorKeyOverride: "release4:base-sepolia"
+  };
 
 function requestMetadata(cookieHeader: string): RequestMetadata {
   return {
@@ -44,6 +56,27 @@ function requestMetadata(cookieHeader: string): RequestMetadata {
     ipAddress: "127.0.0.1",
     userAgent: "test-agent"
   };
+}
+
+async function withManifestContractVersion<T>(
+  contractVersion: number,
+  run: () => Promise<T>
+): Promise<T> {
+  const manifest = getDeploymentManifestByChainId(84532);
+
+  if (!manifest) {
+    throw new Error("missing base sepolia manifest");
+  }
+
+  const mutableManifest = manifest as typeof manifest & { contractVersion: number };
+  const previousVersion = mutableManifest.contractVersion;
+  mutableManifest.contractVersion = contractVersion;
+
+  try {
+    return await run();
+  } finally {
+    mutableManifest.contractVersion = previousVersion;
+  }
 }
 
 async function seedOrganizationMembership(
@@ -87,6 +120,27 @@ async function seedOrganizationMembership(
   }
 }
 
+function isoFromNow(secondsFromNow: number): string {
+  return new Date(Date.now() + secondsFromNow * 1000).toISOString();
+}
+
+async function upsertRelease4Cursor(
+  release4Repositories: InMemoryRelease4Repositories,
+  updatedAt: string
+) {
+  return release4Repositories.chainCursors.upsert({
+    chainId: 84532,
+    cursorKey:
+      milestoneSettlementExecutionReconciliationConfiguration.release4CursorKeyOverride ??
+      "release4:base-sepolia",
+    lastProcessedBlockHash:
+      "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    lastProcessedBlockNumber: "100",
+    nextBlockNumber: "101",
+    updatedAt
+  });
+}
+
 function createServices() {
   const repositories = new InMemoryRelease1Repositories();
   const release4Repositories = new InMemoryRelease4Repositories();
@@ -109,7 +163,8 @@ function createServices() {
       repositories,
       release4Repositories,
       authenticatedSessionService,
-      milestoneReviewConfiguration
+      milestoneReviewConfiguration,
+      milestoneSettlementExecutionReconciliationConfiguration
     ),
     release1Repositories: repositories,
     release4Repositories,
@@ -210,7 +265,8 @@ async function seedActiveAgreement(
   services: ReturnType<typeof createServices>,
   seeded: Awaited<ReturnType<typeof seedMilestoneScenario>>,
   sellerAddress: `0x${string}` = "0x3333333333333333333333333333333333333333",
-  buyerAddress: `0x${string}` = "0x4444444444444444444444444444444444444444"
+  buyerAddress: `0x${string}` = "0x4444444444444444444444444444444444444444",
+  arbitratorAddress: `0x${string}` | null = null
 ) {
   const manifest = getDeploymentManifestByChainId(84532);
 
@@ -261,7 +317,7 @@ async function seedActiveAgreement(
 
   await services.release4Repositories.escrowAgreements.upsert({
     agreementAddress: "0x7777777777777777777777777777777777777777",
-    arbitratorAddress: null,
+    arbitratorAddress,
     buyerAddress,
     chainId: 84532,
     createdBlockHash:
@@ -364,6 +420,56 @@ async function seedCounterpartySellerSubmission(
   return submission;
 }
 
+async function seedApprovedArbitrator(
+  services: ReturnType<typeof createServices>,
+  arbitratorAddress: `0x${string}`
+) {
+  const manifest = getDeploymentManifestByChainId(84532);
+
+  if (!manifest?.contracts.ProtocolConfig || !manifest.contracts.ArbitratorRegistry) {
+    throw new Error("missing protocol config or arbitrator registry manifest");
+  }
+
+  await services.release4Repositories.protocolConfigStates.upsert({
+    arbitratorRegistryAddress:
+      manifest.contracts.ArbitratorRegistry.toLowerCase() as `0x${string}`,
+    chainId: 84532,
+    createEscrowPaused: false,
+    feeVaultAddress: manifest.contracts.FeeVault!.toLowerCase() as `0x${string}`,
+    fundingPaused: false,
+    owner: "0x1111111111111111111111111111111111111111",
+    pendingOwner: null,
+    protocolConfigAddress:
+      manifest.contracts.ProtocolConfig.toLowerCase() as `0x${string}`,
+    protocolFeeBps: manifest.protocolFeeBps,
+    tokenAllowlistAddress:
+      manifest.contracts.TokenAllowlist!.toLowerCase() as `0x${string}`,
+    treasuryAddress: "0x9999999999999999999999999999999999999999",
+    updatedAt: new Date().toISOString()
+    ,
+    updatedBlockHash:
+      "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    updatedBlockNumber: "100",
+    updatedLogIndex: 0,
+    updatedTransactionHash:
+      "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+  });
+  await services.release4Repositories.arbitratorRegistryEntries.upsert({
+    arbitrator: arbitratorAddress,
+    arbitratorRegistryAddress:
+      manifest.contracts.ArbitratorRegistry.toLowerCase() as `0x${string}`,
+    chainId: 84532,
+    isApproved: true,
+    updatedAt: new Date().toISOString(),
+    updatedBlockHash:
+      "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    updatedBlockNumber: "100",
+    updatedLogIndex: 1,
+    updatedTransactionHash:
+      "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+  });
+}
+
 async function seedMilestoneReview(
   services: ReturnType<typeof createServices>,
   seeded: Awaited<ReturnType<typeof seedMilestoneScenario>>,
@@ -414,6 +520,25 @@ async function prepareCounterpartyMilestoneSubmissionChallenge(
 async function signCounterpartyMilestoneSubmissionChallenge(
   challenge: Awaited<ReturnType<typeof prepareCounterpartyMilestoneSubmissionChallenge>>,
   signer = counterpartyAccount
+): Promise<`0x${string}`> {
+  return (
+    signer.signTypedData as (input: {
+      domain: unknown;
+      message: unknown;
+      primaryType: unknown;
+      types: unknown;
+    }) => Promise<`0x${string}`>
+  )({
+    domain: challenge.challenge.typedData.domain,
+    message: challenge.challenge.typedData.message,
+    primaryType: challenge.challenge.typedData.primaryType,
+    types: challenge.challenge.typedData.types
+  });
+}
+
+async function signMilestoneDisputeDecisionChallenge(
+  challenge: { challenge: { typedData: Record<string, unknown> } },
+  signer = arbitratorAccount
 ): Promise<`0x${string}`> {
   return (
     signer.signTypedData as (input: {
@@ -1055,6 +1180,27 @@ test("milestones service lists grouped milestone timelines from immutable milest
     requestedByUserId: actor.userId,
     statementMarkdown: "Release approved milestone funds."
   });
+  await services.release1Repositories.dealMilestoneSettlementPreparations.create({
+    agreementAddress: "0x7777777777777777777777777777777777777777",
+    chainId: 84532,
+    dealId: buildCanonicalDealId("org-1", seeded.draft.draft.id),
+    dealMilestoneReviewId: approvedReview.id,
+    dealMilestoneSettlementRequestId: "settlement-request-1",
+    dealMilestoneSubmissionId: approvedSubmission.id,
+    dealVersionHash:
+      "0x2222222222222222222222222222222222222222222222222222222222222222",
+    dealVersionId: seeded.version.version.id,
+    dealVersionMilestoneId: seeded.version.version.milestones[0]!.id,
+    draftDealId: seeded.draft.draft.id,
+    id: "settlement-preparation-1",
+    kind: "RELEASE",
+    milestoneAmountMinor: seeded.version.version.milestones[0]!.amountMinor,
+    milestonePosition: seeded.version.version.milestones[0]!.position,
+    organizationId: "org-1",
+    preparedAt: "2026-04-03T12:00:00.000Z",
+    settlementTokenAddress: "0x6666666666666666666666666666666666666666",
+    totalAmount: "3000000"
+  });
 
   const expiredSubmission = await seedCounterpartySellerSubmission(services, seeded, {
     dealVersionMilestoneId: seeded.version.version.milestones[1]!.id,
@@ -1086,9 +1232,14 @@ test("milestones service lists grouped milestone timelines from immutable milest
   assert.equal(result.milestones.length, 2);
   assert.deepEqual(
     result.milestones[0]?.events.map((event) => event.kind),
-    ["SUBMISSION_CREATED", "REVIEW_APPROVED", "RELEASE_REQUESTED"]
+    [
+      "SUBMISSION_CREATED",
+      "REVIEW_APPROVED",
+      "RELEASE_REQUESTED",
+      "SETTLEMENT_PREPARED"
+    ]
   );
-  assert.equal(result.milestones[0]?.latestOccurredAt, "2026-04-03T00:00:00.000Z");
+  assert.equal(result.milestones[0]?.latestOccurredAt, "2026-04-03T12:00:00.000Z");
   assert.equal(result.milestones[0]?.events[0]?.attachmentFiles[0]?.id, "file-1");
   assert.equal(
     result.milestones[0]?.events[0]?.submittedByPartySubjectType,
@@ -1100,6 +1251,15 @@ test("milestones service lists grouped milestone timelines from immutable milest
   assert.equal(
     result.milestones[0]?.events[2]?.statementMarkdown,
     "Release approved milestone funds."
+  );
+  assert.equal(result.milestones[0]?.events[3]?.settlementKind, "RELEASE");
+  assert.equal(
+    result.milestones[0]?.events[3]?.settlementPreparation?.agreementAddress,
+    "0x7777777777777777777777777777777777777777"
+  );
+  assert.equal(
+    result.milestones[0]?.events[3]?.settlementPreparation?.preparedAt,
+    "2026-04-03T12:00:00.000Z"
   );
 
   assert.deepEqual(
@@ -1115,6 +1275,1096 @@ test("milestones service lists grouped milestone timelines from immutable milest
   assert.equal(
     result.milestones[1]?.events[1]?.reviewDeadline?.expiredAt,
     "2026-04-04T00:00:00.000Z"
+  );
+});
+
+test("milestones service exposes settlement execution preparation on workflow summaries", async () => {
+  const services = createServices();
+  const actor = await seedAuthenticatedActor(
+    services.release1Repositories,
+    services.sessionTokenService
+  );
+  const seeded = await seedMilestoneScenario(services, actor, "BUYER");
+  const submission = await seedCounterpartySellerSubmission(services, seeded);
+  const review = await seedMilestoneReview(services, seeded, actor, submission.id);
+
+  await services.release1Repositories.dealMilestoneSettlementRequests.create({
+    dealMilestoneReviewId: review.id,
+    dealMilestoneSubmissionId: submission.id,
+    dealVersionId: seeded.version.version.id,
+    dealVersionMilestoneId: seeded.version.version.milestones[0]!.id,
+    draftDealId: seeded.draft.draft.id,
+    id: "settlement-request-1",
+    kind: "RELEASE",
+    organizationId: "org-1",
+    requestedAt: "2026-04-03T00:00:00.000Z",
+    requestedByUserId: actor.userId,
+    statementMarkdown: null
+  });
+  await services.release1Repositories.dealMilestoneSettlementPreparations.create({
+    agreementAddress: "0x7777777777777777777777777777777777777777",
+    chainId: 84532,
+    dealId: buildCanonicalDealId("org-1", seeded.draft.draft.id),
+    dealMilestoneReviewId: review.id,
+    dealMilestoneSettlementRequestId: "settlement-request-1",
+    dealMilestoneSubmissionId: submission.id,
+    dealVersionHash:
+      "0x2222222222222222222222222222222222222222222222222222222222222222",
+    dealVersionId: seeded.version.version.id,
+    dealVersionMilestoneId: seeded.version.version.milestones[0]!.id,
+    draftDealId: seeded.draft.draft.id,
+    id: "settlement-preparation-1",
+    kind: "RELEASE",
+    milestoneAmountMinor: seeded.version.version.milestones[0]!.amountMinor,
+    milestonePosition: seeded.version.version.milestones[0]!.position,
+    organizationId: "org-1",
+    preparedAt: "2026-04-03T12:00:00.000Z",
+    settlementTokenAddress: "0x6666666666666666666666666666666666666666",
+    totalAmount: "3000000"
+  });
+
+  const result = await services.milestonesService.listMilestoneWorkflows(
+    {
+      dealVersionId: seeded.version.version.id,
+      draftDealId: seeded.draft.draft.id,
+      organizationId: "org-1"
+    },
+    requestMetadata(actor.cookieHeader)
+  );
+
+  assert.equal(
+    result.milestones[0]?.submissions[0]?.review?.settlementRequest?.executionPreparation?.id,
+    "settlement-preparation-1"
+  );
+  assert.equal(
+    result.milestones[0]?.submissions[0]?.review?.settlementRequest?.executionPreparation
+      ?.milestonePosition,
+    1
+  );
+});
+
+test("milestones service lists milestone settlement executions with prepared and pending statuses", async () => {
+  const services = createServices();
+  const actor = await seedAuthenticatedActor(
+    services.release1Repositories,
+    services.sessionTokenService
+  );
+  const seeded = await seedMilestoneScenario(services, actor, "BUYER");
+
+  await seedActiveAgreement(services, seeded);
+  const firstSubmission = await seedCounterpartySellerSubmission(services, seeded, {
+    dealVersionMilestoneId: seeded.version.version.milestones[0]!.id,
+    submissionNumber: 1
+  });
+  const firstReview = await seedMilestoneReview(
+    services,
+    seeded,
+    actor,
+    firstSubmission.id,
+    {
+      dealVersionMilestoneId: seeded.version.version.milestones[0]!.id
+    }
+  );
+  await services.release1Repositories.dealMilestoneSettlementRequests.create({
+    dealMilestoneReviewId: firstReview.id,
+    dealMilestoneSubmissionId: firstSubmission.id,
+    dealVersionId: seeded.version.version.id,
+    dealVersionMilestoneId: seeded.version.version.milestones[0]!.id,
+    draftDealId: seeded.draft.draft.id,
+    id: "settlement-request-1",
+    kind: "RELEASE",
+    organizationId: "org-1",
+    requestedAt: "2026-04-03T00:00:00.000Z",
+    requestedByUserId: actor.userId,
+    statementMarkdown: null
+  });
+  await services.release1Repositories.dealMilestoneSettlementPreparations.create({
+    agreementAddress: "0x7777777777777777777777777777777777777777",
+    chainId: 84532,
+    dealId: buildCanonicalDealId("org-1", seeded.draft.draft.id),
+    dealMilestoneReviewId: firstReview.id,
+    dealMilestoneSettlementRequestId: "settlement-request-1",
+    dealMilestoneSubmissionId: firstSubmission.id,
+    dealVersionHash:
+      "0x2222222222222222222222222222222222222222222222222222222222222222",
+    dealVersionId: seeded.version.version.id,
+    dealVersionMilestoneId: seeded.version.version.milestones[0]!.id,
+    draftDealId: seeded.draft.draft.id,
+    id: "settlement-preparation-1",
+    kind: "RELEASE",
+    milestoneAmountMinor: seeded.version.version.milestones[0]!.amountMinor,
+    milestonePosition: seeded.version.version.milestones[0]!.position,
+    organizationId: "org-1",
+    preparedAt: "2026-04-03T12:00:00.000Z",
+    settlementTokenAddress: "0x6666666666666666666666666666666666666666",
+    totalAmount: "3000000"
+  });
+
+  const secondSubmission = await seedCounterpartySellerSubmission(services, seeded, {
+    dealVersionMilestoneId: seeded.version.version.milestones[1]!.id,
+    submissionNumber: 1
+  });
+  const secondReview = await seedMilestoneReview(
+    services,
+    seeded,
+    actor,
+    secondSubmission.id,
+    {
+      decision: "REJECTED",
+      dealVersionMilestoneId: seeded.version.version.milestones[1]!.id,
+      statementMarkdown: "Refund this milestone."
+    }
+  );
+  await services.release1Repositories.dealMilestoneSettlementRequests.create({
+    dealMilestoneReviewId: secondReview.id,
+    dealMilestoneSubmissionId: secondSubmission.id,
+    dealVersionId: seeded.version.version.id,
+    dealVersionMilestoneId: seeded.version.version.milestones[1]!.id,
+    draftDealId: seeded.draft.draft.id,
+    id: "settlement-request-2",
+    kind: "REFUND",
+    organizationId: "org-1",
+    requestedAt: "2026-04-04T00:00:00.000Z",
+    requestedByUserId: actor.userId,
+    statementMarkdown: "Refund the rejected milestone."
+  });
+
+  const result = await services.milestonesService.listMilestoneSettlementExecutions(
+    {
+      dealVersionId: seeded.version.version.id,
+      draftDealId: seeded.draft.draft.id,
+      organizationId: "org-1"
+    },
+    requestMetadata(actor.cookieHeader)
+  );
+
+  assert.equal(result.settlements.length, 2);
+  assert.equal(result.settlements[0]?.status, "PREPARED");
+  assert.deepEqual(result.settlements[0]?.blockers, []);
+  assert.equal(
+    result.settlements[0]?.executionPreparation?.id,
+    "settlement-preparation-1"
+  );
+  assert.equal(result.settlements[1]?.status, "PENDING_PREPARATION");
+  assert.deepEqual(result.settlements[1]?.blockers, []);
+  assert.equal(result.settlements[1]?.executionPreparation, null);
+  assert.equal(result.settlements[1]?.settlementRequest.kind, "REFUND");
+});
+
+test("milestones service marks settlement executions blocked when indexed agreement truth is incompatible", async () => {
+  const services = createServices();
+  const actor = await seedAuthenticatedActor(
+    services.release1Repositories,
+    services.sessionTokenService
+  );
+  const seeded = await seedMilestoneScenario(services, actor, "BUYER");
+
+  await seedActiveAgreement(services, seeded);
+  const [linkedAgreement] =
+    await services.release4Repositories.escrowAgreements.listByChainId(84532);
+
+  if (!linkedAgreement) {
+    throw new Error("linked agreement missing");
+  }
+
+  await services.release4Repositories.escrowAgreements.upsert({
+    ...linkedAgreement,
+    milestoneCount: 1,
+    updatedAt: "2026-04-05T00:00:00.000Z"
+  });
+
+  const blockedSubmission = await seedCounterpartySellerSubmission(services, seeded, {
+    dealVersionMilestoneId: seeded.version.version.milestones[1]!.id,
+    submissionNumber: 1
+  });
+  const blockedReview = await seedMilestoneReview(
+    services,
+    seeded,
+    actor,
+    blockedSubmission.id,
+    {
+      dealVersionMilestoneId: seeded.version.version.milestones[1]!.id
+    }
+  );
+  await services.release1Repositories.dealMilestoneSettlementRequests.create({
+    dealMilestoneReviewId: blockedReview.id,
+    dealMilestoneSubmissionId: blockedSubmission.id,
+    dealVersionId: seeded.version.version.id,
+    dealVersionMilestoneId: seeded.version.version.milestones[1]!.id,
+    draftDealId: seeded.draft.draft.id,
+    id: "settlement-request-blocked",
+    kind: "RELEASE",
+    organizationId: "org-1",
+    requestedAt: "2026-04-05T01:00:00.000Z",
+    requestedByUserId: actor.userId,
+    statementMarkdown: null
+  });
+
+  const result = await services.milestonesService.listMilestoneSettlementExecutions(
+    {
+      dealVersionId: seeded.version.version.id,
+      draftDealId: seeded.draft.draft.id,
+      organizationId: "org-1"
+    },
+    requestMetadata(actor.cookieHeader)
+  );
+
+  assert.equal(result.settlements.length, 1);
+  assert.equal(result.settlements[0]?.status, "BLOCKED");
+  assert.deepEqual(result.settlements[0]?.blockers, [
+    "AGREEMENT_MILESTONE_COUNT_MISMATCH"
+  ]);
+  assert.equal(result.settlements[0]?.executionPreparation, null);
+});
+
+test("milestones service blocks superseded settlement executions when a newer submission exists", async () => {
+  const services = createServices();
+  const actor = await seedAuthenticatedActor(
+    services.release1Repositories,
+    services.sessionTokenService
+  );
+  const seeded = await seedMilestoneScenario(services, actor, "BUYER");
+
+  await seedActiveAgreement(services, seeded);
+  const firstSubmission = await seedCounterpartySellerSubmission(services, seeded, {
+    dealVersionMilestoneId: seeded.version.version.milestones[0]!.id,
+    submissionNumber: 1,
+    submittedAt: "2026-04-03T00:00:00.000Z"
+  });
+  const firstReview = await seedMilestoneReview(
+    services,
+    seeded,
+    actor,
+    firstSubmission.id,
+    {
+      dealVersionMilestoneId: seeded.version.version.milestones[0]!.id,
+      reviewedAt: "2026-04-03T01:00:00.000Z"
+    }
+  );
+  await services.release1Repositories.dealMilestoneSettlementRequests.create({
+    dealMilestoneReviewId: firstReview.id,
+    dealMilestoneSubmissionId: firstSubmission.id,
+    dealVersionId: seeded.version.version.id,
+    dealVersionMilestoneId: seeded.version.version.milestones[0]!.id,
+    draftDealId: seeded.draft.draft.id,
+    id: "settlement-request-superseded",
+    kind: "RELEASE",
+    organizationId: "org-1",
+    requestedAt: "2026-04-03T02:00:00.000Z",
+    requestedByUserId: actor.userId,
+    statementMarkdown: null
+  });
+  await services.release1Repositories.dealMilestoneSettlementPreparations.create({
+    agreementAddress: "0x7777777777777777777777777777777777777777",
+    chainId: 84532,
+    dealId: buildCanonicalDealId("org-1", seeded.draft.draft.id),
+    dealMilestoneReviewId: firstReview.id,
+    dealMilestoneSettlementRequestId: "settlement-request-superseded",
+    dealMilestoneSubmissionId: firstSubmission.id,
+    dealVersionHash:
+      "0x2222222222222222222222222222222222222222222222222222222222222222",
+    dealVersionId: seeded.version.version.id,
+    dealVersionMilestoneId: seeded.version.version.milestones[0]!.id,
+    draftDealId: seeded.draft.draft.id,
+    id: "settlement-preparation-superseded",
+    kind: "RELEASE",
+    milestoneAmountMinor: seeded.version.version.milestones[0]!.amountMinor,
+    milestonePosition: seeded.version.version.milestones[0]!.position,
+    organizationId: "org-1",
+    preparedAt: "2026-04-03T03:00:00.000Z",
+    settlementTokenAddress: "0x6666666666666666666666666666666666666666",
+    totalAmount: "3000000"
+  });
+  await seedCounterpartySellerSubmission(services, seeded, {
+    dealVersionMilestoneId: seeded.version.version.milestones[0]!.id,
+    submissionNumber: 2,
+    submittedAt: "2026-04-04T00:00:00.000Z"
+  });
+
+  const result = await services.milestonesService.listMilestoneSettlementExecutions(
+    {
+      dealVersionId: seeded.version.version.id,
+      draftDealId: seeded.draft.draft.id,
+      organizationId: "org-1"
+    },
+    requestMetadata(actor.cookieHeader)
+  );
+
+  assert.equal(result.settlements.length, 1);
+  assert.equal(result.settlements[0]?.status, "BLOCKED");
+  assert.deepEqual(result.settlements[0]?.blockers, ["NEWER_SUBMISSION_EXISTS"]);
+  assert.equal(
+    result.settlements[0]?.executionPreparation?.id,
+    "settlement-preparation-superseded"
+  );
+});
+
+test("milestones service returns execution plans with honest unsupported-contract blockers", async () => {
+  const services = createServices();
+  const actor = await seedAuthenticatedActor(
+    services.release1Repositories,
+    services.sessionTokenService
+  );
+  const seeded = await seedMilestoneScenario(services, actor, "BUYER");
+
+  await seedActiveAgreement(services, seeded);
+  const submission = await seedCounterpartySellerSubmission(services, seeded, {
+    dealVersionMilestoneId: seeded.version.version.milestones[0]!.id,
+    submissionNumber: 1
+  });
+  const review = await seedMilestoneReview(services, seeded, actor, submission.id, {
+    dealVersionMilestoneId: seeded.version.version.milestones[0]!.id
+  });
+  await services.release1Repositories.dealMilestoneSettlementRequests.create({
+    dealMilestoneReviewId: review.id,
+    dealMilestoneSubmissionId: submission.id,
+    dealVersionId: seeded.version.version.id,
+    dealVersionMilestoneId: seeded.version.version.milestones[0]!.id,
+    draftDealId: seeded.draft.draft.id,
+    id: "settlement-request-plan",
+    kind: "RELEASE",
+    organizationId: "org-1",
+    requestedAt: "2026-04-06T00:00:00.000Z",
+    requestedByUserId: actor.userId,
+    statementMarkdown: null
+  });
+  await services.release1Repositories.dealMilestoneSettlementPreparations.create({
+    agreementAddress: "0x7777777777777777777777777777777777777777",
+    chainId: 84532,
+    dealId: buildCanonicalDealId("org-1", seeded.draft.draft.id),
+    dealMilestoneReviewId: review.id,
+    dealMilestoneSettlementRequestId: "settlement-request-plan",
+    dealMilestoneSubmissionId: submission.id,
+    dealVersionHash:
+      "0x2222222222222222222222222222222222222222222222222222222222222222",
+    dealVersionId: seeded.version.version.id,
+    dealVersionMilestoneId: seeded.version.version.milestones[0]!.id,
+    draftDealId: seeded.draft.draft.id,
+    id: "settlement-preparation-plan",
+    kind: "RELEASE",
+    milestoneAmountMinor: seeded.version.version.milestones[0]!.amountMinor,
+    milestonePosition: seeded.version.version.milestones[0]!.position,
+    organizationId: "org-1",
+    preparedAt: "2026-04-06T01:00:00.000Z",
+    settlementTokenAddress: "0x6666666666666666666666666666666666666666",
+    totalAmount: "3000000"
+  });
+
+  const result = await services.milestonesService.getMilestoneSettlementExecutionPlan(
+    {
+      dealMilestoneSettlementRequestId: "settlement-request-plan",
+      dealVersionId: seeded.version.version.id,
+      draftDealId: seeded.draft.draft.id,
+      organizationId: "org-1"
+    },
+    requestMetadata(actor.cookieHeader)
+  );
+
+  assert.equal(result.plan.ready, false);
+  assert.deepEqual(result.plan.blockers, [
+    "SETTLEMENT_EXECUTION_METHOD_UNAVAILABLE"
+  ]);
+  assert.equal(result.plan.contractVersion, 1);
+  assert.equal(result.plan.chainId, 84532);
+  assert.equal(result.plan.executionPreparation?.id, "settlement-preparation-plan");
+  assert.equal(result.plan.settlementRequest.id, "settlement-request-plan");
+  assert.equal(
+    result.plan.agreementAddress,
+    "0x7777777777777777777777777777777777777777"
+  );
+});
+
+test("milestones service reflects indexed settlements as executed milestone truth", async () => {
+  const services = createServices();
+  const actor = await seedAuthenticatedActor(
+    services.release1Repositories,
+    services.sessionTokenService
+  );
+  const seeded = await seedMilestoneScenario(services, actor, "BUYER");
+
+  await seedActiveAgreement(services, seeded);
+  const milestone = seeded.version.version.milestones[0]!;
+  const submission = await seedCounterpartySellerSubmission(services, seeded, {
+    dealVersionMilestoneId: milestone.id,
+    submissionNumber: 1
+  });
+  const review = await seedMilestoneReview(services, seeded, actor, submission.id, {
+    dealVersionMilestoneId: milestone.id
+  });
+  await services.release1Repositories.dealMilestoneSettlementRequests.create({
+    dealMilestoneReviewId: review.id,
+    dealMilestoneSubmissionId: submission.id,
+    dealVersionId: seeded.version.version.id,
+    dealVersionMilestoneId: milestone.id,
+    draftDealId: seeded.draft.draft.id,
+    id: "settlement-request-indexed",
+    kind: "RELEASE",
+    organizationId: "org-1",
+    requestedAt: "2026-04-08T00:00:00.000Z",
+    requestedByUserId: actor.userId,
+    statementMarkdown: null
+  });
+  await services.release1Repositories.dealMilestoneSettlementPreparations.create({
+    agreementAddress: "0x7777777777777777777777777777777777777777",
+    chainId: 84532,
+    dealId: buildCanonicalDealId("org-1", seeded.draft.draft.id),
+    dealMilestoneReviewId: review.id,
+    dealMilestoneSettlementRequestId: "settlement-request-indexed",
+    dealMilestoneSubmissionId: submission.id,
+    dealVersionHash:
+      "0x2222222222222222222222222222222222222222222222222222222222222222",
+    dealVersionId: seeded.version.version.id,
+    dealVersionMilestoneId: milestone.id,
+    draftDealId: seeded.draft.draft.id,
+    id: "settlement-preparation-indexed",
+    kind: "RELEASE",
+    milestoneAmountMinor: milestone.amountMinor,
+    milestonePosition: milestone.position,
+    organizationId: "org-1",
+    preparedAt: "2026-04-08T01:00:00.000Z",
+    settlementTokenAddress: "0x6666666666666666666666666666666666666666",
+    totalAmount: "3000000"
+  });
+  await services.release4Repositories.escrowAgreementMilestoneSettlements.upsert({
+    agreementAddress: "0x7777777777777777777777777777777777777777",
+    amount: milestone.amountMinor,
+    beneficiaryAddress: "0x3333333333333333333333333333333333333333",
+    chainId: 84532,
+    dealId: buildCanonicalDealId("org-1", seeded.draft.draft.id),
+    dealVersionHash:
+      "0x2222222222222222222222222222222222222222222222222222222222222222",
+    kind: "RELEASE",
+    milestonePosition: milestone.position,
+    settledAt: "2026-04-08T02:00:00.000Z",
+    settledBlockHash:
+      "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    settledBlockNumber: "42",
+    settledByAddress: actor.walletAddress,
+    settledLogIndex: 0,
+    settledTransactionHash:
+      "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    updatedAt: "2026-04-08T02:00:00.000Z"
+  });
+
+  await withManifestContractVersion(3, async () => {
+    const workflows = await services.milestonesService.listMilestoneWorkflows(
+      {
+        dealVersionId: seeded.version.version.id,
+        draftDealId: seeded.draft.draft.id,
+        organizationId: "org-1"
+      },
+      requestMetadata(actor.cookieHeader)
+    );
+    const timelines = await services.milestonesService.listMilestoneTimelines(
+      {
+        dealVersionId: seeded.version.version.id,
+        draftDealId: seeded.draft.draft.id,
+        organizationId: "org-1"
+      },
+      requestMetadata(actor.cookieHeader)
+    );
+    const settlements =
+      await services.milestonesService.listMilestoneSettlementExecutions(
+        {
+          dealVersionId: seeded.version.version.id,
+          draftDealId: seeded.draft.draft.id,
+          organizationId: "org-1"
+        },
+        requestMetadata(actor.cookieHeader)
+      );
+    const plan = await services.milestonesService.getMilestoneSettlementExecutionPlan(
+      {
+        dealMilestoneSettlementRequestId: "settlement-request-indexed",
+        dealVersionId: seeded.version.version.id,
+        draftDealId: seeded.draft.draft.id,
+        organizationId: "org-1"
+      },
+      requestMetadata(actor.cookieHeader)
+    );
+
+    assert.equal(workflows.milestones[0]?.state, "RELEASED");
+    assert.equal(
+      timelines.milestones[0]?.events.some(
+        (event) => event.kind === "RELEASE_EXECUTED"
+      ),
+      true
+    );
+    assert.equal(settlements.settlements[0]?.status, "EXECUTED");
+    assert.equal(settlements.settlements[0]?.indexedSettlement?.amount, milestone.amountMinor);
+    assert.deepEqual(plan.plan.blockers, ["SETTLEMENT_ALREADY_EXECUTED"]);
+    assert.equal(plan.plan.ready, false);
+    assert.equal(plan.plan.indexedSettlement?.settledBlockNumber, "42");
+  });
+});
+
+test("milestones service returns a settlement statement with aggregate release and refund totals", async () => {
+  const services = createServices();
+  const actor = await seedAuthenticatedActor(
+    services.release1Repositories,
+    services.sessionTokenService
+  );
+  const seeded = await seedMilestoneScenario(services, actor, "BUYER");
+
+  await seedActiveAgreement(services, seeded);
+
+  const firstSubmission = await seedCounterpartySellerSubmission(services, seeded, {
+    dealVersionMilestoneId: seeded.version.version.milestones[0]!.id,
+    submissionNumber: 1
+  });
+  const firstReview = await seedMilestoneReview(
+    services,
+    seeded,
+    actor,
+    firstSubmission.id,
+    {
+      dealVersionMilestoneId: seeded.version.version.milestones[0]!.id
+    }
+  );
+  await services.release1Repositories.dealMilestoneSettlementRequests.create({
+    dealMilestoneReviewId: firstReview.id,
+    dealMilestoneSubmissionId: firstSubmission.id,
+    dealVersionId: seeded.version.version.id,
+    dealVersionMilestoneId: seeded.version.version.milestones[0]!.id,
+    draftDealId: seeded.draft.draft.id,
+    id: "settlement-request-statement-release",
+    kind: "RELEASE",
+    organizationId: "org-1",
+    requestedAt: "2026-04-08T01:00:00.000Z",
+    requestedByUserId: actor.userId,
+    statementMarkdown: "Release milestone one."
+  });
+
+  const secondSubmission = await seedCounterpartySellerSubmission(services, seeded, {
+    dealVersionMilestoneId: seeded.version.version.milestones[1]!.id,
+    statementMarkdown: "Second milestone has defects.",
+    submissionNumber: 1
+  });
+  const secondReview = await services.milestonesService.createMilestoneReview(
+    {
+      dealMilestoneSubmissionId: secondSubmission.id,
+      dealVersionId: seeded.version.version.id,
+      dealVersionMilestoneId: seeded.version.version.milestones[1]!.id,
+      draftDealId: seeded.draft.draft.id,
+      organizationId: "org-1"
+    },
+    {
+      decision: "REJECTED",
+      statementMarkdown: "Refund the remaining milestone."
+    },
+    requestMetadata(actor.cookieHeader)
+  );
+  await services.release1Repositories.dealMilestoneSettlementRequests.create({
+    dealMilestoneReviewId: secondReview.review.id,
+    dealMilestoneSubmissionId: secondSubmission.id,
+    dealVersionId: seeded.version.version.id,
+    dealVersionMilestoneId: seeded.version.version.milestones[1]!.id,
+    draftDealId: seeded.draft.draft.id,
+    id: "settlement-request-statement-refund",
+    kind: "REFUND",
+    organizationId: "org-1",
+    requestedAt: "2026-04-08T02:00:00.000Z",
+    requestedByUserId: actor.userId,
+    statementMarkdown: "Refund milestone two."
+  });
+
+  const draftRecord = await services.release1Repositories.draftDeals.findById(
+    seeded.draft.draft.id
+  );
+
+  assert.ok(draftRecord);
+  draftRecord.state = "COMPLETED";
+
+  await services.release4Repositories.escrowAgreementMilestoneSettlements.upsert({
+    agreementAddress: "0x7777777777777777777777777777777777777777",
+    amount: seeded.version.version.milestones[0]!.amountMinor,
+    beneficiaryAddress: "0x3333333333333333333333333333333333333333",
+    chainId: 84532,
+    dealId: buildCanonicalDealId("org-1", seeded.draft.draft.id),
+    dealVersionHash:
+      "0x2222222222222222222222222222222222222222222222222222222222222222",
+    kind: "RELEASE",
+    milestonePosition: 1,
+    settledAt: "2026-04-08T03:00:00.000Z",
+    settledBlockHash:
+      "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    settledBlockNumber: "41",
+    settledByAddress: actor.walletAddress,
+    settledLogIndex: 0,
+    settledTransactionHash:
+      "0x1111111111111111111111111111111111111111111111111111111111111111",
+    updatedAt: "2026-04-08T03:00:00.000Z"
+  });
+  await services.release4Repositories.escrowAgreementMilestoneSettlements.upsert({
+    agreementAddress: "0x7777777777777777777777777777777777777777",
+    amount: seeded.version.version.milestones[1]!.amountMinor,
+    beneficiaryAddress: actor.walletAddress,
+    chainId: 84532,
+    dealId: buildCanonicalDealId("org-1", seeded.draft.draft.id),
+    dealVersionHash:
+      "0x2222222222222222222222222222222222222222222222222222222222222222",
+    kind: "REFUND",
+    milestonePosition: 2,
+    settledAt: "2026-04-08T04:00:00.000Z",
+    settledBlockHash:
+      "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    settledBlockNumber: "42",
+    settledByAddress: actor.walletAddress,
+    settledLogIndex: 1,
+    settledTransactionHash:
+      "0x2222222222222222222222222222222222222222222222222222222222222222",
+    updatedAt: "2026-04-08T04:00:00.000Z"
+  });
+
+  const result = await services.milestonesService.getSettlementStatement(
+    {
+      dealVersionId: seeded.version.version.id,
+      draftDealId: seeded.draft.draft.id,
+      organizationId: "org-1"
+    },
+    requestMetadata(actor.cookieHeader)
+  );
+
+  assert.equal(result.statement.draftState, "COMPLETED");
+  assert.equal(result.statement.milestoneCount, 2);
+  assert.equal(result.statement.releasedMilestoneCount, 1);
+  assert.equal(result.statement.refundedMilestoneCount, 1);
+  assert.equal(result.statement.pendingMilestoneCount, 0);
+  assert.equal(result.statement.releasedAmountMinor, "1000000");
+  assert.equal(result.statement.refundedAmountMinor, "2000000");
+  assert.equal(result.statement.pendingAmountMinor, "0");
+  assert.equal(result.statement.totalAmountMinor, "3000000");
+  assert.equal(result.statement.latestSettledAt, "2026-04-08T04:00:00.000Z");
+  assert.equal(result.milestones[0]?.state, "RELEASED");
+  assert.equal(result.milestones[0]?.latestSettlementRequest?.kind, "RELEASE");
+  assert.equal(result.milestones[0]?.indexedSettlement?.settledBlockNumber, "41");
+  assert.equal(result.milestones[1]?.state, "REFUNDED");
+  assert.equal(result.milestones[1]?.latestReview?.decision, "REJECTED");
+  assert.equal(result.milestones[1]?.latestSettlementRequest?.kind, "REFUND");
+  assert.equal(result.milestones[1]?.indexedSettlement?.settledBlockNumber, "42");
+});
+
+test("milestones service tracks settlement execution transactions and supersedes older pending replacements", async () => {
+  const services = createServices();
+  const actor = await seedAuthenticatedActor(
+    services.release1Repositories,
+    services.sessionTokenService
+  );
+  const seeded = await seedMilestoneScenario(services, actor, "BUYER");
+
+  await seedActiveAgreement(services, seeded);
+  const submission = await seedCounterpartySellerSubmission(services, seeded, {
+    dealVersionMilestoneId: seeded.version.version.milestones[0]!.id,
+    submissionNumber: 1
+  });
+  const review = await seedMilestoneReview(services, seeded, actor, submission.id, {
+    dealVersionMilestoneId: seeded.version.version.milestones[0]!.id
+  });
+  await services.release1Repositories.dealMilestoneSettlementRequests.create({
+    dealMilestoneReviewId: review.id,
+    dealMilestoneSubmissionId: submission.id,
+    dealVersionId: seeded.version.version.id,
+    dealVersionMilestoneId: seeded.version.version.milestones[0]!.id,
+    draftDealId: seeded.draft.draft.id,
+    id: "settlement-request-tracking",
+    kind: "RELEASE",
+    organizationId: "org-1",
+    requestedAt: "2026-04-06T00:00:00.000Z",
+    requestedByUserId: actor.userId,
+    statementMarkdown: null
+  });
+  await services.release1Repositories.dealMilestoneSettlementPreparations.create({
+    agreementAddress: "0x7777777777777777777777777777777777777777",
+    chainId: 84532,
+    dealId: buildCanonicalDealId("org-1", seeded.draft.draft.id),
+    dealMilestoneReviewId: review.id,
+    dealMilestoneSettlementRequestId: "settlement-request-tracking",
+    dealMilestoneSubmissionId: submission.id,
+    dealVersionHash:
+      "0x2222222222222222222222222222222222222222222222222222222222222222",
+    dealVersionId: seeded.version.version.id,
+    dealVersionMilestoneId: seeded.version.version.milestones[0]!.id,
+    draftDealId: seeded.draft.draft.id,
+    id: "settlement-preparation-tracking",
+    kind: "RELEASE",
+    milestoneAmountMinor: seeded.version.version.milestones[0]!.amountMinor,
+    milestonePosition: seeded.version.version.milestones[0]!.position,
+    organizationId: "org-1",
+    preparedAt: "2026-04-06T01:00:00.000Z",
+    settlementTokenAddress: "0x6666666666666666666666666666666666666666",
+    totalAmount: "3000000"
+  });
+
+  const { first, replacement } = await withManifestContractVersion(3, async () => {
+    const first =
+      await services.milestonesService.createMilestoneSettlementExecutionTransaction(
+        {
+          dealMilestoneSettlementRequestId: "settlement-request-tracking",
+          dealVersionId: seeded.version.version.id,
+          draftDealId: seeded.draft.draft.id,
+          organizationId: "org-1"
+        },
+        {
+          transactionHash:
+            "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        requestMetadata(actor.cookieHeader)
+      );
+    const replacement =
+      await services.milestonesService.createMilestoneSettlementExecutionTransaction(
+        {
+          dealMilestoneSettlementRequestId: "settlement-request-tracking",
+          dealVersionId: seeded.version.version.id,
+          draftDealId: seeded.draft.draft.id,
+          organizationId: "org-1"
+        },
+        {
+          transactionHash:
+            "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        },
+        requestMetadata(actor.cookieHeader)
+      );
+
+    return { first, replacement };
+  });
+
+  await services.release4Repositories.indexedTransactions.upsertMany([
+    {
+      blockHash:
+        "0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      blockNumber: "21",
+      chainId: 84532,
+      executionStatus: "SUCCESS",
+      fromAddress: actor.walletAddress,
+      indexedAt: "2026-04-06T02:00:00.000Z",
+      toAddress: "0x7777777777777777777777777777777777777777",
+      transactionHash: replacement.executionTransaction.transactionHash,
+      transactionIndex: 0
+    }
+  ]);
+
+  const listed =
+    await services.milestonesService.listMilestoneSettlementExecutionTransactions(
+      {
+        dealMilestoneSettlementRequestId: "settlement-request-tracking",
+        dealVersionId: seeded.version.version.id,
+        draftDealId: seeded.draft.draft.id,
+        organizationId: "org-1"
+      },
+      requestMetadata(actor.cookieHeader)
+    );
+
+  assert.equal(first.executionTransaction.status, "PENDING");
+  assert.equal(replacement.executionTransaction.status, "PENDING");
+  assert.equal(listed.executionTransactions.length, 2);
+  assert.equal(listed.executionTransactions[0]?.status, "CONFIRMED");
+  assert.equal(
+    listed.executionTransactions[0]?.agreementAddress,
+    "0x7777777777777777777777777777777777777777"
+  );
+  assert.equal(listed.executionTransactions[0]?.matchesTrackedAgreement, true);
+  assert.equal(
+    listed.executionTransactions[1]?.status,
+    "SUPERSEDED"
+  );
+  assert.equal(
+    listed.executionTransactions[1]
+      ?.supersededByDealMilestoneSettlementExecutionTransactionId,
+    replacement.executionTransaction.id
+  );
+});
+
+test("milestones service marks reverted settlement execution transactions as failed", async () => {
+  const services = createServices();
+  const actor = await seedAuthenticatedActor(
+    services.release1Repositories,
+    services.sessionTokenService
+  );
+  const seeded = await seedMilestoneScenario(services, actor, "BUYER");
+
+  await seedActiveAgreement(services, seeded);
+  const submission = await seedCounterpartySellerSubmission(services, seeded, {
+    dealVersionMilestoneId: seeded.version.version.milestones[0]!.id,
+    submissionNumber: 1
+  });
+  const review = await seedMilestoneReview(services, seeded, actor, submission.id, {
+    dealVersionMilestoneId: seeded.version.version.milestones[0]!.id
+  });
+  await services.release1Repositories.dealMilestoneSettlementRequests.create({
+    dealMilestoneReviewId: review.id,
+    dealMilestoneSubmissionId: submission.id,
+    dealVersionId: seeded.version.version.id,
+    dealVersionMilestoneId: seeded.version.version.milestones[0]!.id,
+    draftDealId: seeded.draft.draft.id,
+    id: "settlement-request-failed",
+    kind: "RELEASE",
+    organizationId: "org-1",
+    requestedAt: "2026-04-07T00:00:00.000Z",
+    requestedByUserId: actor.userId,
+    statementMarkdown: null
+  });
+  await services.release1Repositories.dealMilestoneSettlementPreparations.create({
+    agreementAddress: "0x7777777777777777777777777777777777777777",
+    chainId: 84532,
+    dealId: buildCanonicalDealId("org-1", seeded.draft.draft.id),
+    dealMilestoneReviewId: review.id,
+    dealMilestoneSettlementRequestId: "settlement-request-failed",
+    dealMilestoneSubmissionId: submission.id,
+    dealVersionHash:
+      "0x2222222222222222222222222222222222222222222222222222222222222222",
+    dealVersionId: seeded.version.version.id,
+    dealVersionMilestoneId: seeded.version.version.milestones[0]!.id,
+    draftDealId: seeded.draft.draft.id,
+    id: "settlement-preparation-failed",
+    kind: "RELEASE",
+    milestoneAmountMinor: seeded.version.version.milestones[0]!.amountMinor,
+    milestonePosition: seeded.version.version.milestones[0]!.position,
+    organizationId: "org-1",
+    preparedAt: "2026-04-07T01:00:00.000Z",
+    settlementTokenAddress: "0x6666666666666666666666666666666666666666",
+    totalAmount: "3000000"
+  });
+
+  const created = await withManifestContractVersion(3, async () =>
+    services.milestonesService.createMilestoneSettlementExecutionTransaction(
+      {
+        dealMilestoneSettlementRequestId: "settlement-request-failed",
+        dealVersionId: seeded.version.version.id,
+        draftDealId: seeded.draft.draft.id,
+        organizationId: "org-1"
+      },
+      {
+        transactionHash:
+          "0xdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+      },
+      requestMetadata(actor.cookieHeader)
+    )
+  );
+
+  await services.release4Repositories.indexedTransactions.upsertMany([
+    {
+      blockHash:
+        "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      blockNumber: "22",
+      chainId: 84532,
+      executionStatus: "REVERTED",
+      fromAddress: actor.walletAddress,
+      indexedAt: "2026-04-07T02:00:00.000Z",
+      toAddress: "0x7777777777777777777777777777777777777777",
+      transactionHash: created.executionTransaction.transactionHash,
+      transactionIndex: 0
+    }
+  ]);
+
+  const listed =
+    await services.milestonesService.listMilestoneSettlementExecutionTransactions(
+      {
+        dealMilestoneSettlementRequestId: "settlement-request-failed",
+        dealVersionId: seeded.version.version.id,
+        draftDealId: seeded.draft.draft.id,
+        organizationId: "org-1"
+      },
+      requestMetadata(actor.cookieHeader)
+    );
+
+  assert.equal(listed.executionTransactions.length, 1);
+  assert.equal(listed.executionTransactions[0]?.status, "FAILED");
+  assert.equal(listed.executionTransactions[0]?.agreementAddress, null);
+  assert.equal(listed.executionTransactions[0]?.indexedExecutionStatus, "REVERTED");
+  assert.equal(listed.executionTransactions[0]?.indexedBlockNumber, "22");
+});
+
+test("milestones service exposes persisted stale pending escalation metadata on settlement execution transactions", async () => {
+  const services = createServices();
+  const actor = await seedAuthenticatedActor(
+    services.release1Repositories,
+    services.sessionTokenService
+  );
+  const seeded = await seedMilestoneScenario(services, actor, "BUYER");
+
+  await seedActiveAgreement(services, seeded);
+  const submission = await seedCounterpartySellerSubmission(services, seeded, {
+    dealVersionMilestoneId: seeded.version.version.milestones[0]!.id,
+    submissionNumber: 1
+  });
+  const review = await seedMilestoneReview(services, seeded, actor, submission.id, {
+    dealVersionMilestoneId: seeded.version.version.milestones[0]!.id
+  });
+  await services.release1Repositories.dealMilestoneSettlementRequests.create({
+    dealMilestoneReviewId: review.id,
+    dealMilestoneSubmissionId: submission.id,
+    dealVersionId: seeded.version.version.id,
+    dealVersionMilestoneId: seeded.version.version.milestones[0]!.id,
+    draftDealId: seeded.draft.draft.id,
+    id: "settlement-request-escalated",
+    kind: "RELEASE",
+    organizationId: "org-1",
+    requestedAt: "2026-04-07T00:00:00.000Z",
+    requestedByUserId: actor.userId,
+    statementMarkdown: null
+  });
+  await services.release1Repositories.dealMilestoneSettlementPreparations.create({
+    agreementAddress: "0x7777777777777777777777777777777777777777",
+    chainId: 84532,
+    dealId: buildCanonicalDealId("org-1", seeded.draft.draft.id),
+    dealMilestoneReviewId: review.id,
+    dealMilestoneSettlementRequestId: "settlement-request-escalated",
+    dealMilestoneSubmissionId: submission.id,
+    dealVersionHash:
+      "0x2222222222222222222222222222222222222222222222222222222222222222",
+    dealVersionId: seeded.version.version.id,
+    dealVersionMilestoneId: seeded.version.version.milestones[0]!.id,
+    draftDealId: seeded.draft.draft.id,
+    id: "settlement-preparation-escalated",
+    kind: "RELEASE",
+    milestoneAmountMinor: seeded.version.version.milestones[0]!.amountMinor,
+    milestonePosition: seeded.version.version.milestones[0]!.position,
+    organizationId: "org-1",
+    preparedAt: "2026-04-07T01:00:00.000Z",
+    settlementTokenAddress: "0x6666666666666666666666666666666666666666",
+    totalAmount: "3000000"
+  });
+  await services.release1Repositories.dealMilestoneSettlementExecutionTransactions.create({
+    chainId: 84532,
+    dealMilestoneReviewId: review.id,
+    dealMilestoneSettlementRequestId: "settlement-request-escalated",
+    dealMilestoneSubmissionId: submission.id,
+    dealVersionId: seeded.version.version.id,
+    dealVersionMilestoneId: seeded.version.version.milestones[0]!.id,
+    draftDealId: seeded.draft.draft.id,
+    id: "settlement-execution-tx-escalated",
+    organizationId: "org-1",
+    reconciledAgreementAddress: null,
+    reconciledAt: null,
+    reconciledConfirmedAt: null,
+    reconciledMatchesTrackedAgreement: null,
+    reconciledStatus: null,
+    stalePendingEscalatedAt: "2026-04-06T12:05:00.000Z",
+    submittedAt: isoFromNow(-3900),
+    submittedByUserId: actor.userId,
+    submittedWalletAddress: actor.walletAddress,
+    submittedWalletId: actor.walletId,
+    supersededAt: null,
+    supersededByDealMilestoneSettlementExecutionTransactionId: null,
+    transactionHash:
+      "0x5151515151515151515151515151515151515151515151515151515151515151"
+  });
+  await upsertRelease4Cursor(services.release4Repositories, isoFromNow(-60));
+
+  const listed =
+    await services.milestonesService.listMilestoneSettlementExecutionTransactions(
+      {
+        dealMilestoneSettlementRequestId: "settlement-request-escalated",
+        dealVersionId: seeded.version.version.id,
+        draftDealId: seeded.draft.draft.id,
+        organizationId: "org-1"
+      },
+      requestMetadata(actor.cookieHeader)
+    );
+
+  assert.equal(listed.executionTransactions[0]?.status, "PENDING");
+  assert.equal(listed.executionTransactions[0]?.stalePending, true);
+  assert.equal(
+    listed.executionTransactions[0]?.stalePendingEscalatedAt,
+    "2026-04-06T12:05:00.000Z"
+  );
+  assert.equal(listed.executionTransactions[0]?.stalePendingEvaluation, "READY");
+});
+
+test("milestones service exposes persisted worker reconciliation metadata while keeping live settlement execution status truthful", async () => {
+  const services = createServices();
+  const actor = await seedAuthenticatedActor(
+    services.release1Repositories,
+    services.sessionTokenService
+  );
+  const seeded = await seedMilestoneScenario(services, actor, "BUYER");
+
+  await seedActiveAgreement(services, seeded);
+  const submission = await seedCounterpartySellerSubmission(services, seeded, {
+    dealVersionMilestoneId: seeded.version.version.milestones[0]!.id,
+    submissionNumber: 1
+  });
+  const review = await seedMilestoneReview(services, seeded, actor, submission.id, {
+    dealVersionMilestoneId: seeded.version.version.milestones[0]!.id
+  });
+  await services.release1Repositories.dealMilestoneSettlementRequests.create({
+    dealMilestoneReviewId: review.id,
+    dealMilestoneSubmissionId: submission.id,
+    dealVersionId: seeded.version.version.id,
+    dealVersionMilestoneId: seeded.version.version.milestones[0]!.id,
+    draftDealId: seeded.draft.draft.id,
+    id: "settlement-request-reconciled",
+    kind: "RELEASE",
+    organizationId: "org-1",
+    requestedAt: "2026-04-07T00:00:00.000Z",
+    requestedByUserId: actor.userId,
+    statementMarkdown: null
+  });
+  await services.release1Repositories.dealMilestoneSettlementPreparations.create({
+    agreementAddress: "0x7777777777777777777777777777777777777777",
+    chainId: 84532,
+    dealId: buildCanonicalDealId("org-1", seeded.draft.draft.id),
+    dealMilestoneReviewId: review.id,
+    dealMilestoneSettlementRequestId: "settlement-request-reconciled",
+    dealMilestoneSubmissionId: submission.id,
+    dealVersionHash:
+      "0x2222222222222222222222222222222222222222222222222222222222222222",
+    dealVersionId: seeded.version.version.id,
+    dealVersionMilestoneId: seeded.version.version.milestones[0]!.id,
+    draftDealId: seeded.draft.draft.id,
+    id: "settlement-preparation-reconciled",
+    kind: "RELEASE",
+    milestoneAmountMinor: seeded.version.version.milestones[0]!.amountMinor,
+    milestonePosition: seeded.version.version.milestones[0]!.position,
+    organizationId: "org-1",
+    preparedAt: "2026-04-07T01:00:00.000Z",
+    settlementTokenAddress: "0x6666666666666666666666666666666666666666",
+    totalAmount: "3000000"
+  });
+  await services.release1Repositories.dealMilestoneSettlementExecutionTransactions.create({
+    chainId: 84532,
+    dealMilestoneReviewId: review.id,
+    dealMilestoneSettlementRequestId: "settlement-request-reconciled",
+    dealMilestoneSubmissionId: submission.id,
+    dealVersionId: seeded.version.version.id,
+    dealVersionMilestoneId: seeded.version.version.milestones[0]!.id,
+    draftDealId: seeded.draft.draft.id,
+    id: "settlement-execution-tx-reconciled",
+    organizationId: "org-1",
+    reconciledAgreementAddress: "0x7777777777777777777777777777777777777777",
+    reconciledAt: "2026-04-06T12:05:00.000Z",
+    reconciledConfirmedAt: "2026-04-06T12:05:00.000Z",
+    reconciledMatchesTrackedAgreement: true,
+    reconciledStatus: "CONFIRMED",
+    stalePendingEscalatedAt: null,
+    submittedAt: isoFromNow(-1800),
+    submittedByUserId: actor.userId,
+    submittedWalletAddress: actor.walletAddress,
+    submittedWalletId: actor.walletId,
+    supersededAt: null,
+    supersededByDealMilestoneSettlementExecutionTransactionId: null,
+    transactionHash:
+      "0x5252525252525252525252525252525252525252525252525252525252525252"
+  });
+  await upsertRelease4Cursor(services.release4Repositories, isoFromNow(-60));
+
+  const listed =
+    await services.milestonesService.listMilestoneSettlementExecutionTransactions(
+      {
+        dealMilestoneSettlementRequestId: "settlement-request-reconciled",
+        dealVersionId: seeded.version.version.id,
+        draftDealId: seeded.draft.draft.id,
+        organizationId: "org-1"
+      },
+      requestMetadata(actor.cookieHeader)
+    );
+
+  assert.equal(listed.executionTransactions[0]?.status, "PENDING");
+  assert.equal(listed.executionTransactions[0]?.agreementAddress, null);
+  assert.equal(listed.executionTransactions[0]?.confirmedAt, null);
+  assert.equal(listed.executionTransactions[0]?.reconciledStatus, "CONFIRMED");
+  assert.equal(
+    listed.executionTransactions[0]?.reconciledAt,
+    "2026-04-06T12:05:00.000Z"
   );
 });
 
@@ -1310,6 +2560,7 @@ test("milestones service lets buyer-side organizations request release after app
 
   assert.equal(result.settlementRequest.kind, "RELEASE");
   assert.equal(result.settlementRequest.requestedByUserId, actor.userId);
+  assert.equal(result.settlementRequest.executionPreparation, null);
   assert.equal(result.milestone.state, "APPROVED");
   assert.equal(
     result.milestone.submissions[0]?.review?.settlementRequest?.id,
@@ -1534,6 +2785,236 @@ test("milestones service prevents duplicate settlement requests for the same rev
   );
 });
 
+test("milestones service opens disputes and blocks direct settlement requests while unresolved", async () => {
+  const services = createServices();
+  const actor = await seedAuthenticatedActor(
+    services.release1Repositories,
+    services.sessionTokenService
+  );
+  const seeded = await seedMilestoneScenario(services, actor, "BUYER");
+  const arbitratorAddress = arbitratorAccount.address.toLowerCase() as `0x${string}`;
+
+  await seedFile(services.release1Repositories, {
+    createdByUserId: actor.userId,
+    fileId: "dispute-file-1",
+    organizationId: "org-1"
+  });
+  await seedActiveAgreement(
+    services,
+    seeded,
+    "0x3333333333333333333333333333333333333333",
+    "0x4444444444444444444444444444444444444444",
+    arbitratorAddress
+  );
+  await seedApprovedArbitrator(services, arbitratorAddress);
+
+  const submission = await seedCounterpartySellerSubmission(services, seeded, {
+    attachmentFileIds: ["dispute-file-1"]
+  });
+  const review = await services.milestonesService.createMilestoneReview(
+    {
+      dealMilestoneSubmissionId: submission.id,
+      dealVersionId: seeded.version.version.id,
+      dealVersionMilestoneId: seeded.version.version.milestones[0]!.id,
+      draftDealId: seeded.draft.draft.id,
+      organizationId: "org-1"
+    },
+    {
+      decision: "APPROVED"
+    },
+    requestMetadata(actor.cookieHeader)
+  );
+
+  const dispute = await services.milestonesService.createMilestoneDispute(
+    {
+      dealMilestoneReviewId: review.review.id,
+      dealMilestoneSubmissionId: submission.id,
+      dealVersionId: seeded.version.version.id,
+      dealVersionMilestoneId: seeded.version.version.milestones[0]!.id,
+      draftDealId: seeded.draft.draft.id,
+      organizationId: "org-1"
+    },
+    {
+      attachmentFileIds: ["dispute-file-1"],
+      statementMarkdown: "Buyer disputes the milestone acceptance evidence."
+    },
+    requestMetadata(actor.cookieHeader)
+  );
+
+  assert.equal(dispute.dispute.status, "OPEN");
+  assert.equal(dispute.dispute.attachmentFiles.length, 1);
+  assert.equal(dispute.dispute.attachmentFiles[0]?.file.id, "dispute-file-1");
+  assert.equal(dispute.milestone.state, "DISPUTED");
+  assert.equal(dispute.milestone.currentDispute?.id, dispute.dispute.id);
+
+  await expectRejectsWith(
+    services.milestonesService.createMilestoneSettlementRequest(
+      {
+        dealMilestoneReviewId: review.review.id,
+        dealMilestoneSubmissionId: submission.id,
+        dealVersionId: seeded.version.version.id,
+        dealVersionMilestoneId: seeded.version.version.milestones[0]!.id,
+        draftDealId: seeded.draft.draft.id,
+        organizationId: "org-1"
+      },
+      {
+        kind: "RELEASE"
+      },
+      requestMetadata(actor.cookieHeader)
+    ),
+    "ConflictException",
+    "milestone review is currently disputed"
+  );
+
+  const disputes = await services.milestonesService.listMilestoneDisputes(
+    {
+      dealVersionId: seeded.version.version.id,
+      draftDealId: seeded.draft.draft.id,
+      organizationId: "org-1"
+    },
+    requestMetadata(actor.cookieHeader)
+  );
+
+  assert.equal(disputes.disputes.length, 1);
+  assert.equal(disputes.disputes[0]?.dispute.id, dispute.dispute.id);
+  assert.equal(disputes.disputes[0]?.settlementRequest, null);
+});
+
+test("milestones service assigns arbitrators and accepts signed dispute resolutions", async () => {
+  const services = createServices();
+  const actor = await seedAuthenticatedActor(
+    services.release1Repositories,
+    services.sessionTokenService
+  );
+  const seeded = await seedMilestoneScenario(services, actor, "BUYER");
+  const arbitratorAddress = arbitratorAccount.address.toLowerCase() as `0x${string}`;
+
+  await seedActiveAgreement(
+    services,
+    seeded,
+    "0x3333333333333333333333333333333333333333",
+    "0x4444444444444444444444444444444444444444",
+    arbitratorAddress
+  );
+  await seedApprovedArbitrator(services, arbitratorAddress);
+
+  const submission = await seedCounterpartySellerSubmission(services, seeded);
+  const review = await services.milestonesService.createMilestoneReview(
+    {
+      dealMilestoneSubmissionId: submission.id,
+      dealVersionId: seeded.version.version.id,
+      dealVersionMilestoneId: seeded.version.version.milestones[0]!.id,
+      draftDealId: seeded.draft.draft.id,
+      organizationId: "org-1"
+    },
+    {
+      decision: "REJECTED",
+      statementMarkdown: "Buyer rejects the milestone."
+    },
+    requestMetadata(actor.cookieHeader)
+  );
+  const dispute = await services.milestonesService.createMilestoneDispute(
+    {
+      dealMilestoneReviewId: review.review.id,
+      dealMilestoneSubmissionId: submission.id,
+      dealVersionId: seeded.version.version.id,
+      dealVersionMilestoneId: seeded.version.version.milestones[0]!.id,
+      draftDealId: seeded.draft.draft.id,
+      organizationId: "org-1"
+    },
+    {
+      statementMarkdown: "Seller escalates the rejected milestone."
+    },
+    requestMetadata(actor.cookieHeader)
+  );
+
+  const assignment =
+    await services.milestonesService.assignMilestoneDisputeArbitrator(
+      {
+        dealMilestoneDisputeId: dispute.dispute.id,
+        dealVersionId: seeded.version.version.id,
+        draftDealId: seeded.draft.draft.id,
+        organizationId: "org-1"
+      },
+      {
+        arbitratorAddress
+      },
+      requestMetadata(actor.cookieHeader)
+    );
+  const challenge =
+    await services.milestonesService.prepareMilestoneDisputeDecision(
+      {
+        dealMilestoneDisputeId: dispute.dispute.id,
+        dealVersionId: seeded.version.version.id,
+        draftDealId: seeded.draft.draft.id,
+        organizationId: "org-1"
+      },
+      {
+        kind: "RELEASE",
+        statementMarkdown: "Arbitrator orders release of the disputed milestone."
+      },
+      requestMetadata(actor.cookieHeader)
+    );
+  const signature = await signMilestoneDisputeDecisionChallenge(challenge);
+  const resolution =
+    await services.milestonesService.createMilestoneDisputeDecision(
+      {
+        dealMilestoneDisputeId: dispute.dispute.id,
+        dealVersionId: seeded.version.version.id,
+        draftDealId: seeded.draft.draft.id,
+        organizationId: "org-1"
+      },
+      {
+        kind: "RELEASE",
+        signature,
+        statementMarkdown: "Arbitrator orders release of the disputed milestone."
+      },
+      requestMetadata(actor.cookieHeader)
+    );
+
+  assert.equal(assignment.dispute.latestAssignment?.arbitratorAddress, arbitratorAddress);
+  assert.equal(challenge.challenge.expectedWalletAddress, arbitratorAddress);
+  assert.equal(resolution.dispute.status, "RESOLVED");
+  assert.equal(resolution.dispute.latestDecision?.kind, "RELEASE");
+  assert.equal(resolution.settlementRequest.source, "ARBITRATOR_DECISION");
+  assert.equal(
+    resolution.settlementRequest.requestedByArbitratorAddress,
+    arbitratorAddress
+  );
+  assert.equal(resolution.settlementRequest.requestedByUserId, null);
+  assert.equal(resolution.milestone.state, "APPROVED");
+
+  const disputes = await services.milestonesService.listMilestoneDisputes(
+    {
+      dealVersionId: seeded.version.version.id,
+      draftDealId: seeded.draft.draft.id,
+      organizationId: "org-1"
+    },
+    requestMetadata(actor.cookieHeader)
+  );
+  const timelines = await services.milestonesService.listMilestoneTimelines(
+    {
+      dealVersionId: seeded.version.version.id,
+      draftDealId: seeded.draft.draft.id,
+      organizationId: "org-1"
+    },
+    requestMetadata(actor.cookieHeader)
+  );
+
+  assert.equal(disputes.disputes[0]?.settlementRequest?.id, resolution.settlementRequest.id);
+  assert.deepEqual(
+    timelines.milestones[0]?.events.map((event) => event.kind),
+    [
+      "SUBMISSION_CREATED",
+      "REVIEW_REJECTED",
+      "DISPUTE_OPENED",
+      "DISPUTE_ARBITRATOR_ASSIGNED",
+      "DISPUTE_DECISION_SUBMITTED",
+      "RELEASE_REQUESTED"
+    ]
+  );
+});
+
 test("milestones service only allows settlement requests for the latest reviewed submission", async () => {
   const services = createServices();
   const actor = await seedAuthenticatedActor(
@@ -1581,5 +3062,41 @@ test("milestones service only allows settlement requests for the latest reviewed
     ),
     "ConflictException",
     "only latest reviewed milestone submission can request settlement"
+  );
+});
+
+test("milestones service allows seller submissions while draft is partially released", async () => {
+  const services = createServices();
+  const actor = await seedAuthenticatedActor(
+    services.release1Repositories,
+    services.sessionTokenService
+  );
+  const seeded = await seedMilestoneScenario(services, actor, "SELLER");
+
+  await seedActiveAgreement(services, seeded);
+
+  const draftRecord = await services.release1Repositories.draftDeals.findById(
+    seeded.draft.draft.id
+  );
+
+  assert.ok(draftRecord);
+  draftRecord.state = "PARTIALLY_RELEASED";
+
+  const response = await services.milestonesService.createMilestoneSubmission(
+    {
+      dealVersionId: seeded.version.version.id,
+      dealVersionMilestoneId: seeded.version.version.milestones[1]!.id,
+      draftDealId: seeded.draft.draft.id,
+      organizationId: "org-1"
+    },
+    {
+      statementMarkdown: "Remaining milestone delivered."
+    },
+    requestMetadata(actor.cookieHeader)
+  );
+
+  assert.equal(
+    response.submission.dealVersionMilestoneId,
+    seeded.version.version.milestones[1]!.id
   );
 });

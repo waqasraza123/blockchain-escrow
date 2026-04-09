@@ -78,6 +78,10 @@ contract EscrowFactoryTest {
     uint256 private constant TOTAL_AMOUNT = 2_000_000;
     uint32 private constant MILESTONE_COUNT = 4;
     uint16 private constant PROTOCOL_FEE_BPS = 300;
+    uint256 private constant MILESTONE_AMOUNT_1 = 200_000;
+    uint256 private constant MILESTONE_AMOUNT_2 = 300_000;
+    uint256 private constant MILESTONE_AMOUNT_3 = 500_000;
+    uint256 private constant MILESTONE_AMOUNT_4 = 1_000_000;
 
     function setUp() public {
         protocolConfig = new ProtocolConfig();
@@ -126,6 +130,10 @@ contract EscrowFactoryTest {
         require(agreement.arbitrator() == ARBITRATOR, "agreement arbitrator mismatch");
         require(agreement.dealId() == DEAL_ID, "agreement deal id mismatch");
         require(agreement.dealVersionHash() == DEAL_VERSION_HASH, "agreement version hash mismatch");
+        require(
+            agreement.milestoneAmountsHash() == keccak256(abi.encode(_defaultMilestoneAmounts())),
+            "agreement milestone hash mismatch"
+        );
         require(agreement.totalAmount() == TOTAL_AMOUNT, "agreement total amount mismatch");
         require(agreement.milestoneCount() == MILESTONE_COUNT, "agreement milestone count mismatch");
         require(agreement.protocolFeeBps() == PROTOCOL_FEE_BPS, "agreement fee bps mismatch");
@@ -219,8 +227,17 @@ contract EscrowFactoryTest {
             dealId: DEAL_ID,
             dealVersionHash: DEAL_VERSION_HASH,
             totalAmount: TOTAL_AMOUNT,
-            milestoneCount: MILESTONE_COUNT
+            milestoneCount: MILESTONE_COUNT,
+            milestoneAmounts: _defaultMilestoneAmounts()
         });
+    }
+
+    function _defaultMilestoneAmounts() private pure returns (uint256[] memory milestoneAmounts) {
+        milestoneAmounts = new uint256[](4);
+        milestoneAmounts[0] = MILESTONE_AMOUNT_1;
+        milestoneAmounts[1] = MILESTONE_AMOUNT_2;
+        milestoneAmounts[2] = MILESTONE_AMOUNT_3;
+        milestoneAmounts[3] = MILESTONE_AMOUNT_4;
     }
 
     function _callCreateAgreement(EscrowFactory.EscrowCreation memory creation) private returns (bytes memory) {

@@ -5,7 +5,9 @@ import { MilestonesController } from "./milestones.controller";
 import { MilestonesService } from "./milestones.service";
 import {
   loadMilestoneReviewConfiguration,
-  MILESTONE_REVIEW_CONFIGURATION
+  loadMilestoneSettlementExecutionReconciliationConfiguration,
+  MILESTONE_REVIEW_CONFIGURATION,
+  MILESTONE_SETTLEMENT_EXECUTION_RECONCILIATION_CONFIGURATION
 } from "./milestones.tokens";
 
 @Module({
@@ -16,6 +18,10 @@ import {
     {
       provide: MILESTONE_REVIEW_CONFIGURATION,
       useFactory: loadMilestoneReviewConfiguration
+    },
+    {
+      provide: MILESTONE_SETTLEMENT_EXECUTION_RECONCILIATION_CONFIGURATION,
+      useFactory: loadMilestoneSettlementExecutionReconciliationConfiguration
     }
   ]
 })

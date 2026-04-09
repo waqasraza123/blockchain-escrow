@@ -169,6 +169,10 @@ function buildGeneratedSource(artifacts, deployments) {
     "export function deploymentSupportsCreateAndFund(manifest: DeploymentManifest): boolean {",
     "  return manifest.contractVersion >= 2;",
     "}",
+    "",
+    "export function deploymentSupportsMilestoneSettlementExecution(manifest: DeploymentManifest): boolean {",
+    "  return manifest.contractVersion >= 3;",
+    "}",
     ""
   ].join("\n");
 }

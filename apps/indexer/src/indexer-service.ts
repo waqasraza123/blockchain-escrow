@@ -25,7 +25,7 @@ import {
 
 import type { IndexerConfig } from "./config";
 import {
-  decodeAgreementReceiptEventsFromReceipt,
+  decodeAgreementContractLog,
   decodeTrackedContractLog,
   getTrackedContracts,
   type TrackedContracts
@@ -281,6 +281,7 @@ export class IndexerService {
   ): Promise<ChainCursorRecord> {
     const indexedAt = now();
     const blockRecords = await this.fetchBlockRecords(fromBlockNumber, toBlockNumber, indexedAt);
+    const knownAgreementAddresses = await this.loadTrackedAgreementAddresses();
     const blockTimestampByNumber = new Map(
       blockRecords.map((record) => [record.blockNumber, record.timestamp])
     );
@@ -313,19 +314,30 @@ export class IndexerService {
       })
       .sort(sortIndexedEvents);
 
-    const agreementReceiptEvents = await this.fetchAgreementReceiptEvents(
-      decodedBaseEvents,
+    const agreementAddresses = [
+      ...new Set([
+        ...knownAgreementAddresses,
+        ...decodedBaseEvents
+          .filter((event) => event.eventName === "AgreementCreated")
+          .map((event) => normalizeAddress(String(event.data.agreement)))
+      ])
+    ];
+    const decodedAgreementEvents = await this.fetchAgreementLogs(
+      agreementAddresses,
+      fromBlockNumber,
+      toBlockNumber,
       blockTimestampByNumber,
       indexedAt
     );
 
-    const allEvents = [...decodedBaseEvents, ...agreementReceiptEvents].sort(
+    const allEvents = [...decodedBaseEvents, ...decodedAgreementEvents].sort(
       sortIndexedEvents
     );
     const transactionRecords = await this.fetchTransactionRecords(
       fromBlockNumber,
       toBlockNumber,
-      indexedAt
+      indexedAt,
+      agreementAddresses
     );
     const lastBlock = blockRecords.at(-1);
 
@@ -349,48 +361,43 @@ export class IndexerService {
     });
   }
 
-  private async fetchAgreementReceiptEvents(
-    baseEvents: readonly IndexedContractEventSummary[],
+  private async fetchAgreementLogs(
+    agreementAddresses: readonly WalletAddress[],
+    fromBlockNumber: bigint,
+    toBlockNumber: bigint,
     blockTimestampByNumber: ReadonlyMap<string, string>,
     indexedAt: string
   ): Promise<IndexedContractEventSummary[]> {
-    const agreementCreatedEvents = baseEvents.filter(
-      (event) => event.eventName === "AgreementCreated"
-    );
-
-    const decodedReceiptEvents = await mapWithConcurrency(
-      agreementCreatedEvents,
-      this.config.rpcConcurrency,
-      async (event) => {
-        const agreementAddress = normalizeAddress(String(event.data.agreement));
-        const receipt = await this.client.getTransactionReceipt({
-          hash: event.transactionHash
-        });
-        const blockTimestamp = blockTimestampByNumber.get(event.blockNumber);
-
-        if (!blockTimestamp) {
-          throw new Error(
-            `Missing block timestamp for agreement initialization tx ${event.transactionHash}`
-          );
-        }
-
-        return decodeAgreementReceiptEventsFromReceipt(
-          this.config.chainId,
-          receipt,
-          new Set([agreementAddress]),
-          indexedAt,
-          blockTimestamp
-        );
-      }
-    );
-
-    const agreementReceiptEvents: IndexedContractEventSummary[] = [];
-
-    for (const receiptEvents of decodedReceiptEvents) {
-      agreementReceiptEvents.push(...receiptEvents);
+    if (agreementAddresses.length === 0) {
+      return [];
     }
 
-    return agreementReceiptEvents;
+    const agreementLogs = await this.client.getLogs({
+      address: [...agreementAddresses],
+      fromBlock: fromBlockNumber,
+      toBlock: toBlockNumber
+    });
+
+    return agreementLogs
+      .map((log) => {
+        const blockNumber = log.blockNumber?.toString();
+        if (!blockNumber) {
+          throw new Error("Received agreement log without block number");
+        }
+
+        const blockTimestamp = blockTimestampByNumber.get(blockNumber);
+        if (!blockTimestamp) {
+          throw new Error(`Missing block timestamp for agreement block ${blockNumber}`);
+        }
+
+        return decodeAgreementContractLog(
+          this.config.chainId,
+          log,
+          blockTimestamp,
+          indexedAt
+        );
+      })
+      .sort(sortIndexedEvents);
   }
 
   private async fetchBlockRecords(
@@ -426,7 +433,8 @@ export class IndexerService {
   private async fetchTransactionRecords(
     fromBlockNumber: bigint,
     toBlockNumber: bigint,
-    indexedAt: string
+    indexedAt: string,
+    agreementAddresses: readonly WalletAddress[]
   ): Promise<IndexedTransactionSummary[]> {
     const blockNumbers: bigint[] = [];
 
@@ -444,6 +452,10 @@ export class IndexerService {
         })
     );
     const trackedTransactions = new Map<HexString, Transaction>();
+    const trackedToAddresses = new Set<WalletAddress>([
+      ...this.trackedContracts.baseAddresses,
+      ...agreementAddresses
+    ]);
 
     for (const block of blocks) {
       for (const transaction of block.transactions) {
@@ -458,7 +470,7 @@ export class IndexerService {
 
         if (
           !normalizedToAddress ||
-          !this.trackedContracts.baseAddresses.includes(normalizedToAddress)
+          !trackedToAddresses.has(normalizedToAddress)
         ) {
           continue;
         }
@@ -486,6 +498,15 @@ export class IndexerService {
         executionStatusByHash.get(normalizeHex(transaction.hash)) ?? "SUCCESS"
       )
     );
+  }
+
+  private async loadTrackedAgreementAddresses(): Promise<WalletAddress[]> {
+    const repositories = createPrismaRelease4Repositories(this.prisma);
+    const agreements = await repositories.escrowAgreements.listByChainId(
+      this.config.chainId
+    );
+
+    return agreements.map((agreement) => agreement.agreementAddress);
   }
 
   private mapTransactionRecord(

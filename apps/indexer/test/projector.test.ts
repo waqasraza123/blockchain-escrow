@@ -5,6 +5,7 @@ import type {
   ArbitratorRegistryEntryRecord,
   ChainCursorRecord,
   ContractOwnershipRecord,
+  EscrowAgreementMilestoneSettlementRecord,
   EscrowAgreementRecord,
   FeeVaultStateRecord,
   IndexedBlockRecord,
@@ -95,6 +96,35 @@ class InMemoryRelease4Repositories implements Release4Repositories {
     upsert: async (record: EscrowAgreementRecord) => {
       this.escrowAgreementsStore.set(
         `${record.chainId}:${record.agreementAddress}`,
+        record
+      );
+      return record;
+    }
+  };
+
+  readonly escrowAgreementMilestoneSettlements = {
+    listByChainId: async (chainId: number) =>
+      [...this.escrowAgreementMilestoneSettlementsStore.values()].filter(
+        (record) => record.chainId === chainId
+      ),
+    listByChainIdAndAgreementAddress: async (
+      chainId: number,
+      agreementAddress: string
+    ) =>
+      [...this.escrowAgreementMilestoneSettlementsStore.values()].filter(
+        (record) =>
+          record.chainId === chainId && record.agreementAddress === agreementAddress
+      ),
+    resetByChainId: async (chainId: number) => {
+      for (const [key, value] of this.escrowAgreementMilestoneSettlementsStore.entries()) {
+        if (value.chainId === chainId) {
+          this.escrowAgreementMilestoneSettlementsStore.delete(key);
+        }
+      }
+    },
+    upsert: async (record: EscrowAgreementMilestoneSettlementRecord) => {
+      this.escrowAgreementMilestoneSettlementsStore.set(
+        `${record.chainId}:${record.agreementAddress}:${record.milestonePosition}`,
         record
       );
       return record;
@@ -244,6 +274,10 @@ class InMemoryRelease4Repositories implements Release4Repositories {
   >();
   private readonly contractOwnershipsStore = new Map<string, ContractOwnershipRecord>();
   private readonly escrowAgreementsStore = new Map<string, EscrowAgreementRecord>();
+  private readonly escrowAgreementMilestoneSettlementsStore = new Map<
+    string,
+    EscrowAgreementMilestoneSettlementRecord
+  >();
   private readonly feeVaultStatesStore = new Map<string, FeeVaultStateRecord>();
   private readonly indexedTransactionsStore = new Map<string, IndexedTransactionRecord>();
   private readonly protocolConfigStatesStore = new Map<string, ProtocolConfigStateRecord>();
@@ -418,6 +452,30 @@ test("applyIndexedEvents builds protocol and agreement projections from replayab
       transactionHash:
         "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa0001",
       transactionIndex: 1
+    }),
+    createIndexedEvent({
+      blockHash: "0xccccddddeeeeffff0000111122223333444455556666777788889999aaaabbbb",
+      blockNumber: "102",
+      blockTimestamp: "2026-04-05T04:35:54.951Z",
+      contractAddress: "0x43292d7fac721139157c69effd18afc6739815f6",
+      contractName: "EscrowAgreement",
+      data: {
+        amount: "400",
+        caller: "0x1111111111111111111111111111111111111111",
+        dealId: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        dealVersionHash:
+          "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        milestonePosition: "1",
+        recipient: "0x2222222222222222222222222222222222222222",
+        settlementToken: "0x036cbd53842c5426634e7929541ec2318f3dcf7e"
+      },
+      eventName: "MilestoneReleased",
+      logIndex: 0,
+      topic0: "0x05",
+      topics: ["0x05"],
+      transactionHash:
+        "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa0002",
+      transactionIndex: 0
     })
   ];
 
@@ -437,6 +495,11 @@ test("applyIndexedEvents builds protocol and agreement projections from replayab
     "0xeca4953857048466bd2958273c9b470c28ecab2e"
   );
   const agreements = await repositories.escrowAgreements.listByChainId(84532);
+  const milestoneSettlements =
+    await repositories.escrowAgreementMilestoneSettlements.listByChainIdAndAgreementAddress(
+      84532,
+      "0x43292d7fac721139157c69effd18afc6739815f6"
+    );
 
   assert.equal(ownerships.length, 3);
   assert.equal(tokenEntries.length, 1);
@@ -462,6 +525,14 @@ test("applyIndexedEvents builds protocol and agreement projections from replayab
   assert.equal(
     agreements[0]?.fundedPayerAddress,
     "0x1111111111111111111111111111111111111111"
+  );
+  assert.equal(milestoneSettlements.length, 1);
+  assert.equal(milestoneSettlements[0]?.kind, "RELEASE");
+  assert.equal(milestoneSettlements[0]?.milestonePosition, 1);
+  assert.equal(milestoneSettlements[0]?.amount, "400");
+  assert.equal(
+    milestoneSettlements[0]?.beneficiaryAddress,
+    "0x2222222222222222222222222222222222222222"
   );
 });
 

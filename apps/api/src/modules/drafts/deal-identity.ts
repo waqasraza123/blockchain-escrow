@@ -40,6 +40,24 @@ export const counterpartyMilestoneSubmissionTypes = {
   ]
 } as const;
 
+export const milestoneDisputeDecisionPrimaryType = "DealMilestoneDisputeDecision";
+export const milestoneDisputeDecisionTypes = {
+  DealMilestoneDisputeDecision: [
+    { name: "organizationId", type: "string" },
+    { name: "draftDealId", type: "string" },
+    { name: "dealVersionId", type: "string" },
+    { name: "dealVersionMilestoneId", type: "string" },
+    { name: "dealMilestoneSubmissionId", type: "string" },
+    { name: "dealMilestoneReviewId", type: "string" },
+    { name: "dealMilestoneDisputeId", type: "string" },
+    { name: "dealId", type: "bytes32" },
+    { name: "dealVersionHash", type: "bytes32" },
+    { name: "kind", type: "string" },
+    { name: "statementHash", type: "bytes32" },
+    { name: "intent", type: "string" }
+  ]
+} as const;
+
 function sortObjectKeys(value: unknown): unknown {
   if (Array.isArray(value)) {
     return value.map(sortObjectKeys);
@@ -172,5 +190,44 @@ export function buildCounterpartyMilestoneSubmissionTypedData(
     },
     primaryType: counterpartyMilestoneSubmissionPrimaryType,
     types: counterpartyMilestoneSubmissionTypes as unknown as JsonObject
+  };
+}
+
+export function buildMilestoneDisputeDecisionTypedData(
+  draft: DraftDealRecord,
+  version: DealVersionRecord,
+  input: {
+    dealId: `0x${string}`;
+    dealMilestoneDisputeId: string;
+    dealMilestoneReviewId: string;
+    dealMilestoneSubmissionId: string;
+    dealVersionHash: `0x${string}`;
+    dealVersionMilestoneId: string;
+    kind: "RELEASE" | "REFUND";
+    statementMarkdown: string;
+  }
+): JsonObject {
+  return {
+    domain: {
+      chainId: normalizeApiChainId(),
+      name: "Blockchain Escrow",
+      version: "1"
+    },
+    message: {
+      dealId: input.dealId,
+      dealMilestoneDisputeId: input.dealMilestoneDisputeId,
+      dealMilestoneReviewId: input.dealMilestoneReviewId,
+      dealMilestoneSubmissionId: input.dealMilestoneSubmissionId,
+      dealVersionHash: input.dealVersionHash,
+      dealVersionId: version.id,
+      dealVersionMilestoneId: input.dealVersionMilestoneId,
+      draftDealId: draft.id,
+      intent: "ARBITRATOR_DECIDE_DEAL_MILESTONE_DISPUTE",
+      kind: input.kind,
+      organizationId: draft.organizationId,
+      statementHash: keccak256(stringToHex(input.statementMarkdown))
+    },
+    primaryType: milestoneDisputeDecisionPrimaryType,
+    types: milestoneDisputeDecisionTypes as unknown as JsonObject
   };
 }

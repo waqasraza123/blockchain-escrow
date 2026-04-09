@@ -339,6 +339,45 @@ async function applyAgreementFundedEvent(
   });
 }
 
+async function applyAgreementMilestoneSettlementEvent(
+  repositories: Release4Repositories,
+  event: IndexedContractEventSummary
+): Promise<void> {
+  const agreement = await repositories.escrowAgreements.findByChainIdAndAddress(
+    event.chainId,
+    event.contractAddress
+  );
+
+  if (!agreement) {
+    throw new Error(
+      `Missing EscrowAgreement projection for milestone settlement at ${event.contractAddress}`
+    );
+  }
+
+  const kind = event.eventName === "MilestoneReleased" ? "RELEASE" : "REFUND";
+
+  await repositories.escrowAgreementMilestoneSettlements.upsert({
+    agreementAddress: event.contractAddress,
+    amount: requireString(event.data, "amount"),
+    beneficiaryAddress: requireString(
+      event.data,
+      "recipient"
+    ) as WalletAddress,
+    chainId: event.chainId,
+    dealId: requireString(event.data, "dealId") as `0x${string}`,
+    dealVersionHash: requireString(event.data, "dealVersionHash") as `0x${string}`,
+    kind,
+    milestonePosition: requireNumber(event.data, "milestonePosition"),
+    settledAt: toEventTime(event),
+    settledBlockHash: event.blockHash,
+    settledBlockNumber: event.blockNumber,
+    settledByAddress: requireString(event.data, "caller") as WalletAddress,
+    settledLogIndex: event.logIndex,
+    settledTransactionHash: event.transactionHash,
+    updatedAt: toEventTime(event)
+  });
+}
+
 export async function resetRelease4Projections(
   repositories: Release4Repositories,
   chainId: number
@@ -346,6 +385,7 @@ export async function resetRelease4Projections(
   await repositories.arbitratorRegistryEntries.resetByChainId(chainId);
   await repositories.contractOwnerships.resetByChainId(chainId);
   await repositories.escrowAgreements.resetByChainId(chainId);
+  await repositories.escrowAgreementMilestoneSettlements.resetByChainId(chainId);
   await repositories.feeVaultStates.resetByChainId(chainId);
   await repositories.protocolConfigStates.resetByChainId(chainId);
   await repositories.tokenAllowlistEntries.resetByChainId(chainId);
@@ -411,6 +451,10 @@ export async function applyIndexedEvents(
         break;
       case "AgreementFunded":
         await applyAgreementFundedEvent(repositories, event);
+        break;
+      case "MilestoneRefunded":
+      case "MilestoneReleased":
+        await applyAgreementMilestoneSettlementEvent(repositories, event);
         break;
       case "AgreementInitialized":
       case "NativeFeesWithdrawn":

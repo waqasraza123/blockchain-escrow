@@ -1589,3 +1589,29 @@ test("drafts service exposes failed tracked funding progress from indexed revert
   assert.equal(detail.versions[0]?.fundingTransactions[0]?.stalePendingAt, null);
   assert.equal(detail.versions[0]?.fundingTransactions[0]?.stalePendingEvaluation, null);
 });
+
+test("drafts service preserves custody-tracked draft states during funding-state sync reads", async () => {
+  const { draftsService, repositories, sessionTokenService } = createDraftsService();
+  const actor = await seedAuthenticatedActor(repositories, sessionTokenService);
+  const seeded = await seedDraftVersionScenario(draftsService, repositories, actor);
+  const draftRecord = await repositories.draftDeals.findById(seeded.draft.draft.id);
+
+  assert.ok(draftRecord);
+
+  draftRecord.state = "PARTIALLY_RELEASED";
+  draftRecord.updatedAt = "2026-04-09T09:00:00.000Z";
+
+  const detail = await draftsService.getDraft(
+    {
+      draftDealId: seeded.draft.draft.id,
+      organizationId: "org-1"
+    },
+    {
+      cookieHeader: actor.cookieHeader,
+      ipAddress: "127.0.0.1",
+      userAgent: "test-agent"
+    }
+  );
+
+  assert.equal(detail.draft.state, "PARTIALLY_RELEASED");
+});

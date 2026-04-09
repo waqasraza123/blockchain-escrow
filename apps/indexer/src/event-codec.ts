@@ -172,6 +172,24 @@ export function decodeTrackedContractLog(
   );
 }
 
+export function decodeAgreementContractLog(
+  chainId: number,
+  log: Log,
+  blockTimestamp: IsoTimestamp,
+  indexedAt: IsoTimestamp
+): IndexedContractEventSummary {
+  const contractAddress = normalizeAddress(requireLogField(log.address, "contract address"));
+
+  return decodeLogWithContract(
+    "EscrowAgreement",
+    contractAddress,
+    chainId,
+    log,
+    blockTimestamp,
+    indexedAt
+  );
+}
+
 export function decodeAgreementReceiptEventsFromReceipt(
   chainId: number,
   receipt: TransactionReceipt,

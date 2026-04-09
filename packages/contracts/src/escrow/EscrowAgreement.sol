@@ -18,6 +18,7 @@ interface IAgreementArbitratorRegistry {
 }
 
 interface IAgreementErc20 {
+    function transfer(address to, uint256 value) external returns (bool);
     function transferFrom(address from, address to, uint256 value) external returns (bool);
 }
 
@@ -32,6 +33,7 @@ contract EscrowAgreement {
         bytes32 dealVersionHash;
         uint256 totalAmount;
         uint32 milestoneCount;
+        uint256[] milestoneAmounts;
     }
 
     struct ProtocolSnapshot {
@@ -41,23 +43,36 @@ contract EscrowAgreement {
         uint16 protocolFeeBps;
     }
 
+    uint8 private constant MILESTONE_SETTLEMENT_KIND_NONE = 0;
+    uint8 private constant MILESTONE_SETTLEMENT_KIND_RELEASED = 1;
+    uint8 private constant MILESTONE_SETTLEMENT_KIND_REFUNDED = 2;
+
     error AlreadyInitialized();
     error AlreadyFunded();
+    error AgreementNotFunded();
     error ArbitratorNotApproved(address arbitrator);
     error Erc20TransferFromFailed(address token, address from, address to, uint256 amount);
+    error Erc20TransferFailed(address token, address to, uint256 amount);
     error ArbitratorRegistryNotSet();
     error FeeVaultNotSet();
     error FundingPaused();
     error FundingUnauthorized(address caller);
     error IdenticalParties(address buyer, address seller);
+    error InvalidMilestoneAmount(uint32 milestonePosition, uint256 amount);
     error InvalidBuyer(address buyer);
     error InvalidDealId(bytes32 dealId);
     error InvalidDealVersionHash(bytes32 dealVersionHash);
     error InvalidMilestoneCount(uint32 milestoneCount);
+    error InvalidMilestonePosition(uint32 milestonePosition);
+    error InvalidMilestoneAmountsLength(uint256 expectedLength, uint256 actualLength);
     error InvalidProtocolConfig(address protocolConfig);
     error InvalidSeller(address seller);
     error InvalidSettlementToken(address settlementToken);
     error InvalidTotalAmount(uint256 totalAmount);
+    error MilestoneAlreadySettled(uint32 milestonePosition);
+    error MilestoneAmountsHashMismatch();
+    error MilestoneAmountsTotalMismatch(uint256 expectedTotalAmount, uint256 actualTotalAmount);
+    error SettlementUnauthorized(address caller);
     error TokenAllowlistNotSet();
     error TokenNotAllowed(address settlementToken);
 
@@ -82,6 +97,24 @@ contract EscrowAgreement {
         address settlementToken,
         uint256 amount
     );
+    event MilestoneRefunded(
+        bytes32 indexed dealId,
+        bytes32 indexed dealVersionHash,
+        uint32 indexed milestonePosition,
+        address caller,
+        address recipient,
+        address settlementToken,
+        uint256 amount
+    );
+    event MilestoneReleased(
+        bytes32 indexed dealId,
+        bytes32 indexed dealVersionHash,
+        uint32 indexed milestonePosition,
+        address caller,
+        address recipient,
+        address settlementToken,
+        uint256 amount
+    );
 
     bool public initialized;
     bool public funded;
@@ -94,11 +127,15 @@ contract EscrowAgreement {
     address public arbitrator;
     bytes32 public dealId;
     bytes32 public dealVersionHash;
+    bytes32 public milestoneAmountsHash;
     uint256 public totalAmount;
+    uint256 public totalRefundedAmount;
+    uint256 public totalReleasedAmount;
     uint32 public milestoneCount;
     uint16 public protocolFeeBps;
     uint64 public fundedAt;
     uint64 public initializedAt;
+    mapping(uint32 milestonePosition => uint8 settlementKind) private milestoneSettlementKinds;
 
     function initialize(AgreementInitialization calldata initialization) external {
         if (initialized) {
@@ -121,6 +158,7 @@ contract EscrowAgreement {
         arbitrator = initialization.arbitrator;
         dealId = initialization.dealId;
         dealVersionHash = initialization.dealVersionHash;
+        milestoneAmountsHash = keccak256(abi.encode(initialization.milestoneAmounts));
         totalAmount = initialization.totalAmount;
         milestoneCount = initialization.milestoneCount;
         protocolFeeBps = protocolSnapshot.protocolFeeBps;
@@ -163,6 +201,42 @@ contract EscrowAgreement {
         emit AgreementFunded(dealId, dealVersionHash, buyer, settlementToken, totalAmount);
     }
 
+    function releaseMilestone(uint32 milestonePosition, uint256[] calldata milestoneAmounts) external {
+        uint256 milestoneAmount = _settleMilestone(
+            milestonePosition, milestoneAmounts, MILESTONE_SETTLEMENT_KIND_RELEASED
+        );
+
+        emit MilestoneReleased(
+            dealId,
+            dealVersionHash,
+            milestonePosition,
+            msg.sender,
+            seller,
+            settlementToken,
+            milestoneAmount
+        );
+    }
+
+    function refundMilestone(uint32 milestonePosition, uint256[] calldata milestoneAmounts) external {
+        uint256 milestoneAmount = _settleMilestone(
+            milestonePosition, milestoneAmounts, MILESTONE_SETTLEMENT_KIND_REFUNDED
+        );
+
+        emit MilestoneRefunded(
+            dealId,
+            dealVersionHash,
+            milestonePosition,
+            msg.sender,
+            buyer,
+            settlementToken,
+            milestoneAmount
+        );
+    }
+
+    function milestoneSettlementKind(uint32 milestonePosition) external view returns (uint8) {
+        return milestoneSettlementKinds[milestonePosition];
+    }
+
     function _validateCoreInitialization(AgreementInitialization calldata initialization) private pure {
         if (initialization.protocolConfig == address(0)) {
             revert InvalidProtocolConfig(initialization.protocolConfig);
@@ -198,6 +272,26 @@ contract EscrowAgreement {
 
         if (initialization.milestoneCount == 0) {
             revert InvalidMilestoneCount(initialization.milestoneCount);
+        }
+
+        if (initialization.milestoneAmounts.length != initialization.milestoneCount) {
+            revert InvalidMilestoneAmountsLength(
+                initialization.milestoneCount, initialization.milestoneAmounts.length
+            );
+        }
+
+        uint256 milestoneAmountTotal;
+        for (uint256 index = 0; index < initialization.milestoneAmounts.length; ++index) {
+            uint256 milestoneAmount = initialization.milestoneAmounts[index];
+            if (milestoneAmount == 0) {
+                revert InvalidMilestoneAmount(uint32(index + 1), milestoneAmount);
+            }
+
+            milestoneAmountTotal += milestoneAmount;
+        }
+
+        if (milestoneAmountTotal != initialization.totalAmount) {
+            revert MilestoneAmountsTotalMismatch(initialization.totalAmount, milestoneAmountTotal);
         }
     }
 
@@ -238,6 +332,68 @@ contract EscrowAgreement {
                 && !IAgreementArbitratorRegistry(protocolSnapshot.arbitratorRegistry).isApprovedArbitrator(arbitratorAddress)
         ) {
             revert ArbitratorNotApproved(arbitratorAddress);
+        }
+    }
+
+    function _settleMilestone(uint32 milestonePosition, uint256[] calldata milestoneAmounts, uint8 settlementKind)
+        private
+        returns (uint256 milestoneAmount)
+    {
+        if (!funded) {
+            revert AgreementNotFunded();
+        }
+
+        if (msg.sender != buyer) {
+            revert SettlementUnauthorized(msg.sender);
+        }
+
+        if (milestonePosition == 0 || milestonePosition > milestoneCount) {
+            revert InvalidMilestonePosition(milestonePosition);
+        }
+
+        if (milestoneSettlementKinds[milestonePosition] != MILESTONE_SETTLEMENT_KIND_NONE) {
+            revert MilestoneAlreadySettled(milestonePosition);
+        }
+
+        milestoneAmount = _resolveMilestoneAmount(milestonePosition, milestoneAmounts);
+        milestoneSettlementKinds[milestonePosition] = settlementKind;
+
+        if (settlementKind == MILESTONE_SETTLEMENT_KIND_RELEASED) {
+            totalReleasedAmount += milestoneAmount;
+            _safeTransfer(settlementToken, seller, milestoneAmount);
+        } else {
+            totalRefundedAmount += milestoneAmount;
+            _safeTransfer(settlementToken, buyer, milestoneAmount);
+        }
+    }
+
+    function _resolveMilestoneAmount(uint32 milestonePosition, uint256[] calldata milestoneAmounts)
+        private
+        view
+        returns (uint256)
+    {
+        if (milestoneAmounts.length != milestoneCount) {
+            revert InvalidMilestoneAmountsLength(milestoneCount, milestoneAmounts.length);
+        }
+
+        if (keccak256(abi.encode(milestoneAmounts)) != milestoneAmountsHash) {
+            revert MilestoneAmountsHashMismatch();
+        }
+
+        uint256 milestoneAmount = milestoneAmounts[milestonePosition - 1];
+        if (milestoneAmount == 0) {
+            revert InvalidMilestoneAmount(milestonePosition, milestoneAmount);
+        }
+
+        return milestoneAmount;
+    }
+
+    function _safeTransfer(address token, address to, uint256 amount) private {
+        (bool success, bytes memory returnData) =
+            token.call(abi.encodeCall(IAgreementErc20.transfer, (to, amount)));
+
+        if (!success || (returnData.length != 0 && !abi.decode(returnData, (bool)))) {
+            revert Erc20TransferFailed(token, to, amount);
         }
     }
 

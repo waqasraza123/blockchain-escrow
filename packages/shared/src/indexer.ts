@@ -28,7 +28,9 @@ export const indexedEventNameSchema = z.enum([
   "TokenFeesWithdrawn",
   "AgreementCreated",
   "AgreementInitialized",
-  "AgreementFunded"
+  "AgreementFunded",
+  "MilestoneReleased",
+  "MilestoneRefunded"
 ]);
 export type IndexedEventName = z.infer<typeof indexedEventNameSchema>;
 
@@ -179,5 +181,23 @@ export interface EscrowAgreementSummary {
   sellerAddress: WalletAddress;
   settlementTokenAddress: WalletAddress;
   totalAmount: string;
+  updatedAt: IsoTimestamp;
+}
+
+export interface EscrowAgreementMilestoneSettlementSummary {
+  agreementAddress: WalletAddress;
+  amount: string;
+  beneficiaryAddress: WalletAddress;
+  chainId: ChainId;
+  dealId: HexString;
+  dealVersionHash: HexString;
+  kind: "RELEASE" | "REFUND";
+  milestonePosition: number;
+  settledAt: IsoTimestamp;
+  settledBlockHash: HexString;
+  settledBlockNumber: string;
+  settledByAddress: WalletAddress;
+  settledLogIndex: number;
+  settledTransactionHash: HexString;
   updatedAt: IsoTimestamp;
 }

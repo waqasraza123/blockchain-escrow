@@ -44,9 +44,16 @@ export interface WorkerFundingReconciliationConfiguration {
   readonly release4CursorKey: string;
 }
 
+export interface WorkerMilestoneSettlementExecutionReconciliationConfiguration {
+  readonly indexerFreshnessTtlSeconds: number;
+  readonly pendingStaleAfterSeconds: number;
+  readonly release4CursorKey: string;
+}
+
 export interface WorkerConfig {
   readonly chainId: number;
   readonly fundingReconciliation: WorkerFundingReconciliationConfiguration;
+  readonly milestoneSettlementExecutionReconciliation: WorkerMilestoneSettlementExecutionReconciliationConfiguration;
   readonly pollIntervalMs: number;
   readonly port: number;
   readonly runOnce: boolean;
@@ -72,6 +79,23 @@ export function loadWorkerConfig(): WorkerConfig {
         3600
       ),
       release4CursorKey:
+        parseOptionalString(process.env.WORKER_RELEASE4_CURSOR_KEY) ??
+        parseOptionalString(process.env.API_RELEASE4_CURSOR_KEY) ??
+        `release4:${manifest.network}`
+    },
+    milestoneSettlementExecutionReconciliation: {
+      indexerFreshnessTtlSeconds: parsePositiveInteger(
+        "MILESTONE_SETTLEMENT_EXECUTION_INDEXER_FRESHNESS_TTL_SECONDS",
+        300
+      ),
+      pendingStaleAfterSeconds: parsePositiveInteger(
+        "MILESTONE_SETTLEMENT_EXECUTION_PENDING_STALE_AFTER_SECONDS",
+        3600
+      ),
+      release4CursorKey:
+        parseOptionalString(
+          process.env.WORKER_MILESTONE_SETTLEMENT_EXECUTION_RELEASE4_CURSOR_KEY
+        ) ??
         parseOptionalString(process.env.WORKER_RELEASE4_CURSOR_KEY) ??
         parseOptionalString(process.env.API_RELEASE4_CURSOR_KEY) ??
         `release4:${manifest.network}`

@@ -1,11 +1,21 @@
 import { Body, Controller, Get, Param, Post, Req } from "@nestjs/common";
 import type {
+  AssignDealMilestoneDisputeArbitratorResponse,
+  CreateDealMilestoneDisputeDecisionResponse,
+  CreateDealMilestoneDisputeResponse,
+  CreateDealMilestoneSettlementExecutionTransactionResponse,
   CreateCounterpartyDealMilestoneSubmissionResponse,
   CreateDealMilestoneReviewResponse,
   CreateDealMilestoneSettlementRequestResponse,
   CreateDealMilestoneSubmissionResponse,
+  GetDealVersionSettlementStatementResponse,
+  GetMilestoneSettlementExecutionPlanResponse,
+  ListDealVersionMilestoneDisputesResponse,
+  ListDealMilestoneSettlementExecutionTransactionsResponse,
+  ListDealVersionMilestoneSettlementExecutionsResponse,
   ListDealVersionMilestoneTimelinesResponse,
   ListDealVersionMilestoneWorkflowsResponse,
+  PrepareDealMilestoneDisputeDecisionResponse,
   PrepareCounterpartyDealMilestoneSubmissionResponse
 } from "@blockchain-escrow/shared";
 
@@ -38,6 +48,107 @@ export class MilestonesController {
   ): Promise<ListDealVersionMilestoneTimelinesResponse> {
     return this.milestonesService.listMilestoneTimelines(
       { dealVersionId, draftDealId, organizationId },
+      readRequestMetadata(request)
+    );
+  }
+
+  @Get("milestones/disputes")
+  async listMilestoneDisputes(
+    @Param("organizationId") organizationId: string,
+    @Param("draftDealId") draftDealId: string,
+    @Param("dealVersionId") dealVersionId: string,
+    @Req() request: HttpRequestLike
+  ): Promise<ListDealVersionMilestoneDisputesResponse> {
+    return this.milestonesService.listMilestoneDisputes(
+      { dealVersionId, draftDealId, organizationId },
+      readRequestMetadata(request)
+    );
+  }
+
+  @Get("milestones/settlements")
+  async listMilestoneSettlements(
+    @Param("organizationId") organizationId: string,
+    @Param("draftDealId") draftDealId: string,
+    @Param("dealVersionId") dealVersionId: string,
+    @Req() request: HttpRequestLike
+  ): Promise<ListDealVersionMilestoneSettlementExecutionsResponse> {
+    return this.milestonesService.listMilestoneSettlementExecutions(
+      { dealVersionId, draftDealId, organizationId },
+      readRequestMetadata(request)
+    );
+  }
+
+  @Get("milestones/statement")
+  async getSettlementStatement(
+    @Param("organizationId") organizationId: string,
+    @Param("draftDealId") draftDealId: string,
+    @Param("dealVersionId") dealVersionId: string,
+    @Req() request: HttpRequestLike
+  ): Promise<GetDealVersionSettlementStatementResponse> {
+    return this.milestonesService.getSettlementStatement(
+      { dealVersionId, draftDealId, organizationId },
+      readRequestMetadata(request)
+    );
+  }
+
+  @Get("milestones/settlements/:dealMilestoneSettlementRequestId/execution")
+  async getMilestoneSettlementExecutionPlan(
+    @Param("organizationId") organizationId: string,
+    @Param("draftDealId") draftDealId: string,
+    @Param("dealVersionId") dealVersionId: string,
+    @Param("dealMilestoneSettlementRequestId")
+    dealMilestoneSettlementRequestId: string,
+    @Req() request: HttpRequestLike
+  ): Promise<GetMilestoneSettlementExecutionPlanResponse> {
+    return this.milestonesService.getMilestoneSettlementExecutionPlan(
+      {
+        dealMilestoneSettlementRequestId,
+        dealVersionId,
+        draftDealId,
+        organizationId
+      },
+      readRequestMetadata(request)
+    );
+  }
+
+  @Get("milestones/settlements/:dealMilestoneSettlementRequestId/execution-transactions")
+  async listMilestoneSettlementExecutionTransactions(
+    @Param("organizationId") organizationId: string,
+    @Param("draftDealId") draftDealId: string,
+    @Param("dealVersionId") dealVersionId: string,
+    @Param("dealMilestoneSettlementRequestId")
+    dealMilestoneSettlementRequestId: string,
+    @Req() request: HttpRequestLike
+  ): Promise<ListDealMilestoneSettlementExecutionTransactionsResponse> {
+    return this.milestonesService.listMilestoneSettlementExecutionTransactions(
+      {
+        dealMilestoneSettlementRequestId,
+        dealVersionId,
+        draftDealId,
+        organizationId
+      },
+      readRequestMetadata(request)
+    );
+  }
+
+  @Post("milestones/settlements/:dealMilestoneSettlementRequestId/execution-transactions")
+  async createMilestoneSettlementExecutionTransaction(
+    @Param("organizationId") organizationId: string,
+    @Param("draftDealId") draftDealId: string,
+    @Param("dealVersionId") dealVersionId: string,
+    @Param("dealMilestoneSettlementRequestId")
+    dealMilestoneSettlementRequestId: string,
+    @Body() body: unknown,
+    @Req() request: HttpRequestLike
+  ): Promise<CreateDealMilestoneSettlementExecutionTransactionResponse> {
+    return this.milestonesService.createMilestoneSettlementExecutionTransaction(
+      {
+        dealMilestoneSettlementRequestId,
+        dealVersionId,
+        draftDealId,
+        organizationId
+      },
+      body,
       readRequestMetadata(request)
     );
   }
@@ -143,6 +254,96 @@ export class MilestonesController {
         dealMilestoneSubmissionId,
         dealVersionId,
         dealVersionMilestoneId,
+        draftDealId,
+        organizationId
+      },
+      body,
+      readRequestMetadata(request)
+    );
+  }
+
+  @Post(
+    "milestones/:dealVersionMilestoneId/submissions/:dealMilestoneSubmissionId/reviews/:dealMilestoneReviewId/disputes"
+  )
+  async createMilestoneDispute(
+    @Param("organizationId") organizationId: string,
+    @Param("draftDealId") draftDealId: string,
+    @Param("dealVersionId") dealVersionId: string,
+    @Param("dealVersionMilestoneId") dealVersionMilestoneId: string,
+    @Param("dealMilestoneSubmissionId") dealMilestoneSubmissionId: string,
+    @Param("dealMilestoneReviewId") dealMilestoneReviewId: string,
+    @Body() body: unknown,
+    @Req() request: HttpRequestLike
+  ): Promise<CreateDealMilestoneDisputeResponse> {
+    return this.milestonesService.createMilestoneDispute(
+      {
+        dealMilestoneReviewId,
+        dealMilestoneSubmissionId,
+        dealVersionId,
+        dealVersionMilestoneId,
+        draftDealId,
+        organizationId
+      },
+      body,
+      readRequestMetadata(request)
+    );
+  }
+
+  @Post("milestones/disputes/:dealMilestoneDisputeId/assignments")
+  async assignMilestoneDisputeArbitrator(
+    @Param("organizationId") organizationId: string,
+    @Param("draftDealId") draftDealId: string,
+    @Param("dealVersionId") dealVersionId: string,
+    @Param("dealMilestoneDisputeId") dealMilestoneDisputeId: string,
+    @Body() body: unknown,
+    @Req() request: HttpRequestLike
+  ): Promise<AssignDealMilestoneDisputeArbitratorResponse> {
+    return this.milestonesService.assignMilestoneDisputeArbitrator(
+      {
+        dealMilestoneDisputeId,
+        dealVersionId,
+        draftDealId,
+        organizationId
+      },
+      body,
+      readRequestMetadata(request)
+    );
+  }
+
+  @Post("milestones/disputes/:dealMilestoneDisputeId/decision-challenge")
+  async prepareMilestoneDisputeDecision(
+    @Param("organizationId") organizationId: string,
+    @Param("draftDealId") draftDealId: string,
+    @Param("dealVersionId") dealVersionId: string,
+    @Param("dealMilestoneDisputeId") dealMilestoneDisputeId: string,
+    @Body() body: unknown,
+    @Req() request: HttpRequestLike
+  ): Promise<PrepareDealMilestoneDisputeDecisionResponse> {
+    return this.milestonesService.prepareMilestoneDisputeDecision(
+      {
+        dealMilestoneDisputeId,
+        dealVersionId,
+        draftDealId,
+        organizationId
+      },
+      body,
+      readRequestMetadata(request)
+    );
+  }
+
+  @Post("milestones/disputes/:dealMilestoneDisputeId/decisions")
+  async createMilestoneDisputeDecision(
+    @Param("organizationId") organizationId: string,
+    @Param("draftDealId") draftDealId: string,
+    @Param("dealVersionId") dealVersionId: string,
+    @Param("dealMilestoneDisputeId") dealMilestoneDisputeId: string,
+    @Body() body: unknown,
+    @Req() request: HttpRequestLike
+  ): Promise<CreateDealMilestoneDisputeDecisionResponse> {
+    return this.milestonesService.createMilestoneDisputeDecision(
+      {
+        dealMilestoneDisputeId,
+        dealVersionId,
         draftDealId,
         organizationId
       },

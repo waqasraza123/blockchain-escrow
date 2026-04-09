@@ -14,6 +14,7 @@ import type {
   IsoTimestamp,
   JsonObject,
   MilestoneSettlementRequestKind,
+  MilestoneSettlementRequestSource,
   OrganizationInviteStatus,
   OrganizationRole,
   SessionStatus,
@@ -256,7 +257,52 @@ export interface DealMilestoneReviewRecord {
   statementMarkdown: string | null;
 }
 
+export interface DealMilestoneDisputeRecord {
+  dealMilestoneReviewId: EntityId;
+  dealMilestoneSubmissionId: EntityId;
+  dealVersionId: EntityId;
+  dealVersionMilestoneId: EntityId;
+  draftDealId: EntityId;
+  id: EntityId;
+  openedAt: IsoTimestamp;
+  openedByUserId: EntityId;
+  organizationId: EntityId;
+  statementMarkdown: string;
+}
+
+export interface DealMilestoneDisputeEvidenceRecord {
+  createdAt: IsoTimestamp;
+  dealMilestoneDisputeId: EntityId;
+  fileId: EntityId;
+  id: EntityId;
+}
+
+export interface DealMilestoneDisputeAssignmentRecord {
+  arbitratorAddress: WalletAddress;
+  assignedAt: IsoTimestamp;
+  assignedByUserId: EntityId;
+  chainId: ChainId;
+  dealMilestoneDisputeId: EntityId;
+  id: EntityId;
+  organizationId: EntityId;
+}
+
+export interface DealMilestoneDisputeDecisionRecord {
+  dealMilestoneDisputeAssignmentId: EntityId;
+  dealMilestoneDisputeId: EntityId;
+  dealMilestoneSettlementRequestId: EntityId;
+  decidedAt: IsoTimestamp;
+  id: EntityId;
+  kind: MilestoneSettlementRequestKind;
+  organizationId: EntityId;
+  signature: HexString;
+  signedByArbitratorAddress: WalletAddress;
+  statementMarkdown: string;
+  typedData: JsonObject;
+}
+
 export interface DealMilestoneSettlementRequestRecord {
+  dealMilestoneDisputeId: EntityId | null;
   dealMilestoneReviewId: EntityId;
   dealMilestoneSubmissionId: EntityId;
   dealVersionId: EntityId;
@@ -266,8 +312,56 @@ export interface DealMilestoneSettlementRequestRecord {
   kind: MilestoneSettlementRequestKind;
   organizationId: EntityId;
   requestedAt: IsoTimestamp;
-  requestedByUserId: EntityId;
+  requestedByArbitratorAddress: WalletAddress | null;
+  requestedByUserId: EntityId | null;
+  source: MilestoneSettlementRequestSource;
   statementMarkdown: string | null;
+}
+
+export interface DealMilestoneSettlementPreparationRecord {
+  agreementAddress: WalletAddress;
+  chainId: ChainId;
+  dealId: HexString;
+  dealMilestoneReviewId: EntityId;
+  dealMilestoneSettlementRequestId: EntityId;
+  dealMilestoneSubmissionId: EntityId;
+  dealVersionHash: HexString;
+  dealVersionId: EntityId;
+  dealVersionMilestoneId: EntityId;
+  draftDealId: EntityId;
+  id: EntityId;
+  kind: MilestoneSettlementRequestKind;
+  milestoneAmountMinor: string;
+  milestonePosition: number;
+  organizationId: EntityId;
+  preparedAt: IsoTimestamp;
+  settlementTokenAddress: WalletAddress;
+  totalAmount: string;
+}
+
+export interface DealMilestoneSettlementExecutionTransactionRecord {
+  chainId: ChainId;
+  dealMilestoneReviewId: EntityId;
+  dealMilestoneSettlementRequestId: EntityId;
+  dealMilestoneSubmissionId: EntityId;
+  dealVersionId: EntityId;
+  dealVersionMilestoneId: EntityId;
+  draftDealId: EntityId;
+  id: EntityId;
+  organizationId: EntityId;
+  reconciledAgreementAddress: WalletAddress | null;
+  reconciledAt: IsoTimestamp | null;
+  reconciledConfirmedAt: IsoTimestamp | null;
+  reconciledMatchesTrackedAgreement: boolean | null;
+  reconciledStatus: FundingTransactionReconciledStatus | null;
+  stalePendingEscalatedAt: IsoTimestamp | null;
+  submittedAt: IsoTimestamp;
+  submittedByUserId: EntityId;
+  submittedWalletAddress: WalletAddress;
+  submittedWalletId: EntityId;
+  supersededAt: IsoTimestamp | null;
+  supersededByDealMilestoneSettlementExecutionTransactionId: EntityId | null;
+  transactionHash: HexString;
 }
 
 export interface DealVersionFileRecord {
@@ -437,6 +531,24 @@ export interface FeeVaultStateRecord {
   updatedBlockNumber: string;
   updatedLogIndex: number;
   updatedTransactionHash: HexString;
+}
+
+export interface EscrowAgreementMilestoneSettlementRecord {
+  agreementAddress: WalletAddress;
+  amount: string;
+  beneficiaryAddress: WalletAddress;
+  chainId: ChainId;
+  dealId: HexString;
+  dealVersionHash: HexString;
+  kind: "RELEASE" | "REFUND";
+  milestonePosition: number;
+  settledAt: IsoTimestamp;
+  settledBlockHash: HexString;
+  settledBlockNumber: string;
+  settledByAddress: WalletAddress;
+  settledLogIndex: number;
+  settledTransactionHash: HexString;
+  updatedAt: IsoTimestamp;
 }
 
 export interface EscrowAgreementRecord {

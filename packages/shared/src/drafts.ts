@@ -4,6 +4,7 @@ import type { CounterpartySummary } from "./counterparties";
 import type { FileSummary } from "./files";
 import type {
   FundingTransactionIndexedExecutionStatus,
+  FundingTransactionReconciledStatus,
   FundingTransactionStalePendingEvaluation,
   FundingTransactionStatus,
   FundingTransactionSummary
@@ -31,6 +32,32 @@ export const dealStateSchema = z.enum([
   "EXPIRED"
 ]);
 export type DealState = z.infer<typeof dealStateSchema>;
+
+export const custodyTrackedDealStates = [
+  "ACTIVE",
+  "PARTIALLY_RELEASED",
+  "COMPLETED",
+  "REFUNDED"
+] as const satisfies readonly DealState[];
+
+const custodyTrackedDealStateSet = new Set<DealState>(custodyTrackedDealStates);
+
+export function isCustodyTrackedDealState(state: DealState): boolean {
+  return custodyTrackedDealStateSet.has(state);
+}
+
+export const milestoneWorkflowOpenDealStates = [
+  "ACTIVE",
+  "PARTIALLY_RELEASED"
+] as const satisfies readonly DealState[];
+
+const milestoneWorkflowOpenDealStateSet = new Set<DealState>(
+  milestoneWorkflowOpenDealStates
+);
+
+export function isMilestoneWorkflowOpenDealState(state: DealState): boolean {
+  return milestoneWorkflowOpenDealStateSet.has(state);
+}
 
 export const dealPartyRoleSchema = z.enum(["BUYER", "SELLER"]);
 export type DealPartyRole = z.infer<typeof dealPartyRoleSchema>;
@@ -192,6 +219,17 @@ export type MilestoneSettlementRequestKind = z.infer<
   typeof milestoneSettlementRequestKindSchema
 >;
 
+export const milestoneSettlementRequestSourceSchema = z.enum([
+  "BUYER_REVIEW",
+  "ARBITRATOR_DECISION"
+]);
+export type MilestoneSettlementRequestSource = z.infer<
+  typeof milestoneSettlementRequestSourceSchema
+>;
+
+export const milestoneDisputeStatusSchema = z.enum(["OPEN", "RESOLVED"]);
+export type MilestoneDisputeStatus = z.infer<typeof milestoneDisputeStatusSchema>;
+
 export const milestoneReviewDeadlineStatusSchema = z.enum([
   "OPEN",
   "EXPIRED",
@@ -207,11 +245,39 @@ export const milestoneTimelineEventKindSchema = z.enum([
   "REVIEW_APPROVED",
   "REVIEW_REJECTED",
   "REVIEW_DEADLINE_EXPIRED",
+  "DISPUTE_OPENED",
+  "DISPUTE_ARBITRATOR_ASSIGNED",
+  "DISPUTE_DECISION_SUBMITTED",
   "RELEASE_REQUESTED",
-  "REFUND_REQUESTED"
+  "REFUND_REQUESTED",
+  "SETTLEMENT_PREPARED",
+  "RELEASE_EXECUTED",
+  "REFUND_EXECUTED"
 ]);
 export type MilestoneTimelineEventKind = z.infer<
   typeof milestoneTimelineEventKindSchema
+>;
+
+export const milestoneSettlementExecutionStatusSchema = z.enum([
+  "EXECUTED",
+  "PENDING_PREPARATION",
+  "PREPARED",
+  "BLOCKED"
+]);
+export type MilestoneSettlementExecutionStatus = z.infer<
+  typeof milestoneSettlementExecutionStatusSchema
+>;
+
+export const milestoneSettlementExecutionBlockerSchema = z.enum([
+  "AGREEMENT_NOT_INDEXED",
+  "AGREEMENT_MILESTONE_COUNT_MISMATCH",
+  "NEWER_SUBMISSION_EXISTS",
+  "SETTLEMENT_ALREADY_EXECUTED",
+  "SETTLEMENT_EXECUTION_METHOD_UNAVAILABLE",
+  "SETTLEMENT_PREPARATION_MISSING"
+]);
+export type MilestoneSettlementExecutionBlocker = z.infer<
+  typeof milestoneSettlementExecutionBlockerSchema
 >;
 
 export const milestoneSubmissionParamsSchema = z.object({
@@ -277,6 +343,39 @@ export type MilestoneSettlementRequestParams = z.infer<
   typeof milestoneSettlementRequestParamsSchema
 >;
 
+export const milestoneDisputeParamsSchema = milestoneSettlementRequestParamsSchema;
+export type MilestoneDisputeParams = z.infer<typeof milestoneDisputeParamsSchema>;
+
+export const dealVersionMilestoneDisputeParamsSchema = z.object({
+  dealMilestoneDisputeId: z.string().trim().min(1),
+  dealVersionId: z.string().trim().min(1),
+  draftDealId: z.string().trim().min(1),
+  organizationId: z.string().trim().min(1)
+});
+export type DealVersionMilestoneDisputeParams = z.infer<
+  typeof dealVersionMilestoneDisputeParamsSchema
+>;
+
+export const milestoneSettlementExecutionPlanParamsSchema = z.object({
+  dealMilestoneSettlementRequestId: z.string().trim().min(1),
+  dealVersionId: z.string().trim().min(1),
+  draftDealId: z.string().trim().min(1),
+  organizationId: z.string().trim().min(1)
+});
+export type MilestoneSettlementExecutionPlanParams = z.infer<
+  typeof milestoneSettlementExecutionPlanParamsSchema
+>;
+
+export const milestoneSettlementExecutionTransactionParamsSchema = z.object({
+  dealMilestoneSettlementRequestId: z.string().trim().min(1),
+  dealVersionId: z.string().trim().min(1),
+  draftDealId: z.string().trim().min(1),
+  organizationId: z.string().trim().min(1)
+});
+export type MilestoneSettlementExecutionTransactionParams = z.infer<
+  typeof milestoneSettlementExecutionTransactionParamsSchema
+>;
+
 export const createMilestoneReviewSchema = z
   .object({
     decision: milestoneReviewDecisionSchema,
@@ -303,18 +402,109 @@ export type CreateMilestoneSettlementRequestInput = z.infer<
   typeof createMilestoneSettlementRequestSchema
 >;
 
+export const createMilestoneDisputeSchema = z
+  .object({
+    attachmentFileIds: z.array(z.string().trim().min(1)).max(50).optional(),
+    statementMarkdown: z.string().trim().min(1).max(10000)
+  })
+  .superRefine((value, ctx) => {
+    const attachmentFileIds = value.attachmentFileIds ?? [];
+
+    if (new Set(attachmentFileIds).size !== attachmentFileIds.length) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "attachment file ids must be unique",
+        path: ["attachmentFileIds"]
+      });
+    }
+  });
+export type CreateMilestoneDisputeInput = z.infer<
+  typeof createMilestoneDisputeSchema
+>;
+
+export const assignMilestoneDisputeArbitratorSchema = z.object({
+  arbitratorAddress: z.string().trim().regex(/^0x[a-fA-F0-9]{40}$/)
+});
+export type AssignMilestoneDisputeArbitratorInput = z.infer<
+  typeof assignMilestoneDisputeArbitratorSchema
+>;
+
+export const prepareMilestoneDisputeDecisionSchema = z.object({
+  kind: milestoneSettlementRequestKindSchema,
+  statementMarkdown: z.string().trim().min(1).max(10000)
+});
+export type PrepareMilestoneDisputeDecisionInput = z.infer<
+  typeof prepareMilestoneDisputeDecisionSchema
+>;
+
+export const createMilestoneDisputeDecisionSchema =
+  prepareMilestoneDisputeDecisionSchema.extend({
+    signature: z.string().trim().regex(/^0x[a-fA-F0-9]+$/)
+  });
+export type CreateMilestoneDisputeDecisionInput = z.infer<
+  typeof createMilestoneDisputeDecisionSchema
+>;
+
+export const createMilestoneSettlementExecutionTransactionSchema = z.object({
+  transactionHash: z.string().trim().regex(/^0x[a-fA-F0-9]{64}$/)
+});
+export type CreateMilestoneSettlementExecutionTransactionInput = z.infer<
+  typeof createMilestoneSettlementExecutionTransactionSchema
+>;
+
 export interface DealMilestoneSettlementRequestSummary {
+  dealMilestoneDisputeDecisionId: EntityId | null;
+  dealMilestoneDisputeId: EntityId | null;
   dealMilestoneReviewId: EntityId;
   dealMilestoneSubmissionId: EntityId;
   dealVersionId: EntityId;
   dealVersionMilestoneId: EntityId;
   draftDealId: EntityId;
+  executionPreparation: DealMilestoneSettlementPreparationSummary | null;
   id: EntityId;
   kind: MilestoneSettlementRequestKind;
   organizationId: EntityId;
   requestedAt: IsoTimestamp;
-  requestedByUserId: EntityId;
+  requestedByArbitratorAddress: WalletAddress | null;
+  requestedByUserId: EntityId | null;
+  source: MilestoneSettlementRequestSource;
   statementMarkdown: string | null;
+}
+
+export interface DealMilestoneSettlementPreparationSummary {
+  agreementAddress: WalletAddress;
+  chainId: ChainId;
+  dealId: HexString;
+  dealMilestoneReviewId: EntityId;
+  dealMilestoneSettlementRequestId: EntityId;
+  dealMilestoneSubmissionId: EntityId;
+  dealVersionHash: HexString;
+  dealVersionId: EntityId;
+  dealVersionMilestoneId: EntityId;
+  draftDealId: EntityId;
+  id: EntityId;
+  kind: MilestoneSettlementRequestKind;
+  milestoneAmountMinor: string;
+  milestonePosition: number;
+  organizationId: EntityId;
+  preparedAt: IsoTimestamp;
+  settlementTokenAddress: WalletAddress;
+  totalAmount: string;
+}
+
+export interface DealMilestoneIndexedSettlementSummary {
+  agreementAddress: WalletAddress;
+  amount: string;
+  beneficiaryAddress: WalletAddress;
+  chainId: ChainId;
+  dealId: HexString;
+  dealVersionHash: HexString;
+  kind: MilestoneSettlementRequestKind;
+  milestonePosition: number;
+  settledAt: IsoTimestamp;
+  settledBlockNumber: string;
+  settledByAddress: WalletAddress;
+  settledTransactionHash: HexString;
 }
 
 export interface MilestoneReviewDeadlineSummary {
@@ -326,6 +516,64 @@ export interface MilestoneReviewDeadlineSummary {
 export interface CounterpartyDealMilestoneSubmissionChallenge {
   expectedWalletAddress: WalletAddress;
   typedData: JsonObject;
+}
+
+export interface DealMilestoneDisputeDecisionChallenge {
+  expectedWalletAddress: WalletAddress;
+  typedData: JsonObject;
+}
+
+export interface DealMilestoneDisputeEvidenceSummary {
+  createdAt: IsoTimestamp;
+  dealMilestoneDisputeId: EntityId;
+  file: FileSummary;
+  fileId: EntityId;
+  id: EntityId;
+}
+
+export interface DealMilestoneDisputeAssignmentSummary {
+  arbitratorAddress: WalletAddress;
+  assignedAt: IsoTimestamp;
+  assignedByUserId: EntityId;
+  chainId: ChainId;
+  dealMilestoneDisputeId: EntityId;
+  id: EntityId;
+}
+
+export interface DealMilestoneDisputeDecisionSummary {
+  assignmentId: EntityId;
+  decidedAt: IsoTimestamp;
+  dealMilestoneDisputeId: EntityId;
+  dealMilestoneReviewId: EntityId;
+  dealMilestoneSettlementRequestId: EntityId;
+  dealMilestoneSubmissionId: EntityId;
+  dealVersionId: EntityId;
+  dealVersionMilestoneId: EntityId;
+  draftDealId: EntityId;
+  id: EntityId;
+  kind: MilestoneSettlementRequestKind;
+  organizationId: EntityId;
+  signature: HexString;
+  signedByArbitratorAddress: WalletAddress;
+  statementMarkdown: string;
+  typedData: JsonObject;
+}
+
+export interface DealMilestoneDisputeSummary {
+  attachmentFiles: DealMilestoneDisputeEvidenceSummary[];
+  dealMilestoneReviewId: EntityId;
+  dealMilestoneSubmissionId: EntityId;
+  dealVersionId: EntityId;
+  dealVersionMilestoneId: EntityId;
+  draftDealId: EntityId;
+  id: EntityId;
+  latestAssignment: DealMilestoneDisputeAssignmentSummary | null;
+  latestDecision: DealMilestoneDisputeDecisionSummary | null;
+  openedAt: IsoTimestamp;
+  openedByUserId: EntityId;
+  organizationId: EntityId;
+  statementMarkdown: string;
+  status: MilestoneDisputeStatus;
 }
 
 export interface DealMilestoneReviewSummary {
@@ -361,6 +609,7 @@ export interface DealMilestoneSubmissionSummary {
 }
 
 export interface DealVersionMilestoneWorkflow {
+  currentDispute: DealMilestoneDisputeSummary | null;
   latestReviewDeadline: MilestoneReviewDeadlineSummary | null;
   latestReviewAt: IsoTimestamp | null;
   latestSubmissionAt: IsoTimestamp | null;
@@ -376,6 +625,8 @@ export interface ListDealVersionMilestoneWorkflowsResponse {
 export interface DealMilestoneTimelineEvent {
   actorUserId: EntityId | null;
   attachmentFiles: FileSummary[];
+  dealMilestoneDisputeDecisionId: EntityId | null;
+  dealMilestoneDisputeId: EntityId | null;
   dealMilestoneReviewId: EntityId | null;
   dealMilestoneSettlementRequestId: EntityId | null;
   dealMilestoneSubmissionId: EntityId | null;
@@ -383,11 +634,14 @@ export interface DealMilestoneTimelineEvent {
   dealVersionMilestoneId: EntityId;
   draftDealId: EntityId;
   id: EntityId;
+  indexedSettlement: DealMilestoneIndexedSettlementSummary | null;
+  dispute: DealMilestoneDisputeSummary | null;
   kind: MilestoneTimelineEventKind;
   occurredAt: IsoTimestamp;
   organizationId: EntityId;
   reviewDeadline: MilestoneReviewDeadlineSummary | null;
   reviewDecision: MilestoneReviewDecision | null;
+  settlementPreparation: DealMilestoneSettlementPreparationSummary | null;
   settlementKind: MilestoneSettlementRequestKind | null;
   statementMarkdown: string | null;
   submittedByCounterpartyId: EntityId | null;
@@ -405,6 +659,131 @@ export interface ListDealVersionMilestoneTimelinesResponse {
   milestones: DealVersionMilestoneTimeline[];
 }
 
+export interface DealMilestoneSettlementExecutionSummary {
+  blockers: MilestoneSettlementExecutionBlocker[];
+  executionPreparation: DealMilestoneSettlementPreparationSummary | null;
+  indexedSettlement: DealMilestoneIndexedSettlementSummary | null;
+  milestone: DealVersionMilestoneSnapshot;
+  review: DealMilestoneReviewSummary;
+  settlementRequest: DealMilestoneSettlementRequestSummary;
+  status: MilestoneSettlementExecutionStatus;
+}
+
+export interface ListDealVersionMilestoneSettlementExecutionsResponse {
+  settlements: DealMilestoneSettlementExecutionSummary[];
+}
+
+export interface DealMilestoneDisputePacket {
+  dispute: DealMilestoneDisputeSummary;
+  indexedSettlement: DealMilestoneIndexedSettlementSummary | null;
+  milestone: DealVersionMilestoneSnapshot;
+  review: DealMilestoneReviewSummary;
+  settlementRequest: DealMilestoneSettlementRequestSummary | null;
+  submission: DealMilestoneSubmissionSummary;
+}
+
+export interface ListDealVersionMilestoneDisputesResponse {
+  disputes: DealMilestoneDisputePacket[];
+}
+
+export interface DealVersionSettlementStatementSummary {
+  agreementAddress: WalletAddress | null;
+  chainId: ChainId | null;
+  dealId: HexString | null;
+  dealVersionHash: HexString | null;
+  draftDealId: EntityId;
+  draftState: DealState;
+  latestSettledAt: IsoTimestamp | null;
+  milestoneCount: number;
+  organizationId: EntityId;
+  pendingAmountMinor: string;
+  pendingMilestoneCount: number;
+  refundedAmountMinor: string;
+  refundedMilestoneCount: number;
+  releasedAmountMinor: string;
+  releasedMilestoneCount: number;
+  settlementTokenAddress: WalletAddress | null;
+  totalAmountMinor: string;
+}
+
+export interface DealVersionMilestoneStatement {
+  currentDispute: DealMilestoneDisputeSummary | null;
+  indexedSettlement: DealMilestoneIndexedSettlementSummary | null;
+  latestReview: DealMilestoneReviewSummary | null;
+  latestReviewDeadline: MilestoneReviewDeadlineSummary | null;
+  latestSettlementRequest: DealMilestoneSettlementRequestSummary | null;
+  latestSubmission: DealMilestoneSubmissionSummary | null;
+  milestone: DealVersionMilestoneSnapshot;
+  state: MilestoneWorkflowState;
+}
+
+export interface GetDealVersionSettlementStatementResponse {
+  milestones: DealVersionMilestoneStatement[];
+  statement: DealVersionSettlementStatementSummary;
+}
+
+export interface MilestoneSettlementExecutionPlanSummary {
+  agreementAddress: WalletAddress | null;
+  blockers: MilestoneSettlementExecutionBlocker[];
+  chainId: ChainId;
+  contractVersion: number | null;
+  dealId: HexString | null;
+  dealVersionHash: HexString | null;
+  executionPreparation: DealMilestoneSettlementPreparationSummary | null;
+  indexedSettlement: DealMilestoneIndexedSettlementSummary | null;
+  milestone: DealVersionMilestoneSnapshot;
+  network: string | null;
+  ready: boolean;
+  review: DealMilestoneReviewSummary;
+  settlementRequest: DealMilestoneSettlementRequestSummary;
+  settlementTokenAddress: WalletAddress | null;
+  totalAmountMinor: string | null;
+}
+
+export interface GetMilestoneSettlementExecutionPlanResponse {
+  plan: MilestoneSettlementExecutionPlanSummary;
+}
+
+export interface DealMilestoneSettlementExecutionTransactionSummary {
+  agreementAddress: WalletAddress | null;
+  chainId: ChainId;
+  confirmedAt: IsoTimestamp | null;
+  dealMilestoneReviewId: EntityId;
+  dealMilestoneSettlementRequestId: EntityId;
+  dealMilestoneSubmissionId: EntityId;
+  dealVersionId: EntityId;
+  dealVersionMilestoneId: EntityId;
+  draftDealId: EntityId;
+  id: EntityId;
+  indexedAt: IsoTimestamp | null;
+  indexedBlockNumber: string | null;
+  indexedExecutionStatus: FundingTransactionIndexedExecutionStatus | null;
+  matchesTrackedAgreement: boolean | null;
+  organizationId: EntityId;
+  reconciledAt: IsoTimestamp | null;
+  reconciledStatus: FundingTransactionReconciledStatus | null;
+  stalePending: boolean | null;
+  stalePendingAt: IsoTimestamp | null;
+  stalePendingEscalatedAt: IsoTimestamp | null;
+  stalePendingEvaluation: FundingTransactionStalePendingEvaluation | null;
+  status: FundingTransactionStatus;
+  submittedAt: IsoTimestamp;
+  submittedByUserId: EntityId;
+  submittedWalletAddress: WalletAddress;
+  supersededAt: IsoTimestamp | null;
+  supersededByDealMilestoneSettlementExecutionTransactionId: EntityId | null;
+  supersededByTransactionHash: HexString | null;
+  transactionHash: HexString;
+}
+
+export interface CreateDealMilestoneSettlementExecutionTransactionResponse {
+  executionTransaction: DealMilestoneSettlementExecutionTransactionSummary;
+}
+
+export interface ListDealMilestoneSettlementExecutionTransactionsResponse {
+  executionTransactions: DealMilestoneSettlementExecutionTransactionSummary[];
+}
+
 export interface CreateDealMilestoneSubmissionResponse {
   milestone: DealVersionMilestoneWorkflow;
   submission: DealMilestoneSubmissionSummary;
@@ -416,6 +795,26 @@ export interface CreateDealMilestoneReviewResponse {
 }
 
 export interface CreateDealMilestoneSettlementRequestResponse {
+  milestone: DealVersionMilestoneWorkflow;
+  settlementRequest: DealMilestoneSettlementRequestSummary;
+}
+
+export interface CreateDealMilestoneDisputeResponse {
+  dispute: DealMilestoneDisputeSummary;
+  milestone: DealVersionMilestoneWorkflow;
+}
+
+export interface AssignDealMilestoneDisputeArbitratorResponse {
+  dispute: DealMilestoneDisputeSummary;
+}
+
+export interface PrepareDealMilestoneDisputeDecisionResponse {
+  challenge: DealMilestoneDisputeDecisionChallenge;
+  dispute: DealMilestoneDisputeSummary;
+}
+
+export interface CreateDealMilestoneDisputeDecisionResponse {
+  dispute: DealMilestoneDisputeSummary;
   milestone: DealVersionMilestoneWorkflow;
   settlementRequest: DealMilestoneSettlementRequestSummary;
 }

@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 
 import {
   deploymentSupportsCreateAndFund,
-  getContractArtifact,
+  deploymentSupportsMilestoneSettlementExecution,
   getDeploymentManifestByChainId
 } from "@blockchain-escrow/contracts-sdk";
 import type {
@@ -84,6 +84,162 @@ import {
 
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 
+const escrowFactoryCreationAbiV1V2 = [
+  {
+    type: "function",
+    name: "createAgreement",
+    stateMutability: "nonpayable",
+    inputs: [
+      {
+        name: "creation",
+        type: "tuple",
+        internalType: "struct EscrowFactory.EscrowCreation",
+        components: [
+          { name: "buyer", type: "address", internalType: "address" },
+          { name: "seller", type: "address", internalType: "address" },
+          {
+            name: "settlementToken",
+            type: "address",
+            internalType: "address"
+          },
+          { name: "arbitrator", type: "address", internalType: "address" },
+          { name: "dealId", type: "bytes32", internalType: "bytes32" },
+          {
+            name: "dealVersionHash",
+            type: "bytes32",
+            internalType: "bytes32"
+          },
+          { name: "totalAmount", type: "uint256", internalType: "uint256" },
+          {
+            name: "milestoneCount",
+            type: "uint32",
+            internalType: "uint32"
+          }
+        ]
+      }
+    ],
+    outputs: [{ name: "agreementAddress", type: "address", internalType: "address" }]
+  },
+  {
+    type: "function",
+    name: "createAndFundAgreement",
+    stateMutability: "nonpayable",
+    inputs: [
+      {
+        name: "creation",
+        type: "tuple",
+        internalType: "struct EscrowFactory.EscrowCreation",
+        components: [
+          { name: "buyer", type: "address", internalType: "address" },
+          { name: "seller", type: "address", internalType: "address" },
+          {
+            name: "settlementToken",
+            type: "address",
+            internalType: "address"
+          },
+          { name: "arbitrator", type: "address", internalType: "address" },
+          { name: "dealId", type: "bytes32", internalType: "bytes32" },
+          {
+            name: "dealVersionHash",
+            type: "bytes32",
+            internalType: "bytes32"
+          },
+          { name: "totalAmount", type: "uint256", internalType: "uint256" },
+          {
+            name: "milestoneCount",
+            type: "uint32",
+            internalType: "uint32"
+          }
+        ]
+      }
+    ],
+    outputs: [{ name: "agreementAddress", type: "address", internalType: "address" }]
+  }
+] as const satisfies Abi;
+
+const escrowFactoryCreationAbiV3 = [
+  {
+    type: "function",
+    name: "createAgreement",
+    stateMutability: "nonpayable",
+    inputs: [
+      {
+        name: "creation",
+        type: "tuple",
+        internalType: "struct EscrowFactory.EscrowCreation",
+        components: [
+          { name: "buyer", type: "address", internalType: "address" },
+          { name: "seller", type: "address", internalType: "address" },
+          {
+            name: "settlementToken",
+            type: "address",
+            internalType: "address"
+          },
+          { name: "arbitrator", type: "address", internalType: "address" },
+          { name: "dealId", type: "bytes32", internalType: "bytes32" },
+          {
+            name: "dealVersionHash",
+            type: "bytes32",
+            internalType: "bytes32"
+          },
+          { name: "totalAmount", type: "uint256", internalType: "uint256" },
+          {
+            name: "milestoneCount",
+            type: "uint32",
+            internalType: "uint32"
+          },
+          {
+            name: "milestoneAmounts",
+            type: "uint256[]",
+            internalType: "uint256[]"
+          }
+        ]
+      }
+    ],
+    outputs: [{ name: "agreementAddress", type: "address", internalType: "address" }]
+  },
+  {
+    type: "function",
+    name: "createAndFundAgreement",
+    stateMutability: "nonpayable",
+    inputs: [
+      {
+        name: "creation",
+        type: "tuple",
+        internalType: "struct EscrowFactory.EscrowCreation",
+        components: [
+          { name: "buyer", type: "address", internalType: "address" },
+          { name: "seller", type: "address", internalType: "address" },
+          {
+            name: "settlementToken",
+            type: "address",
+            internalType: "address"
+          },
+          { name: "arbitrator", type: "address", internalType: "address" },
+          { name: "dealId", type: "bytes32", internalType: "bytes32" },
+          {
+            name: "dealVersionHash",
+            type: "bytes32",
+            internalType: "bytes32"
+          },
+          { name: "totalAmount", type: "uint256", internalType: "uint256" },
+          {
+            name: "milestoneCount",
+            type: "uint32",
+            internalType: "uint32"
+          },
+          {
+            name: "milestoneAmounts",
+            type: "uint256[]",
+            internalType: "uint256[]"
+          }
+        ]
+      }
+    ],
+    outputs: [{ name: "agreementAddress", type: "address", internalType: "address" }]
+  }
+] as const satisfies Abi;
+
 interface FundingAccessContext {
   actor: AuthenticatedSessionContext;
   draft: DraftDealRecord;
@@ -116,6 +272,51 @@ interface FundingComputationContext extends FundingAccessContext {
 
 function normalizeAddress(value: string): `0x${string}` {
   return getAddress(value).toLowerCase() as `0x${string}`;
+}
+
+function buildEscrowFactoryCreationTransactionData(input: {
+  buyerAddress: `0x${string}`;
+  dealId: `0x${string}`;
+  dealVersionHash: `0x${string}`;
+  milestoneAmountsMinor: readonly string[];
+  sellerAddress: `0x${string}`;
+  settlementTokenAddress: `0x${string}`;
+  supportsCreateAndFund: boolean;
+  supportsMilestoneSettlementExecution: boolean;
+  totalAmountMinor: string;
+}): `0x${string}` {
+  const functionName = input.supportsCreateAndFund
+    ? "createAndFundAgreement"
+    : "createAgreement";
+  const commonArgs = {
+    arbitrator: ZERO_ADDRESS as `0x${string}`,
+    buyer: input.buyerAddress,
+    dealId: input.dealId,
+    dealVersionHash: input.dealVersionHash,
+    milestoneCount: input.milestoneAmountsMinor.length,
+    seller: input.sellerAddress,
+    settlementToken: input.settlementTokenAddress,
+    totalAmount: BigInt(input.totalAmountMinor)
+  };
+
+  if (input.supportsMilestoneSettlementExecution) {
+    return encodeFunctionData({
+      abi: escrowFactoryCreationAbiV3,
+      functionName,
+      args: [
+        {
+          ...commonArgs,
+          milestoneAmounts: input.milestoneAmountsMinor.map((amount) => BigInt(amount))
+        }
+      ]
+    }) as `0x${string}`;
+  }
+
+  return encodeFunctionData({
+    abi: escrowFactoryCreationAbiV1V2,
+    functionName,
+    args: [commonArgs]
+  }) as `0x${string}`;
 }
 
 function cloneCreationCode(implementation: `0x${string}`): `0x${string}` {
@@ -391,6 +592,8 @@ export class FundingService {
   ): Promise<FundingPreparationSummary> {
     const blockers: FundingPreparationBlocker[] = [];
     const supportsCreateAndFund = deploymentSupportsCreateAndFund(context.manifest);
+    const supportsMilestoneSettlement =
+      deploymentSupportsMilestoneSettlementExecution(context.manifest);
     const totalAmountMinor = sumMilestones(context.milestones);
 
     if (!context.latestVersion || context.latestVersion.id !== context.version.id) {
@@ -567,24 +770,19 @@ export class FundingService {
       versionPartyAddresses.buyerAddress &&
       versionPartyAddresses.sellerAddress
         ? {
-            data: encodeFunctionData({
-              abi: getContractArtifact("EscrowFactory").abi as Abi,
-              functionName: supportsCreateAndFund
-                ? "createAndFundAgreement"
-                : "createAgreement",
-              args: [
-                {
-                  arbitrator: ZERO_ADDRESS,
-                  buyer: versionPartyAddresses.buyerAddress,
-                  dealId: context.dealId,
-                  dealVersionHash: context.dealVersionHash,
-                  milestoneCount: context.milestones.length,
-                  seller: versionPartyAddresses.sellerAddress,
-                  settlementToken: settlementTokenAddress,
-                  totalAmount: BigInt(totalAmountMinor)
-                }
-              ]
-            }) as `0x${string}`,
+            data: buildEscrowFactoryCreationTransactionData({
+              buyerAddress: versionPartyAddresses.buyerAddress,
+              dealId: context.dealId,
+              dealVersionHash: context.dealVersionHash,
+              milestoneAmountsMinor: context.milestones.map(
+                (milestone) => milestone.amountMinor
+              ),
+              sellerAddress: versionPartyAddresses.sellerAddress,
+              settlementTokenAddress,
+              supportsCreateAndFund,
+              supportsMilestoneSettlementExecution: supportsMilestoneSettlement,
+              totalAmountMinor
+            }),
             to: factoryAddress,
             value: "0" as const
           }

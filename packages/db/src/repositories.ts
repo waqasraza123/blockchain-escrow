@@ -13,8 +13,14 @@ import type {
   ContractOwnershipRecord,
   CounterpartyRecord,
   CounterpartyDealVersionAcceptanceRecord,
+  DealMilestoneDisputeAssignmentRecord,
+  DealMilestoneDisputeDecisionRecord,
+  DealMilestoneDisputeEvidenceRecord,
+  DealMilestoneDisputeRecord,
   DealMilestoneReviewDeadlineExpiryRecord,
   DealMilestoneReviewRecord,
+  DealMilestoneSettlementExecutionTransactionRecord,
+  DealMilestoneSettlementPreparationRecord,
   DealMilestoneSettlementRequestRecord,
   DealMilestoneSubmissionFileRecord,
   DealMilestoneSubmissionRecord,
@@ -25,6 +31,7 @@ import type {
   DealVersionRecord,
   DraftDealPartyRecord,
   DraftDealRecord,
+  EscrowAgreementMilestoneSettlementRecord,
   EscrowAgreementRecord,
   FeeVaultStateRecord,
   FileRecord,
@@ -232,6 +239,47 @@ export interface DealMilestoneReviewRepository {
   listByDealVersionId(dealVersionId: EntityId): Promise<DealMilestoneReviewRecord[]>;
 }
 
+export interface DealMilestoneDisputeRepository {
+  create(record: DealMilestoneDisputeRecord): Promise<DealMilestoneDisputeRecord>;
+  findByDealMilestoneReviewId(
+    dealMilestoneReviewId: EntityId
+  ): Promise<DealMilestoneDisputeRecord | null>;
+  findById(id: EntityId): Promise<DealMilestoneDisputeRecord | null>;
+  listByDealVersionId(dealVersionId: EntityId): Promise<DealMilestoneDisputeRecord[]>;
+}
+
+export interface DealMilestoneDisputeEvidenceRepository {
+  add(
+    record: DealMilestoneDisputeEvidenceRecord
+  ): Promise<DealMilestoneDisputeEvidenceRecord>;
+  listByDealMilestoneDisputeId(
+    dealMilestoneDisputeId: EntityId
+  ): Promise<DealMilestoneDisputeEvidenceRecord[]>;
+}
+
+export interface DealMilestoneDisputeAssignmentRepository {
+  create(
+    record: DealMilestoneDisputeAssignmentRecord
+  ): Promise<DealMilestoneDisputeAssignmentRecord>;
+  findById(id: EntityId): Promise<DealMilestoneDisputeAssignmentRecord | null>;
+  listByDealMilestoneDisputeId(
+    dealMilestoneDisputeId: EntityId
+  ): Promise<DealMilestoneDisputeAssignmentRecord[]>;
+}
+
+export interface DealMilestoneDisputeDecisionRepository {
+  create(
+    record: DealMilestoneDisputeDecisionRecord
+  ): Promise<DealMilestoneDisputeDecisionRecord>;
+  findByDealMilestoneDisputeId(
+    dealMilestoneDisputeId: EntityId
+  ): Promise<DealMilestoneDisputeDecisionRecord | null>;
+  findById(id: EntityId): Promise<DealMilestoneDisputeDecisionRecord | null>;
+  findByDealMilestoneSettlementRequestId(
+    dealMilestoneSettlementRequestId: EntityId
+  ): Promise<DealMilestoneDisputeDecisionRecord | null>;
+}
+
 export interface DealMilestoneSettlementRequestRepository {
   create(
     record: DealMilestoneSettlementRequestRecord
@@ -243,6 +291,22 @@ export interface DealMilestoneSettlementRequestRepository {
   listByDealVersionId(
     dealVersionId: EntityId
   ): Promise<DealMilestoneSettlementRequestRecord[]>;
+}
+
+export interface DealMilestoneSettlementPreparationRepository {
+  create(
+    record: DealMilestoneSettlementPreparationRecord
+  ): Promise<DealMilestoneSettlementPreparationRecord>;
+  findByDealMilestoneSettlementRequestId(
+    dealMilestoneSettlementRequestId: EntityId
+  ): Promise<DealMilestoneSettlementPreparationRecord | null>;
+  findById(id: EntityId): Promise<DealMilestoneSettlementPreparationRecord | null>;
+  listByChainId(
+    chainId: ChainId
+  ): Promise<DealMilestoneSettlementPreparationRecord[]>;
+  listByDealVersionId(
+    dealVersionId: EntityId
+  ): Promise<DealMilestoneSettlementPreparationRecord[]>;
 }
 
 export interface DealMilestoneSubmissionFileRepository {
@@ -315,6 +379,45 @@ export interface FundingTransactionRepository {
     supersededByFundingTransactionId: EntityId,
     supersededAt: IsoTimestamp
   ): Promise<FundingTransactionRecord>;
+}
+
+export interface DealMilestoneSettlementExecutionTransactionRepository {
+  create(
+    record: DealMilestoneSettlementExecutionTransactionRecord
+  ): Promise<DealMilestoneSettlementExecutionTransactionRecord>;
+  findByChainIdAndTransactionHash(
+    chainId: ChainId,
+    transactionHash: HexString
+  ): Promise<DealMilestoneSettlementExecutionTransactionRecord | null>;
+  findById(
+    id: EntityId
+  ): Promise<DealMilestoneSettlementExecutionTransactionRecord | null>;
+  listByChainId(
+    chainId: ChainId
+  ): Promise<DealMilestoneSettlementExecutionTransactionRecord[]>;
+  listByDealMilestoneSettlementRequestId(
+    dealMilestoneSettlementRequestId: EntityId
+  ): Promise<DealMilestoneSettlementExecutionTransactionRecord[]>;
+  markStalePendingEscalated(
+    id: EntityId,
+    stalePendingEscalatedAt: IsoTimestamp
+  ): Promise<DealMilestoneSettlementExecutionTransactionRecord>;
+  markSuperseded(
+    id: EntityId,
+    supersededByDealMilestoneSettlementExecutionTransactionId: EntityId,
+    supersededAt: IsoTimestamp
+  ): Promise<DealMilestoneSettlementExecutionTransactionRecord>;
+  updateReconciliation(
+    id: EntityId,
+    reconciliation: Pick<
+      DealMilestoneSettlementExecutionTransactionRecord,
+      | "reconciledAgreementAddress"
+      | "reconciledAt"
+      | "reconciledConfirmedAt"
+      | "reconciledMatchesTrackedAgreement"
+      | "reconciledStatus"
+    >
+  ): Promise<DealMilestoneSettlementExecutionTransactionRecord>;
 }
 
 export interface ChainCursorRepository {
@@ -409,11 +512,24 @@ export interface EscrowAgreementRepository {
   upsert(record: EscrowAgreementRecord): Promise<EscrowAgreementRecord>;
 }
 
+export interface EscrowAgreementMilestoneSettlementRepository {
+  listByChainId(chainId: ChainId): Promise<EscrowAgreementMilestoneSettlementRecord[]>;
+  listByChainIdAndAgreementAddress(
+    chainId: ChainId,
+    agreementAddress: WalletAddress
+  ): Promise<EscrowAgreementMilestoneSettlementRecord[]>;
+  resetByChainId(chainId: ChainId): Promise<void>;
+  upsert(
+    record: EscrowAgreementMilestoneSettlementRecord
+  ): Promise<EscrowAgreementMilestoneSettlementRecord>;
+}
+
 export interface Release4Repositories {
   arbitratorRegistryEntries: ArbitratorRegistryEntryRepository;
   chainCursors: ChainCursorRepository;
   contractOwnerships: ContractOwnershipRepository;
   escrowAgreements: EscrowAgreementRepository;
+  escrowAgreementMilestoneSettlements: EscrowAgreementMilestoneSettlementRepository;
   feeVaultStates: FeeVaultStateRepository;
   indexedBlocks: IndexedBlockRepository;
   indexedContractEvents: IndexedContractEventRepository;
@@ -426,8 +542,14 @@ export interface Release1Repositories {
   auditLogs: AuditLogRepository;
   counterparties: CounterpartyRepository;
   counterpartyDealVersionAcceptances: CounterpartyDealVersionAcceptanceRepository;
+  dealMilestoneDisputeAssignments: DealMilestoneDisputeAssignmentRepository;
+  dealMilestoneDisputeDecisions: DealMilestoneDisputeDecisionRepository;
+  dealMilestoneDisputeEvidence: DealMilestoneDisputeEvidenceRepository;
+  dealMilestoneDisputes: DealMilestoneDisputeRepository;
   dealMilestoneReviewDeadlineExpiries: DealMilestoneReviewDeadlineExpiryRepository;
   dealMilestoneReviews: DealMilestoneReviewRepository;
+  dealMilestoneSettlementExecutionTransactions: DealMilestoneSettlementExecutionTransactionRepository;
+  dealMilestoneSettlementPreparations: DealMilestoneSettlementPreparationRepository;
   dealMilestoneSettlementRequests: DealMilestoneSettlementRequestRepository;
   dealMilestoneSubmissionFiles: DealMilestoneSubmissionFileRepository;
   dealMilestoneSubmissions: DealMilestoneSubmissionRepository;

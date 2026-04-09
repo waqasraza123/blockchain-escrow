@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+repo_root="$(git rev-parse --show-toplevel)"
+
+if [[ "${SAFE_PUSH_VERIFIED:-0}" == "1" ]]; then
+  echo "pre-push: skipping duplicate verification because safe-push already passed"
+  exit 0
+fi
+
+if [[ ! -x "${repo_root}/scripts/verify-push.sh" ]]; then
+  echo "pre-push: missing executable verifier at scripts/verify-push.sh" >&2
+  exit 1
+fi
+
+"${repo_root}/scripts/verify-push.sh" --mode=hook --remote-name="${1:-}" --remote-url="${2:-}"

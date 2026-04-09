@@ -41,6 +41,17 @@ contract MockFundingErc20 {
 
         return true;
     }
+
+    function transfer(address to, uint256 amount) external returns (bool) {
+        uint256 availableBalance = balances[msg.sender];
+
+        require(availableBalance >= amount, "insufficient balance");
+
+        balances[msg.sender] = availableBalance - amount;
+        balances[to] += amount;
+
+        return true;
+    }
 }
 
 contract FalseReturningTransferFromErc20 {
@@ -58,6 +69,22 @@ contract EscrowAgreementActor {
 
     function fund(EscrowAgreement agreement) external {
         agreement.fund();
+    }
+
+    function refundMilestone(
+        EscrowAgreement agreement,
+        uint32 milestonePosition,
+        uint256[] calldata milestoneAmounts
+    ) external {
+        agreement.refundMilestone(milestonePosition, milestoneAmounts);
+    }
+
+    function releaseMilestone(
+        EscrowAgreement agreement,
+        uint32 milestonePosition,
+        uint256[] calldata milestoneAmounts
+    ) external {
+        agreement.releaseMilestone(milestonePosition, milestoneAmounts);
     }
 
     function approve(MockFundingErc20 token, address spender, uint256 amount) external {
@@ -84,6 +111,9 @@ contract EscrowAgreementTest {
     uint256 private constant TOTAL_AMOUNT = 1_500_000;
     uint32 private constant MILESTONE_COUNT = 3;
     uint16 private constant PROTOCOL_FEE_BPS = 250;
+    uint256 private constant MILESTONE_AMOUNT_1 = 200_000;
+    uint256 private constant MILESTONE_AMOUNT_2 = 500_000;
+    uint256 private constant MILESTONE_AMOUNT_3 = 800_000;
 
     function setUp() public {
         agreement = new EscrowAgreement();
@@ -119,6 +149,10 @@ contract EscrowAgreementTest {
         require(agreement.arbitrator() == ARBITRATOR, "arbitrator mismatch");
         require(agreement.dealId() == DEAL_ID, "deal id mismatch");
         require(agreement.dealVersionHash() == DEAL_VERSION_HASH, "deal version hash mismatch");
+        require(
+            agreement.milestoneAmountsHash() == keccak256(abi.encode(_defaultMilestoneAmounts())),
+            "milestone amounts hash mismatch"
+        );
         require(agreement.totalAmount() == TOTAL_AMOUNT, "total amount mismatch");
         require(agreement.milestoneCount() == MILESTONE_COUNT, "milestone count mismatch");
         require(agreement.protocolFeeBps() == PROTOCOL_FEE_BPS, "protocol fee mismatch");
@@ -145,6 +179,10 @@ contract EscrowAgreementTest {
 
         require(agreement.feeVault() == address(feeVault), "fee vault snapshot changed");
         require(agreement.protocolFeeBps() == PROTOCOL_FEE_BPS, "protocol fee snapshot changed");
+        require(
+            agreement.milestoneAmountsHash() == keccak256(abi.encode(_defaultMilestoneAmounts())),
+            "milestone amounts snapshot changed"
+        );
     }
 
     function testBuyerCanFundAgreementAfterInitialization() external {
@@ -186,6 +224,82 @@ contract EscrowAgreementTest {
         _expectCustomError(
             _callFundAgreementFromActor(factoryActor, failingAgreement),
             EscrowAgreement.Erc20TransferFromFailed.selector
+        );
+    }
+
+    function testBuyerCanReleaseAndRefundMilestonesAfterFunding() external {
+        factoryActor.initialize(agreement, _defaultInitialization());
+        fundingToken.mint(address(factoryActor), TOTAL_AMOUNT);
+        factoryActor.approve(fundingToken, address(agreement), TOTAL_AMOUNT);
+        factoryActor.fund(agreement);
+
+        uint256[] memory milestoneAmounts = _defaultMilestoneAmounts();
+        uint256 sellerBalanceBefore = fundingToken.balanceOf(SELLER);
+        uint256 buyerBalanceBefore = fundingToken.balanceOf(address(factoryActor));
+
+        factoryActor.releaseMilestone(agreement, 1, milestoneAmounts);
+
+        require(agreement.milestoneSettlementKind(1) == 1, "milestone release kind mismatch");
+        require(agreement.totalReleasedAmount() == MILESTONE_AMOUNT_1, "released total mismatch");
+        require(
+            fundingToken.balanceOf(SELLER) == sellerBalanceBefore + MILESTONE_AMOUNT_1,
+            "seller release balance mismatch"
+        );
+
+        factoryActor.refundMilestone(agreement, 2, milestoneAmounts);
+
+        require(agreement.milestoneSettlementKind(2) == 2, "milestone refund kind mismatch");
+        require(agreement.totalRefundedAmount() == MILESTONE_AMOUNT_2, "refunded total mismatch");
+        require(
+            fundingToken.balanceOf(address(factoryActor)) == buyerBalanceBefore + MILESTONE_AMOUNT_2,
+            "buyer refund balance mismatch"
+        );
+        require(
+            fundingToken.balanceOf(address(agreement)) == TOTAL_AMOUNT - MILESTONE_AMOUNT_1 - MILESTONE_AMOUNT_2,
+            "agreement remaining balance mismatch"
+        );
+    }
+
+    function testRejectsMilestoneSettlementWhenUnauthorizedInvalidOrRepeated() external {
+        uint256[] memory milestoneAmounts = _defaultMilestoneAmounts();
+        _expectCustomError(
+            _callReleaseMilestoneFromActor(factoryActor, agreement, 1, milestoneAmounts),
+            EscrowAgreement.AgreementNotFunded.selector
+        );
+
+        factoryActor.initialize(agreement, _defaultInitialization());
+        fundingToken.mint(address(factoryActor), TOTAL_AMOUNT);
+        factoryActor.approve(fundingToken, address(agreement), TOTAL_AMOUNT);
+        factoryActor.fund(agreement);
+
+        EscrowAgreementActor unauthorizedActor = new EscrowAgreementActor();
+        _expectCustomError(
+            _callReleaseMilestoneFromActor(unauthorizedActor, agreement, 1, milestoneAmounts),
+            EscrowAgreement.SettlementUnauthorized.selector
+        );
+
+        uint256[] memory invalidMilestoneAmounts = new uint256[](3);
+        invalidMilestoneAmounts[0] = MILESTONE_AMOUNT_1;
+        invalidMilestoneAmounts[1] = MILESTONE_AMOUNT_2 + 1;
+        invalidMilestoneAmounts[2] = MILESTONE_AMOUNT_3 - 1;
+        _expectCustomError(
+            _callReleaseMilestoneFromActor(factoryActor, agreement, 1, invalidMilestoneAmounts),
+            EscrowAgreement.MilestoneAmountsHashMismatch.selector
+        );
+
+        _expectCustomError(
+            _callRefundMilestoneFromActor(factoryActor, agreement, 0, milestoneAmounts),
+            EscrowAgreement.InvalidMilestonePosition.selector
+        );
+        _expectCustomError(
+            _callRefundMilestoneFromActor(factoryActor, agreement, MILESTONE_COUNT + 1, milestoneAmounts),
+            EscrowAgreement.InvalidMilestonePosition.selector
+        );
+
+        factoryActor.releaseMilestone(agreement, 1, milestoneAmounts);
+        _expectCustomError(
+            _callRefundMilestoneFromActor(factoryActor, agreement, 1, milestoneAmounts),
+            EscrowAgreement.MilestoneAlreadySettled.selector
         );
     }
 
@@ -232,6 +346,25 @@ contract EscrowAgreementTest {
         initialization = _defaultInitialization();
         initialization.milestoneCount = 0;
         _expectCustomError(_callInitialize(initialization), EscrowAgreement.InvalidMilestoneCount.selector);
+
+        initialization = _defaultInitialization();
+        initialization.milestoneAmounts = new uint256[](2);
+        initialization.milestoneAmounts[0] = MILESTONE_AMOUNT_1;
+        initialization.milestoneAmounts[1] = TOTAL_AMOUNT - MILESTONE_AMOUNT_1;
+        _expectCustomError(
+            _callInitialize(initialization), EscrowAgreement.InvalidMilestoneAmountsLength.selector
+        );
+
+        initialization = _defaultInitialization();
+        initialization.milestoneAmounts[1] = 0;
+        initialization.milestoneAmounts[2] = TOTAL_AMOUNT - MILESTONE_AMOUNT_1;
+        _expectCustomError(_callInitialize(initialization), EscrowAgreement.InvalidMilestoneAmount.selector);
+
+        initialization = _defaultInitialization();
+        initialization.milestoneAmounts[2] = MILESTONE_AMOUNT_3 - 1;
+        _expectCustomError(
+            _callInitialize(initialization), EscrowAgreement.MilestoneAmountsTotalMismatch.selector
+        );
     }
 
     function testRejectsTokenAndArbitratorPolicyViolations() external {
@@ -280,8 +413,16 @@ contract EscrowAgreementTest {
             dealId: DEAL_ID,
             dealVersionHash: DEAL_VERSION_HASH,
             totalAmount: TOTAL_AMOUNT,
-            milestoneCount: MILESTONE_COUNT
+            milestoneCount: MILESTONE_COUNT,
+            milestoneAmounts: _defaultMilestoneAmounts()
         });
+    }
+
+    function _defaultMilestoneAmounts() private pure returns (uint256[] memory milestoneAmounts) {
+        milestoneAmounts = new uint256[](3);
+        milestoneAmounts[0] = MILESTONE_AMOUNT_1;
+        milestoneAmounts[1] = MILESTONE_AMOUNT_2;
+        milestoneAmounts[2] = MILESTONE_AMOUNT_3;
     }
 
     function _callInitialize(EscrowAgreement.AgreementInitialization memory initialization)
@@ -312,6 +453,32 @@ contract EscrowAgreementTest {
         returns (bytes memory)
     {
         try actor.fund(targetAgreement) {
+            revert("expected revert");
+        } catch (bytes memory reason) {
+            return reason;
+        }
+    }
+
+    function _callReleaseMilestoneFromActor(
+        EscrowAgreementActor actor,
+        EscrowAgreement targetAgreement,
+        uint32 milestonePosition,
+        uint256[] memory milestoneAmounts
+    ) private returns (bytes memory) {
+        try actor.releaseMilestone(targetAgreement, milestonePosition, milestoneAmounts) {
+            revert("expected revert");
+        } catch (bytes memory reason) {
+            return reason;
+        }
+    }
+
+    function _callRefundMilestoneFromActor(
+        EscrowAgreementActor actor,
+        EscrowAgreement targetAgreement,
+        uint32 milestonePosition,
+        uint256[] memory milestoneAmounts
+    ) private returns (bytes memory) {
+        try actor.refundMilestone(targetAgreement, milestonePosition, milestoneAmounts) {
             revert("expected revert");
         } catch (bytes memory reason) {
             return reason;

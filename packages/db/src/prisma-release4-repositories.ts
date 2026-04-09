@@ -10,6 +10,7 @@ import type {
   ArbitratorRegistryEntryRecord,
   ChainCursorRecord,
   ContractOwnershipRecord,
+  EscrowAgreementMilestoneSettlementRecord,
   EscrowAgreementRecord,
   FeeVaultStateRecord,
   IndexedBlockRecord,
@@ -368,6 +369,48 @@ function mapEscrowAgreementRecord(record: {
   };
 }
 
+function mapEscrowAgreementMilestoneSettlementRecord(record: {
+  agreementAddress: string;
+  amount: string;
+  beneficiaryAddress: string;
+  chainId: number;
+  dealId: string;
+  dealVersionHash: string;
+  kind: string;
+  milestonePosition: number;
+  settledAt: Date;
+  settledBlockHash: string;
+  settledBlockNumber: bigint;
+  settledByAddress: string;
+  settledLogIndex: number;
+  settledTransactionHash: string;
+  updatedAt: Date;
+}): EscrowAgreementMilestoneSettlementRecord {
+  return {
+    agreementAddress:
+      record.agreementAddress as EscrowAgreementMilestoneSettlementRecord["agreementAddress"],
+    amount: record.amount,
+    beneficiaryAddress:
+      record.beneficiaryAddress as EscrowAgreementMilestoneSettlementRecord["beneficiaryAddress"],
+    chainId: record.chainId,
+    dealId: record.dealId as EscrowAgreementMilestoneSettlementRecord["dealId"],
+    dealVersionHash:
+      record.dealVersionHash as EscrowAgreementMilestoneSettlementRecord["dealVersionHash"],
+    kind: record.kind as EscrowAgreementMilestoneSettlementRecord["kind"],
+    milestonePosition: record.milestonePosition,
+    settledAt: toIsoTimestamp(record.settledAt),
+    settledBlockHash:
+      record.settledBlockHash as EscrowAgreementMilestoneSettlementRecord["settledBlockHash"],
+    settledBlockNumber: toBigIntString(record.settledBlockNumber),
+    settledByAddress:
+      record.settledByAddress as EscrowAgreementMilestoneSettlementRecord["settledByAddress"],
+    settledLogIndex: record.settledLogIndex,
+    settledTransactionHash:
+      record.settledTransactionHash as EscrowAgreementMilestoneSettlementRecord["settledTransactionHash"],
+    updatedAt: toIsoTimestamp(record.updatedAt)
+  };
+}
+
 function buildRelease4Repositories(database: DatabaseClient): Release4Repositories {
   return {
     arbitratorRegistryEntries: {
@@ -610,6 +653,77 @@ function buildRelease4Repositories(database: DatabaseClient): Release4Repositori
         });
 
         return mapEscrowAgreementRecord(persisted);
+      }
+    },
+    escrowAgreementMilestoneSettlements: {
+      async listByChainId(chainId) {
+        const records =
+          await database.escrowAgreementMilestoneSettlementProjection.findMany({
+            where: { chainId },
+            orderBy: [{ agreementAddress: "asc" }, { milestonePosition: "asc" }]
+          });
+
+        return records.map(mapEscrowAgreementMilestoneSettlementRecord);
+      },
+      async listByChainIdAndAgreementAddress(chainId, agreementAddress) {
+        const records =
+          await database.escrowAgreementMilestoneSettlementProjection.findMany({
+            where: { agreementAddress, chainId },
+            orderBy: [{ milestonePosition: "asc" }]
+          });
+
+        return records.map(mapEscrowAgreementMilestoneSettlementRecord);
+      },
+      async resetByChainId(chainId) {
+        await database.escrowAgreementMilestoneSettlementProjection.deleteMany({
+          where: { chainId }
+        });
+      },
+      async upsert(record) {
+        const persisted =
+          await database.escrowAgreementMilestoneSettlementProjection.upsert({
+            where: {
+              chainId_agreementAddress_milestonePosition: {
+                agreementAddress: record.agreementAddress,
+                chainId: record.chainId,
+                milestonePosition: record.milestonePosition
+              }
+            },
+            update: {
+              amount: record.amount,
+              beneficiaryAddress: record.beneficiaryAddress,
+              dealId: record.dealId,
+              dealVersionHash: record.dealVersionHash,
+              kind: record.kind,
+              settledAt: toDate(record.settledAt),
+              settledBlockHash: record.settledBlockHash,
+              settledBlockNumber: BigInt(record.settledBlockNumber),
+              settledByAddress: record.settledByAddress,
+              settledLogIndex: record.settledLogIndex,
+              settledTransactionHash: record.settledTransactionHash,
+              updatedAt: toDate(record.updatedAt)
+            },
+            create: {
+              id: `${record.chainId}:${record.agreementAddress}:${record.milestonePosition}`,
+              agreementAddress: record.agreementAddress,
+              amount: record.amount,
+              beneficiaryAddress: record.beneficiaryAddress,
+              chainId: record.chainId,
+              dealId: record.dealId,
+              dealVersionHash: record.dealVersionHash,
+              kind: record.kind,
+              milestonePosition: record.milestonePosition,
+              settledAt: toDate(record.settledAt),
+              settledBlockHash: record.settledBlockHash,
+              settledBlockNumber: BigInt(record.settledBlockNumber),
+              settledByAddress: record.settledByAddress,
+              settledLogIndex: record.settledLogIndex,
+              settledTransactionHash: record.settledTransactionHash,
+              updatedAt: toDate(record.updatedAt)
+            }
+          });
+
+        return mapEscrowAgreementMilestoneSettlementRecord(persisted);
       }
     },
     feeVaultStates: {

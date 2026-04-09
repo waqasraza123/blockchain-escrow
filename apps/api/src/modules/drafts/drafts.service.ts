@@ -34,6 +34,7 @@ import {
   draftDealParamsSchema,
   organizationDraftDealsParamsSchema,
   updateDraftCounterpartyWalletSchema,
+  isCustodyTrackedDealState,
   type CreateDealVersionAcceptanceResponse,
   type CreateCounterpartyDealVersionAcceptanceResponse,
   type CreateDealVersionResponse,
@@ -1449,7 +1450,7 @@ export class DraftsService {
       return null;
     }
 
-    if (draft.state === "ACTIVE") {
+    if (isCustodyTrackedDealState(draft.state)) {
       return draft;
     }
 
@@ -1499,7 +1500,7 @@ export class DraftsService {
   private async assertDraftIsMutable(draft: DraftDealRecord): Promise<void> {
     const linkedAgreement = await this.findLinkedAgreementForDraft(draft);
 
-    if (linkedAgreement || draft.state === "ACTIVE") {
+    if (linkedAgreement || isCustodyTrackedDealState(draft.state)) {
       throw new ConflictException("draft deal is already active onchain");
     }
 

@@ -2,6 +2,7 @@ import type {
   ArbitratorRegistryEntryRecord,
   ChainCursorRecord,
   ContractOwnershipRecord,
+  EscrowAgreementMilestoneSettlementRecord,
   EscrowAgreementRecord,
   FeeVaultStateRecord,
   IndexedBlockRecord,
@@ -99,6 +100,40 @@ export class InMemoryRelease4Repositories implements Release4Repositories {
           !(entry.chainId === record.chainId && entry.agreementAddress === record.agreementAddress)
       );
       this.escrowAgreementsStore.push(record);
+      return record;
+    }
+  };
+
+  readonly escrowAgreementMilestoneSettlements = {
+    listByChainId: async (chainId: number) =>
+      this.escrowAgreementMilestoneSettlementsStore.filter(
+        (record) => record.chainId === chainId
+      ),
+    listByChainIdAndAgreementAddress: async (
+      chainId: number,
+      agreementAddress: string
+    ) =>
+      this.escrowAgreementMilestoneSettlementsStore.filter(
+        (record) =>
+          record.chainId === chainId && record.agreementAddress === agreementAddress
+      ),
+    resetByChainId: async (chainId: number) => {
+      this.escrowAgreementMilestoneSettlementsStore =
+        this.escrowAgreementMilestoneSettlementsStore.filter(
+          (record) => record.chainId !== chainId
+        );
+    },
+    upsert: async (record: EscrowAgreementMilestoneSettlementRecord) => {
+      this.escrowAgreementMilestoneSettlementsStore =
+        this.escrowAgreementMilestoneSettlementsStore.filter(
+          (entry) =>
+            !(
+              entry.chainId === record.chainId &&
+              entry.agreementAddress === record.agreementAddress &&
+              entry.milestonePosition === record.milestonePosition
+            )
+        );
+      this.escrowAgreementMilestoneSettlementsStore.push(record);
       return record;
     }
   };
@@ -254,6 +289,8 @@ export class InMemoryRelease4Repositories implements Release4Repositories {
   private chainCursorStore: ChainCursorRecord[] = [];
   private contractOwnershipsStore: ContractOwnershipRecord[] = [];
   private escrowAgreementsStore: EscrowAgreementRecord[] = [];
+  private escrowAgreementMilestoneSettlementsStore: EscrowAgreementMilestoneSettlementRecord[] =
+    [];
   private feeVaultStatesStore: FeeVaultStateRecord[] = [];
   private indexedTransactionsStore: IndexedTransactionRecord[] = [];
   private protocolConfigStatesStore: ProtocolConfigStateRecord[] = [];

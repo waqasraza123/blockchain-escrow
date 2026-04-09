@@ -14,7 +14,14 @@ export type Release1TableName =
 
 export const release2TableNames = {
   dealMilestoneReviewDeadlineExpiries: "deal_milestone_review_deadline_expiries",
+  dealMilestoneDisputeAssignments: "deal_milestone_dispute_assignments",
+  dealMilestoneDisputeDecisions: "deal_milestone_dispute_decisions",
+  dealMilestoneDisputeEvidence: "deal_milestone_dispute_evidence",
+  dealMilestoneDisputes: "deal_milestone_disputes",
   dealMilestoneReviews: "deal_milestone_reviews",
+  dealMilestoneSettlementExecutionTransactions:
+    "deal_milestone_settlement_execution_transactions",
+  dealMilestoneSettlementPreparations: "deal_milestone_settlement_preparations",
   dealMilestoneSettlementRequests: "deal_milestone_settlement_requests",
   counterparties: "counterparties",
   dealMilestoneSubmissionFiles: "deal_milestone_submission_files",
@@ -38,6 +45,8 @@ export const release4TableNames = {
   chainCursors: "chain_cursors",
   contractOwnershipProjections: "contract_ownership_projections",
   escrowAgreementProjections: "escrow_agreement_projections",
+  escrowAgreementMilestoneSettlementProjections:
+    "escrow_agreement_milestone_settlement_projections",
   feeVaultProjections: "fee_vault_projections",
   indexedBlocks: "indexed_blocks",
   indexedContractEvents: "indexed_contract_events",

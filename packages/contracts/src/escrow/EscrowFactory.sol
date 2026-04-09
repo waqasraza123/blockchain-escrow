@@ -22,6 +22,7 @@ contract EscrowFactory {
         bytes32 dealVersionHash;
         uint256 totalAmount;
         uint32 milestoneCount;
+        uint256[] milestoneAmounts;
     }
 
     error AgreementInitializationFailed();
@@ -105,7 +106,8 @@ contract EscrowFactory {
             dealId: dealId,
             dealVersionHash: creation.dealVersionHash,
             totalAmount: creation.totalAmount,
-            milestoneCount: creation.milestoneCount
+            milestoneCount: creation.milestoneCount,
+            milestoneAmounts: creation.milestoneAmounts
         });
 
         try EscrowAgreement(agreementAddress).initialize(initialization) {}

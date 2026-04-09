@@ -31,8 +31,16 @@ enum AuditAction {
   AUTH_NONCE_ISSUED
   AUTH_SESSION_VERIFIED
   COUNTERPARTY_CREATED
+  DEAL_MILESTONE_DISPUTE_ARBITRATOR_ASSIGNED
+  DEAL_MILESTONE_DISPUTE_DECISION_SUBMITTED
+  DEAL_MILESTONE_DISPUTE_OPENED
   DEAL_MILESTONE_RELEASE_REQUESTED
   DEAL_MILESTONE_REFUND_REQUESTED
+  DEAL_MILESTONE_SETTLEMENT_EXECUTION_TRANSACTION_RECONCILIATION_UPDATED
+  DEAL_MILESTONE_SETTLEMENT_EXECUTION_TRANSACTION_STALE_PENDING
+  DEAL_MILESTONE_SETTLEMENT_EXECUTION_TRANSACTION_SUBMITTED
+  DEAL_MILESTONE_SETTLEMENT_EXECUTION_TRANSACTION_SUPERSEDED
+  DEAL_MILESTONE_SETTLEMENT_EXECUTION_PREPARED
   DEAL_MILESTONE_REVIEW_DEADLINE_EXPIRED
   DEAL_MILESTONE_REVIEW_APPROVED
   DEAL_MILESTONE_REVIEW_REJECTED
@@ -41,6 +49,7 @@ enum AuditAction {
   DEAL_VERSION_ACCEPTANCE_CREATED
   DEAL_VERSION_COUNTERPARTY_ACCEPTANCE_CREATED
   DRAFT_DEAL_ACTIVATED
+  DRAFT_DEAL_CUSTODY_STATE_RECONCILED
   DEAL_VERSION_CREATED
   DRAFT_DEAL_CREATED
   FILE_CREATED
@@ -73,8 +82,17 @@ enum MilestoneSettlementRequestKind {
   REFUND
 }
 
+enum MilestoneSettlementRequestSource {
+  BUYER_REVIEW
+  ARBITRATOR_DECISION
+}
+
 enum AuditEntityType {
   COUNTERPARTY
+  DEAL_MILESTONE_DISPUTE
+  DEAL_MILESTONE_DISPUTE_ASSIGNMENT
+  DEAL_MILESTONE_DISPUTE_DECISION
+  DEAL_MILESTONE_SETTLEMENT_EXECUTION_TRANSACTION
   DEAL_MILESTONE_SETTLEMENT_REQUEST
   DEAL_MILESTONE_REVIEW
   DEAL_MILESTONE_SUBMISSION
@@ -158,6 +176,8 @@ enum IndexedEventName {
   AgreementCreated
   AgreementInitialized
   AgreementFunded
+  MilestoneReleased
+  MilestoneRefunded
 }
 
 enum IndexedTransactionExecutionStatus {
@@ -173,7 +193,10 @@ model User {
   wallets                    Wallet[]
   organizationsOwned         Organization[]
   counterpartiesCreated      Counterparty[]         @relation("CounterpartyCreatedByUser")
+  dealMilestoneDisputeAssignmentsMade DealMilestoneDisputeAssignment[] @relation("DealMilestoneDisputeAssignmentAssignedByUser")
+  dealMilestoneDisputesOpened DealMilestoneDispute[] @relation("DealMilestoneDisputeOpenedByUser")
   dealMilestoneReviewsMade   DealMilestoneReview[]  @relation("DealMilestoneReviewReviewedByUser")
+  dealMilestoneSettlementExecutionTransactionsSubmitted DealMilestoneSettlementExecutionTransaction[] @relation("DealMilestoneSettlementExecutionTransactionSubmittedByUser")
   dealMilestoneSettlementRequestsMade DealMilestoneSettlementRequest[] @relation("DealMilestoneSettlementRequestRequestedByUser")
   draftDealsCreated          DraftDeal[]            @relation("DraftDealCreatedByUser")
   dealVersionAcceptancesMade DealVersionAcceptance[] @relation("DealVersionAcceptanceAcceptedByUser")
@@ -200,6 +223,7 @@ model Wallet {
   user                  User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
   sessions              Session[]
   dealVersionAcceptances DealVersionAcceptance[] @relation("DealVersionAcceptanceSignerWallet")
+  dealMilestoneSettlementExecutionTransactionsSubmitted DealMilestoneSettlementExecutionTransaction[] @relation("DealMilestoneSettlementExecutionTransactionSubmittedWallet")
   fundingTransactionsSubmitted FundingTransaction[] @relation("FundingTransactionSubmittedWallet")
 
   @@index([userId], map: "wallets_user_id_idx")
@@ -248,7 +272,12 @@ model Organization {
   updatedAt              DateTime                @db.Timestamptz(3)
   createdByUser          User                    @relation(fields: [createdByUserId], references: [id], onDelete: Restrict)
   counterparties         Counterparty[]
+  dealMilestoneDisputeAssignments DealMilestoneDisputeAssignment[]
+  dealMilestoneDisputeDecisions DealMilestoneDisputeDecision[]
+  dealMilestoneDisputes  DealMilestoneDispute[]
   dealMilestoneReviewDeadlineExpiries DealMilestoneReviewDeadlineExpiry[]
+  dealMilestoneSettlementExecutionTransactions DealMilestoneSettlementExecutionTransaction[]
+  dealMilestoneSettlementPreparations DealMilestoneSettlementPreparation[]
   dealMilestoneReviews   DealMilestoneReview[]
   dealMilestoneSettlementRequests DealMilestoneSettlementRequest[]
   dealMilestoneSubmissions DealMilestoneSubmission[]
@@ -304,6 +333,7 @@ model StoredFile {
   category         FileCategory
   createdAt        DateTime     @db.Timestamptz(3)
   updatedAt        DateTime     @db.Timestamptz(3)
+  dealMilestoneDisputeEvidenceLinks DealMilestoneDisputeEvidence[]
   dealMilestoneSubmissionFiles DealMilestoneSubmissionFile[]
   dealVersionFiles DealVersionFile[]
   organization     Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
@@ -355,7 +385,10 @@ model DraftDeal {
   organization       Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   createdByUser      User               @relation("DraftDealCreatedByUser", fields: [createdByUserId], references: [id], onDelete: Restrict)
   template           Template?          @relation("DraftDealTemplate", fields: [templateId], references: [id], onDelete: SetNull)
+  milestoneDisputes  DealMilestoneDispute[]
   milestoneReviewDeadlineExpiries DealMilestoneReviewDeadlineExpiry[]
+  milestoneSettlementExecutionTransactions DealMilestoneSettlementExecutionTransaction[]
+  milestoneSettlementPreparations DealMilestoneSettlementPreparation[]
   milestoneSubmissions DealMilestoneSubmission[]
   milestoneSettlementRequests DealMilestoneSettlementRequest[]
   fundingTransactions FundingTransaction[]
@@ -410,8 +443,11 @@ model DealVersion {
   acceptances        DealVersionAcceptance[]
   counterpartyAcceptances CounterpartyDealVersionAcceptance[]
   fundingTransactions FundingTransaction[]
+  milestoneDisputes  DealMilestoneDispute[]
   milestoneReviewDeadlineExpiries DealMilestoneReviewDeadlineExpiry[]
   milestoneReviews   DealMilestoneReview[]
+  milestoneSettlementExecutionTransactions DealMilestoneSettlementExecutionTransaction[]
+  milestoneSettlementPreparations DealMilestoneSettlementPreparation[]
   milestoneSettlementRequests DealMilestoneSettlementRequest[]
   milestoneSubmissions DealMilestoneSubmission[]
   parties            DealVersionParty[]
@@ -459,8 +495,11 @@ model DealVersionMilestone {
   dueAt         DateTime?   @db.Timestamptz(3)
   createdAt     DateTime    @db.Timestamptz(3)
   dealVersion   DealVersion @relation(fields: [dealVersionId], references: [id], onDelete: Cascade)
+  disputes      DealMilestoneDispute[]
   reviewDeadlineExpiries DealMilestoneReviewDeadlineExpiry[]
   reviews       DealMilestoneReview[]
+  settlementExecutionTransactions DealMilestoneSettlementExecutionTransaction[]
+  settlementPreparations DealMilestoneSettlementPreparation[]
   settlementRequests DealMilestoneSettlementRequest[]
   submissions   DealMilestoneSubmission[]
 
@@ -493,8 +532,11 @@ model DealMilestoneSubmission {
   dealVersionMilestone   DealVersionMilestone @relation(fields: [dealVersionMilestoneId], references: [id], onDelete: Cascade)
   submittedByUser        User?                @relation("DealMilestoneSubmissionSubmittedByUser", fields: [submittedByUserId], references: [id], onDelete: SetNull)
   files                  DealMilestoneSubmissionFile[]
+  disputes               DealMilestoneDispute[]
   reviewDeadlineExpiry   DealMilestoneReviewDeadlineExpiry?
   review                 DealMilestoneReview?
+  settlementExecutionTransactions DealMilestoneSettlementExecutionTransaction[]
+  settlementPreparations DealMilestoneSettlementPreparation[]
   settlementRequests     DealMilestoneSettlementRequest[]
 
   @@unique([dealVersionMilestoneId, submissionNumber], map: "deal_milestone_submissions_milestone_id_submission_number_key")
@@ -561,6 +603,9 @@ model DealMilestoneReview {
   dealVersionMilestone      DealVersionMilestone    @relation(fields: [dealVersionMilestoneId], references: [id], onDelete: Cascade)
   dealMilestoneSubmission   DealMilestoneSubmission @relation(fields: [dealMilestoneSubmissionId], references: [id], onDelete: Cascade)
   reviewedByUser            User                    @relation("DealMilestoneReviewReviewedByUser", fields: [reviewedByUserId], references: [id], onDelete: Restrict)
+  disputes                  DealMilestoneDispute[]
+  executionTransactions     DealMilestoneSettlementExecutionTransaction[]
+  settlementPreparation     DealMilestoneSettlementPreparation?
   settlementRequest         DealMilestoneSettlementRequest?
 
   @@index([organizationId], map: "deal_milestone_reviews_organization_id_idx")
@@ -572,6 +617,95 @@ model DealMilestoneReview {
   @@map("deal_milestone_reviews")
 }
 
+model DealMilestoneDispute {
+  id                        String                  @id @db.Text
+  organizationId            String                  @db.Text
+  draftDealId               String                  @db.Text
+  dealVersionId             String                  @db.Text
+  dealVersionMilestoneId    String                  @db.Text
+  dealMilestoneSubmissionId String                  @db.Text
+  dealMilestoneReviewId     String                  @unique @db.Text
+  openedByUserId            String                  @db.Text
+  statementMarkdown         String                  @db.Text
+  openedAt                  DateTime                @db.Timestamptz(3)
+  organization              Organization            @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  draftDeal                 DraftDeal               @relation(fields: [draftDealId], references: [id], onDelete: Cascade)
+  dealVersion               DealVersion             @relation(fields: [dealVersionId], references: [id], onDelete: Cascade)
+  dealVersionMilestone      DealVersionMilestone    @relation(fields: [dealVersionMilestoneId], references: [id], onDelete: Cascade)
+  dealMilestoneSubmission   DealMilestoneSubmission @relation(fields: [dealMilestoneSubmissionId], references: [id], onDelete: Cascade)
+  dealMilestoneReview       DealMilestoneReview     @relation(fields: [dealMilestoneReviewId], references: [id], onDelete: Cascade)
+  openedByUser              User                    @relation("DealMilestoneDisputeOpenedByUser", fields: [openedByUserId], references: [id], onDelete: Restrict)
+  evidenceLinks             DealMilestoneDisputeEvidence[]
+  assignments               DealMilestoneDisputeAssignment[]
+  decision                  DealMilestoneDisputeDecision?
+  settlementRequest         DealMilestoneSettlementRequest?
+
+  @@index([organizationId], map: "deal_milestone_disputes_organization_id_idx")
+  @@index([draftDealId], map: "deal_milestone_disputes_draft_deal_id_idx")
+  @@index([dealVersionId], map: "deal_milestone_disputes_deal_version_id_idx")
+  @@index([dealVersionMilestoneId], map: "deal_milestone_disputes_milestone_id_idx")
+  @@index([dealMilestoneSubmissionId], map: "deal_milestone_disputes_submission_id_idx")
+  @@index([openedByUserId], map: "deal_milestone_disputes_opened_by_user_id_idx")
+  @@index([dealVersionMilestoneId, openedAt], map: "deal_milestone_disputes_milestone_opened_at_idx")
+  @@map("deal_milestone_disputes")
+}
+
+model DealMilestoneDisputeEvidence {
+  id                     String               @id @db.Text
+  dealMilestoneDisputeId String               @db.Text
+  fileId                 String               @db.Text
+  createdAt              DateTime             @db.Timestamptz(3)
+  dealMilestoneDispute   DealMilestoneDispute @relation(fields: [dealMilestoneDisputeId], references: [id], onDelete: Cascade)
+  file                   StoredFile           @relation(fields: [fileId], references: [id], onDelete: Cascade)
+
+  @@unique([dealMilestoneDisputeId, fileId], map: "deal_milestone_dispute_evidence_dispute_id_file_id_key")
+  @@index([dealMilestoneDisputeId], map: "deal_milestone_dispute_evidence_dispute_id_idx")
+  @@index([fileId], map: "deal_milestone_dispute_evidence_file_id_idx")
+  @@map("deal_milestone_dispute_evidence")
+}
+
+model DealMilestoneDisputeAssignment {
+  id                     String               @id @db.Text
+  organizationId         String               @db.Text
+  dealMilestoneDisputeId String               @db.Text
+  assignedByUserId       String               @db.Text
+  chainId                Int
+  arbitratorAddress      String               @db.Text
+  assignedAt             DateTime             @db.Timestamptz(3)
+  organization           Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  dealMilestoneDispute   DealMilestoneDispute @relation(fields: [dealMilestoneDisputeId], references: [id], onDelete: Cascade)
+  assignedByUser         User                 @relation("DealMilestoneDisputeAssignmentAssignedByUser", fields: [assignedByUserId], references: [id], onDelete: Restrict)
+  decision               DealMilestoneDisputeDecision?
+
+  @@index([organizationId], map: "deal_milestone_dispute_assignments_organization_id_idx")
+  @@index([dealMilestoneDisputeId], map: "deal_milestone_dispute_assignments_dispute_id_idx")
+  @@index([assignedByUserId], map: "deal_milestone_dispute_assignments_assigned_by_user_id_idx")
+  @@index([dealMilestoneDisputeId, assignedAt], map: "deal_milestone_dispute_assignments_dispute_assigned_at_idx")
+  @@map("deal_milestone_dispute_assignments")
+}
+
+model DealMilestoneDisputeDecision {
+  id                             String                         @id @db.Text
+  organizationId                 String                         @db.Text
+  dealMilestoneDisputeId         String                         @unique @db.Text
+  dealMilestoneDisputeAssignmentId String                       @unique @db.Text
+  dealMilestoneSettlementRequestId String                       @unique @db.Text
+  kind                           MilestoneSettlementRequestKind
+  statementMarkdown              String                         @db.Text
+  signature                      String                         @db.Text
+  typedData                      Json
+  signedByArbitratorAddress      String                         @db.Text
+  decidedAt                      DateTime                       @db.Timestamptz(3)
+  organization                   Organization                   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  dealMilestoneDispute           DealMilestoneDispute           @relation(fields: [dealMilestoneDisputeId], references: [id], onDelete: Cascade)
+  dealMilestoneDisputeAssignment DealMilestoneDisputeAssignment @relation(fields: [dealMilestoneDisputeAssignmentId], references: [id], onDelete: Cascade)
+  dealMilestoneSettlementRequest DealMilestoneSettlementRequest @relation(fields: [dealMilestoneSettlementRequestId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId], map: "deal_milestone_dispute_decisions_organization_id_idx")
+  @@index([decidedAt], map: "deal_milestone_dispute_decisions_decided_at_idx")
+  @@map("deal_milestone_dispute_decisions")
+}
+
 model DealMilestoneSettlementRequest {
   id                        String                        @id @db.Text
   organizationId            String                        @db.Text
@@ -580,7 +714,10 @@ model DealMilestoneSettlementRequest {
   dealVersionMilestoneId    String                        @db.Text
   dealMilestoneSubmissionId String                        @db.Text
   dealMilestoneReviewId     String                        @unique @db.Text
-  requestedByUserId         String                        @db.Text
+  dealMilestoneDisputeId    String?                       @unique @db.Text
+  requestedByUserId         String?                       @db.Text
+  requestedByArbitratorAddress String?                    @db.Text
+  source                    MilestoneSettlementRequestSource
   kind                      MilestoneSettlementRequestKind
   statementMarkdown         String?                       @db.Text
   requestedAt               DateTime                      @db.Timestamptz(3)
@@ -590,16 +727,105 @@ model DealMilestoneSettlementRequest {
   dealVersionMilestone      DealVersionMilestone          @relation(fields: [dealVersionMilestoneId], references: [id], onDelete: Cascade)
   dealMilestoneSubmission   DealMilestoneSubmission       @relation(fields: [dealMilestoneSubmissionId], references: [id], onDelete: Cascade)
   dealMilestoneReview       DealMilestoneReview           @relation(fields: [dealMilestoneReviewId], references: [id], onDelete: Cascade)
-  requestedByUser           User                          @relation("DealMilestoneSettlementRequestRequestedByUser", fields: [requestedByUserId], references: [id], onDelete: Restrict)
+  dealMilestoneDispute      DealMilestoneDispute?         @relation(fields: [dealMilestoneDisputeId], references: [id], onDelete: SetNull)
+  requestedByUser           User?                         @relation("DealMilestoneSettlementRequestRequestedByUser", fields: [requestedByUserId], references: [id], onDelete: SetNull)
+  disputeDecision           DealMilestoneDisputeDecision?
+  executionTransactions     DealMilestoneSettlementExecutionTransaction[]
+  executionPreparation      DealMilestoneSettlementPreparation?
 
   @@index([organizationId], map: "deal_milestone_settlement_requests_organization_id_idx")
   @@index([draftDealId], map: "deal_milestone_settlement_requests_draft_deal_id_idx")
   @@index([dealVersionId], map: "deal_milestone_settlement_requests_deal_version_id_idx")
   @@index([dealVersionMilestoneId], map: "deal_milestone_settlement_requests_milestone_id_idx")
   @@index([dealMilestoneSubmissionId], map: "deal_milestone_settlement_requests_submission_id_idx")
+  @@index([dealMilestoneDisputeId], map: "deal_milestone_settlement_requests_dispute_id_idx")
   @@index([requestedByUserId], map: "deal_milestone_settlement_requests_requested_by_user_id_idx")
   @@index([dealVersionMilestoneId, requestedAt], map: "deal_milestone_settlement_requests_milestone_req_at_idx")
   @@map("deal_milestone_settlement_requests")
+}
+
+model DealMilestoneSettlementPreparation {
+  id                             String                        @id @db.Text
+  organizationId                 String                        @db.Text
+  draftDealId                    String                        @db.Text
+  dealVersionId                  String                        @db.Text
+  dealVersionMilestoneId         String                        @db.Text
+  dealMilestoneSubmissionId      String                        @db.Text
+  dealMilestoneReviewId          String                        @unique @db.Text
+  dealMilestoneSettlementRequestId String                      @unique @db.Text
+  chainId                        Int
+  agreementAddress               String                        @db.Text
+  dealId                         String                        @db.Text
+  dealVersionHash                String                        @db.Text
+  kind                           MilestoneSettlementRequestKind
+  milestonePosition              Int
+  milestoneAmountMinor           String                        @db.Text
+  settlementTokenAddress         String                        @db.Text
+  totalAmount                    String                        @db.Text
+  preparedAt                     DateTime                      @db.Timestamptz(3)
+  organization                   Organization                  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  draftDeal                      DraftDeal                     @relation(fields: [draftDealId], references: [id], onDelete: Cascade)
+  dealVersion                    DealVersion                   @relation(fields: [dealVersionId], references: [id], onDelete: Cascade)
+  dealVersionMilestone           DealVersionMilestone          @relation(fields: [dealVersionMilestoneId], references: [id], onDelete: Cascade)
+  dealMilestoneSubmission        DealMilestoneSubmission       @relation(fields: [dealMilestoneSubmissionId], references: [id], onDelete: Cascade)
+  dealMilestoneReview            DealMilestoneReview           @relation(fields: [dealMilestoneReviewId], references: [id], onDelete: Cascade)
+  dealMilestoneSettlementRequest DealMilestoneSettlementRequest @relation(fields: [dealMilestoneSettlementRequestId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId], map: "deal_milestone_settlement_preparations_organization_id_idx")
+  @@index([draftDealId], map: "deal_milestone_settlement_preparations_draft_deal_id_idx")
+  @@index([dealVersionId], map: "deal_milestone_settlement_preparations_deal_version_id_idx")
+  @@index([dealVersionMilestoneId], map: "deal_milestone_settlement_preparations_milestone_id_idx")
+  @@index([dealMilestoneSubmissionId], map: "deal_milestone_settlement_preparations_submission_id_idx")
+  @@index([chainId, agreementAddress], map: "deal_milestone_settlement_preparations_chain_agreement_idx")
+  @@index([dealVersionMilestoneId, preparedAt], map: "deal_milestone_settlement_preparations_milestone_prep_at_idx")
+  @@map("deal_milestone_settlement_preparations")
+}
+
+model DealMilestoneSettlementExecutionTransaction {
+  id                        String                        @id @db.Text
+  organizationId            String                        @db.Text
+  draftDealId               String                        @db.Text
+  dealVersionId             String                        @db.Text
+  dealVersionMilestoneId    String                        @db.Text
+  dealMilestoneSubmissionId String                        @db.Text
+  dealMilestoneReviewId     String                        @db.Text
+  dealMilestoneSettlementRequestId String                 @db.Text
+  submittedByUserId         String                        @db.Text
+  submittedWalletId         String                        @db.Text
+  submittedWalletAddress    String                        @db.Text
+  chainId                   Int
+  transactionHash           String                        @db.Text
+  reconciledStatus          FundingTransactionReconciledStatus?
+  reconciledAgreementAddress String?                      @db.Text
+  reconciledAt              DateTime?                     @db.Timestamptz(3)
+  reconciledConfirmedAt     DateTime?                     @db.Timestamptz(3)
+  reconciledMatchesTrackedAgreement Boolean?
+  submittedAt               DateTime                      @db.Timestamptz(3)
+  stalePendingEscalatedAt   DateTime?                     @db.Timestamptz(3)
+  supersededAt              DateTime?                     @db.Timestamptz(3)
+  supersededByDealMilestoneSettlementExecutionTransactionId String? @db.Text
+  organization              Organization                  @relation(fields: [organizationId], references: [id], onDelete: Cascade, map: "deal_milestone_settl_exec_txs_organization_id_fkey")
+  draftDeal                 DraftDeal                     @relation(fields: [draftDealId], references: [id], onDelete: Cascade, map: "deal_milestone_settl_exec_txs_draft_deal_id_fkey")
+  dealVersion               DealVersion                   @relation(fields: [dealVersionId], references: [id], onDelete: Cascade, map: "deal_milestone_settl_exec_txs_deal_version_id_fkey")
+  dealVersionMilestone      DealVersionMilestone          @relation(fields: [dealVersionMilestoneId], references: [id], onDelete: Cascade, map: "deal_milestone_settl_exec_txs_milestone_id_fkey")
+  dealMilestoneSubmission   DealMilestoneSubmission       @relation(fields: [dealMilestoneSubmissionId], references: [id], onDelete: Cascade, map: "deal_milestone_settl_exec_txs_submission_id_fkey")
+  dealMilestoneReview       DealMilestoneReview           @relation(fields: [dealMilestoneReviewId], references: [id], onDelete: Cascade, map: "deal_milestone_settl_exec_txs_review_id_fkey")
+  dealMilestoneSettlementRequest DealMilestoneSettlementRequest @relation(fields: [dealMilestoneSettlementRequestId], references: [id], onDelete: Cascade, map: "deal_milestone_settl_exec_txs_request_id_fkey")
+  submittedByUser           User                          @relation("DealMilestoneSettlementExecutionTransactionSubmittedByUser", fields: [submittedByUserId], references: [id], onDelete: Restrict, map: "deal_milestone_settl_exec_txs_submitted_by_user_id_fkey")
+  submittedWallet           Wallet                        @relation("DealMilestoneSettlementExecutionTransactionSubmittedWallet", fields: [submittedWalletId], references: [id], onDelete: Restrict, map: "deal_milestone_settl_exec_txs_submitted_wallet_id_fkey")
+  supersededByDealMilestoneSettlementExecutionTransaction DealMilestoneSettlementExecutionTransaction? @relation("DealMilestoneSettlementExecutionTransactionSupersession", fields: [supersededByDealMilestoneSettlementExecutionTransactionId], references: [id], onDelete: SetNull, map: "deal_milestone_settl_exec_txs_superseded_by_id_fkey")
+  supersededExecutionTransactions DealMilestoneSettlementExecutionTransaction[] @relation("DealMilestoneSettlementExecutionTransactionSupersession")
+
+  @@unique([chainId, transactionHash], map: "deal_milestone_settl_exec_txs_chain_id_transaction_hash_key")
+  @@index([chainId], map: "deal_milestone_settl_exec_txs_chain_id_idx")
+  @@index([organizationId], map: "deal_milestone_settl_exec_txs_organization_id_idx")
+  @@index([draftDealId], map: "deal_milestone_settl_exec_txs_draft_deal_id_idx")
+  @@index([dealVersionId], map: "deal_milestone_settl_exec_txs_deal_version_id_idx")
+  @@index([dealVersionMilestoneId], map: "deal_milestone_settl_exec_txs_milestone_id_idx")
+  @@index([dealMilestoneSettlementRequestId], map: "deal_milestone_settl_exec_txs_request_id_idx")
+  @@index([dealMilestoneSettlementRequestId, submittedAt], map: "deal_milestone_settl_exec_txs_request_submitted_at_idx")
+  @@index([supersededByDealMilestoneSettlementExecutionTransactionId], map: "deal_milestone_settl_exec_txs_superseded_by_id_idx")
+  @@map("deal_milestone_settlement_execution_transactions")
 }
 
 model DealVersionFile {
@@ -957,4 +1183,28 @@ model EscrowAgreementProjection {
   @@unique([chainId, dealId], map: "escrow_agreement_projections_chain_id_deal_id_key")
   @@index([chainId, factoryAddress], map: "escrow_agreement_projections_chain_id_factory_address_idx")
   @@map("escrow_agreement_projections")
+}
+
+model EscrowAgreementMilestoneSettlementProjection {
+  id                    String                       @id @db.Text
+  chainId               Int
+  agreementAddress      String                       @db.Text
+  dealId                String                       @db.Text
+  dealVersionHash       String                       @db.Text
+  milestonePosition     Int
+  kind                  MilestoneSettlementRequestKind
+  amount                String                       @db.Text
+  beneficiaryAddress    String                       @db.Text
+  settledByAddress      String                       @db.Text
+  settledBlockNumber    BigInt
+  settledBlockHash      String                       @db.Text
+  settledTransactionHash String                      @db.Text
+  settledLogIndex       Int
+  settledAt             DateTime                     @db.Timestamptz(3)
+  updatedAt             DateTime                     @db.Timestamptz(3)
+
+  @@unique([chainId, agreementAddress, milestonePosition], map: "eamsp_chain_agreement_position_key")
+  @@index([chainId, dealId], map: "eamsp_chain_deal_id_idx")
+  @@index([chainId, agreementAddress], map: "eamsp_chain_agreement_idx")
+  @@map("escrow_agreement_milestone_settlement_projections")
 }

@@ -5,6 +5,7 @@ import type {
   DealMilestoneSubmissionRecord,
   Release1Repositories
 } from "@blockchain-escrow/db";
+import { milestoneWorkflowOpenDealStates } from "@blockchain-escrow/shared";
 
 export interface MilestoneReviewDeadlineReconciliationResult {
   readonly expiredMilestoneReviewDeadlineCount: number;
@@ -30,7 +31,9 @@ export class MilestoneReviewDeadlineReconciler {
   ) {}
 
   async reconcileOnce(): Promise<MilestoneReviewDeadlineReconciliationResult> {
-    const drafts = await this.release1Repositories.draftDeals.listByStates(["ACTIVE"]);
+    const drafts = await this.release1Repositories.draftDeals.listByStates([
+      ...milestoneWorkflowOpenDealStates
+    ]);
     const occurredAt = this.now();
     let expiredMilestoneReviewDeadlineCount = 0;
     let scannedMilestoneReviewDeadlineCount = 0;

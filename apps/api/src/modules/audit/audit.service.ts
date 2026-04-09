@@ -2,7 +2,11 @@ import type {
   AuditLogRecord,
   CounterpartyRecord,
   CounterpartyDealVersionAcceptanceRecord,
+  DealMilestoneDisputeAssignmentRecord,
+  DealMilestoneDisputeDecisionRecord,
+  DealMilestoneDisputeRecord,
   DealMilestoneReviewRecord,
+  DealMilestoneSettlementExecutionTransactionRecord,
   DealMilestoneSettlementRequestRecord,
   DealMilestoneSubmissionRecord,
   DealVersionAcceptanceRecord,
@@ -160,6 +164,37 @@ export class AuditService {
           review.id
         );
       }
+      case "DEAL_MILESTONE_DISPUTE": {
+        const dispute = await this.requireDealMilestoneDisputeAccess(
+          actor,
+          params.entityId
+        );
+        return this.repositories.auditLogs.listByEntity(
+          "DEAL_MILESTONE_DISPUTE",
+          dispute.id
+        );
+      }
+      case "DEAL_MILESTONE_DISPUTE_ASSIGNMENT": {
+        const assignment =
+          await this.requireDealMilestoneDisputeAssignmentAccess(
+            actor,
+            params.entityId
+          );
+        return this.repositories.auditLogs.listByEntity(
+          "DEAL_MILESTONE_DISPUTE_ASSIGNMENT",
+          assignment.id
+        );
+      }
+      case "DEAL_MILESTONE_DISPUTE_DECISION": {
+        const decision = await this.requireDealMilestoneDisputeDecisionAccess(
+          actor,
+          params.entityId
+        );
+        return this.repositories.auditLogs.listByEntity(
+          "DEAL_MILESTONE_DISPUTE_DECISION",
+          decision.id
+        );
+      }
       case "DEAL_MILESTONE_SETTLEMENT_REQUEST": {
         const settlementRequest =
           await this.requireDealMilestoneSettlementRequestAccess(
@@ -169,6 +204,17 @@ export class AuditService {
         return this.repositories.auditLogs.listByEntity(
           "DEAL_MILESTONE_SETTLEMENT_REQUEST",
           settlementRequest.id
+        );
+      }
+      case "DEAL_MILESTONE_SETTLEMENT_EXECUTION_TRANSACTION": {
+        const executionTransaction =
+          await this.requireDealMilestoneSettlementExecutionTransactionAccess(
+            actor,
+            params.entityId
+          );
+        return this.repositories.auditLogs.listByEntity(
+          "DEAL_MILESTONE_SETTLEMENT_EXECUTION_TRANSACTION",
+          executionTransaction.id
         );
       }
       case "DEAL_VERSION_ACCEPTANCE": {
@@ -436,6 +482,84 @@ export class AuditService {
 
     await this.requireDraftDealAccess(actor, settlementRequest.draftDealId);
     return settlementRequest;
+  }
+
+  private async requireDealMilestoneDisputeAccess(
+    actor: AuthenticatedSessionContext,
+    dealMilestoneDisputeId: string
+  ): Promise<DealMilestoneDisputeRecord> {
+    const dispute =
+      await this.repositories.dealMilestoneDisputes.findById(dealMilestoneDisputeId);
+
+    if (!dispute) {
+      throw new NotFoundException("deal milestone dispute not found");
+    }
+
+    await this.requireDraftDealAccess(actor, dispute.draftDealId);
+    return dispute;
+  }
+
+  private async requireDealMilestoneDisputeAssignmentAccess(
+    actor: AuthenticatedSessionContext,
+    dealMilestoneDisputeAssignmentId: string
+  ): Promise<DealMilestoneDisputeAssignmentRecord> {
+    const assignment =
+      await this.repositories.dealMilestoneDisputeAssignments.findById(
+        dealMilestoneDisputeAssignmentId
+      );
+
+    if (!assignment) {
+      throw new NotFoundException("deal milestone dispute assignment not found");
+    }
+
+    const dispute = await this.requireDealMilestoneDisputeAccess(
+      actor,
+      assignment.dealMilestoneDisputeId
+    );
+    void dispute;
+
+    return assignment;
+  }
+
+  private async requireDealMilestoneDisputeDecisionAccess(
+    actor: AuthenticatedSessionContext,
+    dealMilestoneDisputeDecisionId: string
+  ): Promise<DealMilestoneDisputeDecisionRecord> {
+    const decision =
+      await this.repositories.dealMilestoneDisputeDecisions.findById(
+        dealMilestoneDisputeDecisionId
+      );
+
+    if (!decision) {
+      throw new NotFoundException("deal milestone dispute decision not found");
+    }
+
+    const dispute = await this.requireDealMilestoneDisputeAccess(
+      actor,
+      decision.dealMilestoneDisputeId
+    );
+    void dispute;
+
+    return decision;
+  }
+
+  private async requireDealMilestoneSettlementExecutionTransactionAccess(
+    actor: AuthenticatedSessionContext,
+    dealMilestoneSettlementExecutionTransactionId: string
+  ): Promise<DealMilestoneSettlementExecutionTransactionRecord> {
+    const executionTransaction =
+      await this.repositories.dealMilestoneSettlementExecutionTransactions.findById(
+        dealMilestoneSettlementExecutionTransactionId
+      );
+
+    if (!executionTransaction) {
+      throw new NotFoundException(
+        "deal milestone settlement execution transaction not found"
+      );
+    }
+
+    await this.requireDraftDealAccess(actor, executionTransaction.draftDealId);
+    return executionTransaction;
   }
 
   private async requireCounterpartyDealVersionAcceptanceAccess(

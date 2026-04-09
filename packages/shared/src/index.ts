@@ -10,6 +10,7 @@ export * from "./funding-reconciliation";
 export * from "./indexer";
 export * from "./organizations";
 export * from "./primitives";
+export * from "./settlement-execution-reconciliation";
 export * from "./templates";
 export * from "./users";
 export * from "./wallets";

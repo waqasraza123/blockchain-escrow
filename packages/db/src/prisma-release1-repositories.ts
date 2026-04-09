@@ -21,8 +21,14 @@ import type {
   AuditLogRecord,
   CounterpartyRecord,
   CounterpartyDealVersionAcceptanceRecord,
+  DealMilestoneDisputeAssignmentRecord,
+  DealMilestoneDisputeDecisionRecord,
+  DealMilestoneDisputeEvidenceRecord,
+  DealMilestoneDisputeRecord,
   DealMilestoneReviewDeadlineExpiryRecord,
   DealMilestoneReviewRecord,
+  DealMilestoneSettlementExecutionTransactionRecord,
+  DealMilestoneSettlementPreparationRecord,
   DealMilestoneSettlementRequestRecord,
   DealMilestoneSubmissionFileRecord,
   DealMilestoneSubmissionRecord,
@@ -48,8 +54,14 @@ import type {
   AuditLogRepository,
   CounterpartyRepository,
   CounterpartyDealVersionAcceptanceRepository,
+  DealMilestoneDisputeAssignmentRepository,
+  DealMilestoneDisputeDecisionRepository,
+  DealMilestoneDisputeEvidenceRepository,
+  DealMilestoneDisputeRepository,
   DealMilestoneReviewDeadlineExpiryRepository,
   DealMilestoneReviewRepository,
+  DealMilestoneSettlementExecutionTransactionRepository,
+  DealMilestoneSettlementPreparationRepository,
   DealMilestoneSettlementRequestRepository,
   DealMilestoneSubmissionFileRepository,
   DealMilestoneSubmissionRepository,
@@ -491,7 +503,98 @@ function mapDealMilestoneReviewRecord(record: {
   };
 }
 
+function mapDealMilestoneDisputeRecord(record: {
+  dealMilestoneReviewId: string;
+  dealMilestoneSubmissionId: string;
+  dealVersionId: string;
+  dealVersionMilestoneId: string;
+  draftDealId: string;
+  id: string;
+  openedAt: Date;
+  openedByUserId: string;
+  organizationId: string;
+  statementMarkdown: string;
+}): DealMilestoneDisputeRecord {
+  return {
+    dealMilestoneReviewId: record.dealMilestoneReviewId,
+    dealMilestoneSubmissionId: record.dealMilestoneSubmissionId,
+    dealVersionId: record.dealVersionId,
+    dealVersionMilestoneId: record.dealVersionMilestoneId,
+    draftDealId: record.draftDealId,
+    id: record.id,
+    openedAt: toRequiredIsoTimestamp(record.openedAt),
+    openedByUserId: record.openedByUserId,
+    organizationId: record.organizationId,
+    statementMarkdown: record.statementMarkdown
+  };
+}
+
+function mapDealMilestoneDisputeEvidenceRecord(record: {
+  createdAt: Date;
+  dealMilestoneDisputeId: string;
+  fileId: string;
+  id: string;
+}): DealMilestoneDisputeEvidenceRecord {
+  return {
+    createdAt: toRequiredIsoTimestamp(record.createdAt),
+    dealMilestoneDisputeId: record.dealMilestoneDisputeId,
+    fileId: record.fileId,
+    id: record.id
+  };
+}
+
+function mapDealMilestoneDisputeAssignmentRecord(record: {
+  arbitratorAddress: string;
+  assignedAt: Date;
+  assignedByUserId: string;
+  chainId: number;
+  dealMilestoneDisputeId: string;
+  id: string;
+  organizationId: string;
+}): DealMilestoneDisputeAssignmentRecord {
+  return {
+    arbitratorAddress:
+      record.arbitratorAddress as DealMilestoneDisputeAssignmentRecord["arbitratorAddress"],
+    assignedAt: toRequiredIsoTimestamp(record.assignedAt),
+    assignedByUserId: record.assignedByUserId,
+    chainId: record.chainId,
+    dealMilestoneDisputeId: record.dealMilestoneDisputeId,
+    id: record.id,
+    organizationId: record.organizationId
+  };
+}
+
+function mapDealMilestoneDisputeDecisionRecord(record: {
+  dealMilestoneDisputeAssignmentId: string;
+  dealMilestoneDisputeId: string;
+  dealMilestoneSettlementRequestId: string;
+  decidedAt: Date;
+  id: string;
+  kind: PrismaMilestoneSettlementRequestKind;
+  organizationId: string;
+  signature: string;
+  signedByArbitratorAddress: string;
+  statementMarkdown: string;
+  typedData: Prisma.JsonValue;
+}): DealMilestoneDisputeDecisionRecord {
+  return {
+    dealMilestoneDisputeAssignmentId: record.dealMilestoneDisputeAssignmentId,
+    dealMilestoneDisputeId: record.dealMilestoneDisputeId,
+    dealMilestoneSettlementRequestId: record.dealMilestoneSettlementRequestId,
+    decidedAt: toRequiredIsoTimestamp(record.decidedAt),
+    id: record.id,
+    kind: record.kind,
+    organizationId: record.organizationId,
+    signature: record.signature as DealMilestoneDisputeDecisionRecord["signature"],
+    signedByArbitratorAddress:
+      record.signedByArbitratorAddress as DealMilestoneDisputeDecisionRecord["signedByArbitratorAddress"],
+    statementMarkdown: record.statementMarkdown,
+    typedData: record.typedData as DealMilestoneDisputeDecisionRecord["typedData"]
+  };
+}
+
 function mapDealMilestoneSettlementRequestRecord(record: {
+  dealMilestoneDisputeId: string | null;
   dealMilestoneReviewId: string;
   dealMilestoneSubmissionId: string;
   dealVersionId: string;
@@ -501,10 +604,13 @@ function mapDealMilestoneSettlementRequestRecord(record: {
   kind: PrismaMilestoneSettlementRequestKind;
   organizationId: string;
   requestedAt: Date;
-  requestedByUserId: string;
+  requestedByArbitratorAddress: string | null;
+  requestedByUserId: string | null;
+  source: DealMilestoneSettlementRequestRecord["source"];
   statementMarkdown: string | null;
 }): DealMilestoneSettlementRequestRecord {
   return {
+    dealMilestoneDisputeId: record.dealMilestoneDisputeId,
     dealMilestoneReviewId: record.dealMilestoneReviewId,
     dealMilestoneSubmissionId: record.dealMilestoneSubmissionId,
     dealVersionId: record.dealVersionId,
@@ -514,8 +620,56 @@ function mapDealMilestoneSettlementRequestRecord(record: {
     kind: record.kind,
     organizationId: record.organizationId,
     requestedAt: toRequiredIsoTimestamp(record.requestedAt),
+    requestedByArbitratorAddress:
+      record.requestedByArbitratorAddress as DealMilestoneSettlementRequestRecord["requestedByArbitratorAddress"],
     requestedByUserId: record.requestedByUserId,
+    source: record.source,
     statementMarkdown: record.statementMarkdown
+  };
+}
+
+function mapDealMilestoneSettlementPreparationRecord(record: {
+  agreementAddress: string;
+  chainId: number;
+  dealId: string;
+  dealMilestoneReviewId: string;
+  dealMilestoneSettlementRequestId: string;
+  dealMilestoneSubmissionId: string;
+  dealVersionHash: string;
+  dealVersionId: string;
+  dealVersionMilestoneId: string;
+  draftDealId: string;
+  id: string;
+  kind: PrismaMilestoneSettlementRequestKind;
+  milestoneAmountMinor: string;
+  milestonePosition: number;
+  organizationId: string;
+  preparedAt: Date;
+  settlementTokenAddress: string;
+  totalAmount: string;
+}): DealMilestoneSettlementPreparationRecord {
+  return {
+    agreementAddress:
+      record.agreementAddress as DealMilestoneSettlementPreparationRecord["agreementAddress"],
+    chainId: record.chainId,
+    dealId: record.dealId as DealMilestoneSettlementPreparationRecord["dealId"],
+    dealMilestoneReviewId: record.dealMilestoneReviewId,
+    dealMilestoneSettlementRequestId: record.dealMilestoneSettlementRequestId,
+    dealMilestoneSubmissionId: record.dealMilestoneSubmissionId,
+    dealVersionHash:
+      record.dealVersionHash as DealMilestoneSettlementPreparationRecord["dealVersionHash"],
+    dealVersionId: record.dealVersionId,
+    dealVersionMilestoneId: record.dealVersionMilestoneId,
+    draftDealId: record.draftDealId,
+    id: record.id,
+    kind: record.kind,
+    milestoneAmountMinor: record.milestoneAmountMinor,
+    milestonePosition: record.milestonePosition,
+    organizationId: record.organizationId,
+    preparedAt: toRequiredIsoTimestamp(record.preparedAt),
+    settlementTokenAddress:
+      record.settlementTokenAddress as DealMilestoneSettlementPreparationRecord["settlementTokenAddress"],
+    totalAmount: record.totalAmount
   };
 }
 
@@ -627,6 +781,61 @@ function mapFundingTransactionRecord(record: {
     supersededAt: toIsoTimestamp(record.supersededAt),
     supersededByFundingTransactionId: record.supersededByFundingTransactionId,
     transactionHash: record.transactionHash as FundingTransactionRecord["transactionHash"]
+  };
+}
+
+function mapDealMilestoneSettlementExecutionTransactionRecord(record: {
+  chainId: number;
+  dealMilestoneReviewId: string;
+  dealMilestoneSettlementRequestId: string;
+  dealMilestoneSubmissionId: string;
+  dealVersionId: string;
+  dealVersionMilestoneId: string;
+  draftDealId: string;
+  id: string;
+  organizationId: string;
+  reconciledAgreementAddress: string | null;
+  reconciledAt: Date | null;
+  reconciledConfirmedAt: Date | null;
+  reconciledMatchesTrackedAgreement: boolean | null;
+  reconciledStatus: PrismaFundingTransactionReconciledStatus | null;
+  stalePendingEscalatedAt: Date | null;
+  submittedAt: Date;
+  submittedByUserId: string;
+  submittedWalletAddress: string;
+  submittedWalletId: string;
+  supersededAt: Date | null;
+  supersededByDealMilestoneSettlementExecutionTransactionId: string | null;
+  transactionHash: string;
+}): DealMilestoneSettlementExecutionTransactionRecord {
+  return {
+    chainId: record.chainId,
+    dealMilestoneReviewId: record.dealMilestoneReviewId,
+    dealMilestoneSettlementRequestId: record.dealMilestoneSettlementRequestId,
+    dealMilestoneSubmissionId: record.dealMilestoneSubmissionId,
+    dealVersionId: record.dealVersionId,
+    dealVersionMilestoneId: record.dealVersionMilestoneId,
+    draftDealId: record.draftDealId,
+    id: record.id,
+    organizationId: record.organizationId,
+    reconciledAgreementAddress:
+      record.reconciledAgreementAddress as DealMilestoneSettlementExecutionTransactionRecord["reconciledAgreementAddress"],
+    reconciledAt: toIsoTimestamp(record.reconciledAt),
+    reconciledConfirmedAt: toIsoTimestamp(record.reconciledConfirmedAt),
+    reconciledMatchesTrackedAgreement: record.reconciledMatchesTrackedAgreement,
+    reconciledStatus:
+      record.reconciledStatus as DealMilestoneSettlementExecutionTransactionRecord["reconciledStatus"],
+    stalePendingEscalatedAt: toIsoTimestamp(record.stalePendingEscalatedAt),
+    submittedAt: toRequiredIsoTimestamp(record.submittedAt),
+    submittedByUserId: record.submittedByUserId,
+    submittedWalletAddress:
+      record.submittedWalletAddress as DealMilestoneSettlementExecutionTransactionRecord["submittedWalletAddress"],
+    submittedWalletId: record.submittedWalletId,
+    supersededAt: toIsoTimestamp(record.supersededAt),
+    supersededByDealMilestoneSettlementExecutionTransactionId:
+      record.supersededByDealMilestoneSettlementExecutionTransactionId,
+    transactionHash:
+      record.transactionHash as DealMilestoneSettlementExecutionTransactionRecord["transactionHash"]
   };
 }
 
@@ -1514,6 +1723,195 @@ export class PrismaDealMilestoneReviewRepository
   }
 }
 
+export class PrismaDealMilestoneDisputeRepository
+  implements DealMilestoneDisputeRepository
+{
+  constructor(private readonly prisma: PrismaClient) {}
+
+  async create(
+    record: DealMilestoneDisputeRecord
+  ): Promise<DealMilestoneDisputeRecord> {
+    const created = await (this.prisma as any).dealMilestoneDispute.create({
+      data: {
+        dealMilestoneReviewId: record.dealMilestoneReviewId,
+        dealMilestoneSubmissionId: record.dealMilestoneSubmissionId,
+        dealVersionId: record.dealVersionId,
+        dealVersionMilestoneId: record.dealVersionMilestoneId,
+        draftDealId: record.draftDealId,
+        id: record.id,
+        openedAt: toDate(record.openedAt),
+        openedByUserId: record.openedByUserId,
+        organizationId: record.organizationId,
+        statementMarkdown: record.statementMarkdown
+      }
+    });
+
+    return mapDealMilestoneDisputeRecord(created);
+  }
+
+  async findByDealMilestoneReviewId(
+    dealMilestoneReviewId: string
+  ): Promise<DealMilestoneDisputeRecord | null> {
+    const record = await (this.prisma as any).dealMilestoneDispute.findUnique({
+      where: { dealMilestoneReviewId }
+    });
+
+    return record ? mapDealMilestoneDisputeRecord(record) : null;
+  }
+
+  async findById(id: string): Promise<DealMilestoneDisputeRecord | null> {
+    const record = await (this.prisma as any).dealMilestoneDispute.findUnique({
+      where: { id }
+    });
+
+    return record ? mapDealMilestoneDisputeRecord(record) : null;
+  }
+
+  async listByDealVersionId(
+    dealVersionId: string
+  ): Promise<DealMilestoneDisputeRecord[]> {
+    const records = await (this.prisma as any).dealMilestoneDispute.findMany({
+      where: { dealVersionId },
+      orderBy: [{ openedAt: "asc" }, { id: "asc" }]
+    });
+
+    return records.map(mapDealMilestoneDisputeRecord);
+  }
+}
+
+export class PrismaDealMilestoneDisputeEvidenceRepository
+  implements DealMilestoneDisputeEvidenceRepository
+{
+  constructor(private readonly prisma: PrismaClient) {}
+
+  async add(
+    record: DealMilestoneDisputeEvidenceRecord
+  ): Promise<DealMilestoneDisputeEvidenceRecord> {
+    const created = await (this.prisma as any).dealMilestoneDisputeEvidence.create({
+      data: {
+        createdAt: toDate(record.createdAt),
+        dealMilestoneDisputeId: record.dealMilestoneDisputeId,
+        fileId: record.fileId,
+        id: record.id
+      }
+    });
+
+    return mapDealMilestoneDisputeEvidenceRecord(created);
+  }
+
+  async listByDealMilestoneDisputeId(
+    dealMilestoneDisputeId: string
+  ): Promise<DealMilestoneDisputeEvidenceRecord[]> {
+    const records = await (this.prisma as any).dealMilestoneDisputeEvidence.findMany({
+      where: { dealMilestoneDisputeId },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }]
+    });
+
+    return records.map(mapDealMilestoneDisputeEvidenceRecord);
+  }
+}
+
+export class PrismaDealMilestoneDisputeAssignmentRepository
+  implements DealMilestoneDisputeAssignmentRepository
+{
+  constructor(private readonly prisma: PrismaClient) {}
+
+  async create(
+    record: DealMilestoneDisputeAssignmentRecord
+  ): Promise<DealMilestoneDisputeAssignmentRecord> {
+    const created = await (this.prisma as any).dealMilestoneDisputeAssignment.create({
+      data: {
+        arbitratorAddress: record.arbitratorAddress,
+        assignedAt: toDate(record.assignedAt),
+        assignedByUserId: record.assignedByUserId,
+        chainId: record.chainId,
+        dealMilestoneDisputeId: record.dealMilestoneDisputeId,
+        id: record.id,
+        organizationId: record.organizationId
+      }
+    });
+
+    return mapDealMilestoneDisputeAssignmentRecord(created);
+  }
+
+  async listByDealMilestoneDisputeId(
+    dealMilestoneDisputeId: string
+  ): Promise<DealMilestoneDisputeAssignmentRecord[]> {
+    const records = await (this.prisma as any).dealMilestoneDisputeAssignment.findMany({
+      where: { dealMilestoneDisputeId },
+      orderBy: [{ assignedAt: "asc" }, { id: "asc" }]
+    });
+
+    return records.map(mapDealMilestoneDisputeAssignmentRecord);
+  }
+
+  async findById(
+    id: string
+  ): Promise<DealMilestoneDisputeAssignmentRecord | null> {
+    const record = await (this.prisma as any).dealMilestoneDisputeAssignment.findUnique({
+      where: { id }
+    });
+
+    return record ? mapDealMilestoneDisputeAssignmentRecord(record) : null;
+  }
+}
+
+export class PrismaDealMilestoneDisputeDecisionRepository
+  implements DealMilestoneDisputeDecisionRepository
+{
+  constructor(private readonly prisma: PrismaClient) {}
+
+  async create(
+    record: DealMilestoneDisputeDecisionRecord
+  ): Promise<DealMilestoneDisputeDecisionRecord> {
+    const created = await (this.prisma as any).dealMilestoneDisputeDecision.create({
+      data: {
+        dealMilestoneDisputeAssignmentId: record.dealMilestoneDisputeAssignmentId,
+        dealMilestoneDisputeId: record.dealMilestoneDisputeId,
+        dealMilestoneSettlementRequestId: record.dealMilestoneSettlementRequestId,
+        decidedAt: toDate(record.decidedAt),
+        id: record.id,
+        kind: record.kind,
+        organizationId: record.organizationId,
+        signature: record.signature,
+        signedByArbitratorAddress: record.signedByArbitratorAddress,
+        statementMarkdown: record.statementMarkdown,
+        typedData: record.typedData as Prisma.InputJsonValue
+      }
+    });
+
+    return mapDealMilestoneDisputeDecisionRecord(created);
+  }
+
+  async findByDealMilestoneDisputeId(
+    dealMilestoneDisputeId: string
+  ): Promise<DealMilestoneDisputeDecisionRecord | null> {
+    const record = await (this.prisma as any).dealMilestoneDisputeDecision.findUnique({
+      where: { dealMilestoneDisputeId }
+    });
+
+    return record ? mapDealMilestoneDisputeDecisionRecord(record) : null;
+  }
+
+  async findById(id: string): Promise<DealMilestoneDisputeDecisionRecord | null> {
+    const record = await (this.prisma as any).dealMilestoneDisputeDecision.findUnique({
+      where: { id }
+    });
+
+    return record ? mapDealMilestoneDisputeDecisionRecord(record) : null;
+  }
+
+  async findByDealMilestoneSettlementRequestId(
+    dealMilestoneSettlementRequestId: string
+  ): Promise<DealMilestoneDisputeDecisionRecord | null> {
+    const record = await (this.prisma as any).dealMilestoneDisputeDecision.findUnique({
+      where: { dealMilestoneSettlementRequestId }
+    });
+
+    return record ? mapDealMilestoneDisputeDecisionRecord(record) : null;
+  }
+}
+
 export class PrismaDealMilestoneSubmissionFileRepository
   implements DealMilestoneSubmissionFileRepository
 {
@@ -1554,8 +1952,9 @@ export class PrismaDealMilestoneSettlementRequestRepository
   async create(
     record: DealMilestoneSettlementRequestRecord
   ): Promise<DealMilestoneSettlementRequestRecord> {
-    const created = await this.prisma.dealMilestoneSettlementRequest.create({
+    const created = await (this.prisma as any).dealMilestoneSettlementRequest.create({
       data: {
+        dealMilestoneDisputeId: record.dealMilestoneDisputeId,
         dealMilestoneReviewId: record.dealMilestoneReviewId,
         dealMilestoneSubmissionId: record.dealMilestoneSubmissionId,
         dealVersionId: record.dealVersionId,
@@ -1565,7 +1964,9 @@ export class PrismaDealMilestoneSettlementRequestRepository
         kind: record.kind,
         organizationId: record.organizationId,
         requestedAt: toDate(record.requestedAt),
+        requestedByArbitratorAddress: record.requestedByArbitratorAddress,
         requestedByUserId: record.requestedByUserId,
+        source: record.source,
         statementMarkdown: record.statementMarkdown
       }
     });
@@ -1576,7 +1977,7 @@ export class PrismaDealMilestoneSettlementRequestRepository
   async findByDealMilestoneReviewId(
     dealMilestoneReviewId: string
   ): Promise<DealMilestoneSettlementRequestRecord | null> {
-    const record = await this.prisma.dealMilestoneSettlementRequest.findUnique({
+    const record = await (this.prisma as any).dealMilestoneSettlementRequest.findUnique({
       where: { dealMilestoneReviewId }
     });
 
@@ -1584,7 +1985,7 @@ export class PrismaDealMilestoneSettlementRequestRepository
   }
 
   async findById(id: string): Promise<DealMilestoneSettlementRequestRecord | null> {
-    const record = await this.prisma.dealMilestoneSettlementRequest.findUnique({
+    const record = await (this.prisma as any).dealMilestoneSettlementRequest.findUnique({
       where: { id }
     });
 
@@ -1594,12 +1995,87 @@ export class PrismaDealMilestoneSettlementRequestRepository
   async listByDealVersionId(
     dealVersionId: string
   ): Promise<DealMilestoneSettlementRequestRecord[]> {
-    const records = await this.prisma.dealMilestoneSettlementRequest.findMany({
+    const records = await (this.prisma as any).dealMilestoneSettlementRequest.findMany({
       where: { dealVersionId },
       orderBy: [{ requestedAt: "asc" }, { id: "asc" }]
     });
 
     return records.map(mapDealMilestoneSettlementRequestRecord);
+  }
+}
+
+export class PrismaDealMilestoneSettlementPreparationRepository
+  implements DealMilestoneSettlementPreparationRepository
+{
+  constructor(private readonly prisma: PrismaClient) {}
+
+  async create(
+    record: DealMilestoneSettlementPreparationRecord
+  ): Promise<DealMilestoneSettlementPreparationRecord> {
+    const created = await this.prisma.dealMilestoneSettlementPreparation.create({
+      data: {
+        agreementAddress: record.agreementAddress,
+        chainId: record.chainId,
+        dealId: record.dealId,
+        dealMilestoneReviewId: record.dealMilestoneReviewId,
+        dealMilestoneSettlementRequestId: record.dealMilestoneSettlementRequestId,
+        dealMilestoneSubmissionId: record.dealMilestoneSubmissionId,
+        dealVersionHash: record.dealVersionHash,
+        dealVersionId: record.dealVersionId,
+        dealVersionMilestoneId: record.dealVersionMilestoneId,
+        draftDealId: record.draftDealId,
+        id: record.id,
+        kind: record.kind,
+        milestoneAmountMinor: record.milestoneAmountMinor,
+        milestonePosition: record.milestonePosition,
+        organizationId: record.organizationId,
+        preparedAt: toDate(record.preparedAt),
+        settlementTokenAddress: record.settlementTokenAddress,
+        totalAmount: record.totalAmount
+      }
+    });
+
+    return mapDealMilestoneSettlementPreparationRecord(created);
+  }
+
+  async findByDealMilestoneSettlementRequestId(
+    dealMilestoneSettlementRequestId: string
+  ): Promise<DealMilestoneSettlementPreparationRecord | null> {
+    const record = await this.prisma.dealMilestoneSettlementPreparation.findUnique({
+      where: { dealMilestoneSettlementRequestId }
+    });
+
+    return record ? mapDealMilestoneSettlementPreparationRecord(record) : null;
+  }
+
+  async findById(id: string): Promise<DealMilestoneSettlementPreparationRecord | null> {
+    const record = await this.prisma.dealMilestoneSettlementPreparation.findUnique({
+      where: { id }
+    });
+
+    return record ? mapDealMilestoneSettlementPreparationRecord(record) : null;
+  }
+
+  async listByChainId(
+    chainId: number
+  ): Promise<DealMilestoneSettlementPreparationRecord[]> {
+    const records = await this.prisma.dealMilestoneSettlementPreparation.findMany({
+      where: { chainId },
+      orderBy: [{ preparedAt: "asc" }, { id: "asc" }]
+    });
+
+    return records.map(mapDealMilestoneSettlementPreparationRecord);
+  }
+
+  async listByDealVersionId(
+    dealVersionId: string
+  ): Promise<DealMilestoneSettlementPreparationRecord[]> {
+    const records = await this.prisma.dealMilestoneSettlementPreparation.findMany({
+      where: { dealVersionId },
+      orderBy: [{ preparedAt: "asc" }, { id: "asc" }]
+    });
+
+    return records.map(mapDealMilestoneSettlementPreparationRecord);
   }
 }
 
@@ -1895,6 +2371,172 @@ export class PrismaFundingTransactionRepository
   }
 }
 
+export class PrismaDealMilestoneSettlementExecutionTransactionRepository
+  implements DealMilestoneSettlementExecutionTransactionRepository
+{
+  constructor(private readonly prisma: PrismaClient) {}
+
+  async create(
+    record: DealMilestoneSettlementExecutionTransactionRecord
+  ): Promise<DealMilestoneSettlementExecutionTransactionRecord> {
+    const created =
+      await this.prisma.dealMilestoneSettlementExecutionTransaction.create({
+        data: {
+          chainId: record.chainId,
+          dealMilestoneReviewId: record.dealMilestoneReviewId,
+          dealMilestoneSettlementRequestId:
+            record.dealMilestoneSettlementRequestId,
+          dealMilestoneSubmissionId: record.dealMilestoneSubmissionId,
+          dealVersionId: record.dealVersionId,
+          dealVersionMilestoneId: record.dealVersionMilestoneId,
+          draftDealId: record.draftDealId,
+          id: record.id,
+          organizationId: record.organizationId,
+          reconciledAgreementAddress: record.reconciledAgreementAddress,
+          reconciledAt: record.reconciledAt ? toDate(record.reconciledAt) : null,
+          reconciledConfirmedAt: record.reconciledConfirmedAt
+            ? toDate(record.reconciledConfirmedAt)
+            : null,
+          reconciledMatchesTrackedAgreement:
+            record.reconciledMatchesTrackedAgreement,
+          reconciledStatus: record.reconciledStatus
+            ? (record.reconciledStatus as PrismaFundingTransactionReconciledStatus)
+            : null,
+          stalePendingEscalatedAt: record.stalePendingEscalatedAt
+            ? toDate(record.stalePendingEscalatedAt)
+            : null,
+          submittedAt: toDate(record.submittedAt),
+          submittedByUserId: record.submittedByUserId,
+          submittedWalletAddress: record.submittedWalletAddress,
+          submittedWalletId: record.submittedWalletId,
+          supersededAt: record.supersededAt ? toDate(record.supersededAt) : null,
+          supersededByDealMilestoneSettlementExecutionTransactionId:
+            record.supersededByDealMilestoneSettlementExecutionTransactionId,
+          transactionHash: record.transactionHash
+        }
+      });
+
+    return mapDealMilestoneSettlementExecutionTransactionRecord(created);
+  }
+
+  async findByChainIdAndTransactionHash(
+    chainId: number,
+    transactionHash: `0x${string}`
+  ): Promise<DealMilestoneSettlementExecutionTransactionRecord | null> {
+    const record =
+      await this.prisma.dealMilestoneSettlementExecutionTransaction.findUnique({
+        where: {
+          chainId_transactionHash: {
+            chainId,
+            transactionHash
+          }
+        }
+      });
+
+    return record ? mapDealMilestoneSettlementExecutionTransactionRecord(record) : null;
+  }
+
+  async findById(
+    id: string
+  ): Promise<DealMilestoneSettlementExecutionTransactionRecord | null> {
+    const record =
+      await this.prisma.dealMilestoneSettlementExecutionTransaction.findUnique({
+        where: { id }
+      });
+
+    return record ? mapDealMilestoneSettlementExecutionTransactionRecord(record) : null;
+  }
+
+  async listByChainId(
+    chainId: number
+  ): Promise<DealMilestoneSettlementExecutionTransactionRecord[]> {
+    const records =
+      await this.prisma.dealMilestoneSettlementExecutionTransaction.findMany({
+        orderBy: [{ submittedAt: "desc" }, { id: "desc" }],
+        where: { chainId }
+      });
+
+    return records.map(mapDealMilestoneSettlementExecutionTransactionRecord);
+  }
+
+  async listByDealMilestoneSettlementRequestId(
+    dealMilestoneSettlementRequestId: string
+  ): Promise<DealMilestoneSettlementExecutionTransactionRecord[]> {
+    const records =
+      await this.prisma.dealMilestoneSettlementExecutionTransaction.findMany({
+        orderBy: [{ submittedAt: "desc" }, { id: "desc" }],
+        where: { dealMilestoneSettlementRequestId }
+      });
+
+    return records.map(mapDealMilestoneSettlementExecutionTransactionRecord);
+  }
+
+  async markSuperseded(
+    id: string,
+    supersededByDealMilestoneSettlementExecutionTransactionId: string,
+    supersededAt: string
+  ): Promise<DealMilestoneSettlementExecutionTransactionRecord> {
+    const record =
+      await this.prisma.dealMilestoneSettlementExecutionTransaction.update({
+        data: {
+          supersededAt: toDate(supersededAt),
+          supersededByDealMilestoneSettlementExecutionTransactionId
+        },
+        where: { id }
+      });
+
+    return mapDealMilestoneSettlementExecutionTransactionRecord(record);
+  }
+
+  async markStalePendingEscalated(
+    id: string,
+    stalePendingEscalatedAt: string
+  ): Promise<DealMilestoneSettlementExecutionTransactionRecord> {
+    const record =
+      await this.prisma.dealMilestoneSettlementExecutionTransaction.update({
+        data: {
+          stalePendingEscalatedAt: toDate(stalePendingEscalatedAt)
+        },
+        where: { id }
+      });
+
+    return mapDealMilestoneSettlementExecutionTransactionRecord(record);
+  }
+
+  async updateReconciliation(
+    id: string,
+    reconciliation: Pick<
+      DealMilestoneSettlementExecutionTransactionRecord,
+      | "reconciledAgreementAddress"
+      | "reconciledAt"
+      | "reconciledConfirmedAt"
+      | "reconciledMatchesTrackedAgreement"
+      | "reconciledStatus"
+    >
+  ): Promise<DealMilestoneSettlementExecutionTransactionRecord> {
+    const record =
+      await this.prisma.dealMilestoneSettlementExecutionTransaction.update({
+        data: {
+          reconciledAgreementAddress: reconciliation.reconciledAgreementAddress,
+          reconciledAt: reconciliation.reconciledAt
+            ? toDate(reconciliation.reconciledAt)
+            : null,
+          reconciledConfirmedAt: reconciliation.reconciledConfirmedAt
+            ? toDate(reconciliation.reconciledConfirmedAt)
+            : null,
+          reconciledMatchesTrackedAgreement:
+            reconciliation.reconciledMatchesTrackedAgreement,
+          reconciledStatus: reconciliation.reconciledStatus
+            ? (reconciliation.reconciledStatus as PrismaFundingTransactionReconciledStatus)
+            : null
+        },
+        where: { id }
+      });
+
+    return mapDealMilestoneSettlementExecutionTransactionRecord(record);
+  }
+}
+
 export class PrismaOrganizationMemberRepository
   implements OrganizationMemberRepository
 {
@@ -2156,8 +2798,14 @@ export class PrismaRelease1Repositories implements Release1Repositories {
   readonly auditLogs: AuditLogRepository;
   readonly counterparties: CounterpartyRepository;
   readonly counterpartyDealVersionAcceptances: CounterpartyDealVersionAcceptanceRepository;
+  readonly dealMilestoneDisputeAssignments: DealMilestoneDisputeAssignmentRepository;
+  readonly dealMilestoneDisputeDecisions: DealMilestoneDisputeDecisionRepository;
+  readonly dealMilestoneDisputeEvidence: DealMilestoneDisputeEvidenceRepository;
+  readonly dealMilestoneDisputes: DealMilestoneDisputeRepository;
   readonly dealMilestoneReviewDeadlineExpiries: DealMilestoneReviewDeadlineExpiryRepository;
   readonly dealMilestoneReviews: DealMilestoneReviewRepository;
+  readonly dealMilestoneSettlementExecutionTransactions: DealMilestoneSettlementExecutionTransactionRepository;
+  readonly dealMilestoneSettlementPreparations: DealMilestoneSettlementPreparationRepository;
   readonly dealMilestoneSettlementRequests: DealMilestoneSettlementRequestRepository;
   readonly dealMilestoneSubmissionFiles: DealMilestoneSubmissionFileRepository;
   readonly dealMilestoneSubmissions: DealMilestoneSubmissionRepository;
@@ -2184,9 +2832,20 @@ export class PrismaRelease1Repositories implements Release1Repositories {
     this.counterparties = new PrismaCounterpartyRepository(prisma);
     this.counterpartyDealVersionAcceptances =
       new PrismaCounterpartyDealVersionAcceptanceRepository(prisma);
+    this.dealMilestoneDisputeAssignments =
+      new PrismaDealMilestoneDisputeAssignmentRepository(prisma);
+    this.dealMilestoneDisputeDecisions =
+      new PrismaDealMilestoneDisputeDecisionRepository(prisma);
+    this.dealMilestoneDisputeEvidence =
+      new PrismaDealMilestoneDisputeEvidenceRepository(prisma);
+    this.dealMilestoneDisputes = new PrismaDealMilestoneDisputeRepository(prisma);
     this.dealMilestoneReviewDeadlineExpiries =
       new PrismaDealMilestoneReviewDeadlineExpiryRepository(prisma);
     this.dealMilestoneReviews = new PrismaDealMilestoneReviewRepository(prisma);
+    this.dealMilestoneSettlementExecutionTransactions =
+      new PrismaDealMilestoneSettlementExecutionTransactionRepository(prisma);
+    this.dealMilestoneSettlementPreparations =
+      new PrismaDealMilestoneSettlementPreparationRepository(prisma);
     this.dealMilestoneSettlementRequests =
       new PrismaDealMilestoneSettlementRequestRepository(prisma);
     this.dealMilestoneSubmissionFiles =

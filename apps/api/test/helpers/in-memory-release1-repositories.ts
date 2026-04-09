@@ -2,8 +2,14 @@ import type {
   AuditLogRecord,
   CounterpartyRecord,
   CounterpartyDealVersionAcceptanceRecord,
+  DealMilestoneDisputeAssignmentRecord,
+  DealMilestoneDisputeDecisionRecord,
+  DealMilestoneDisputeEvidenceRecord,
+  DealMilestoneDisputeRecord,
   DealMilestoneReviewDeadlineExpiryRecord,
   DealMilestoneReviewRecord,
+  DealMilestoneSettlementExecutionTransactionRecord,
+  DealMilestoneSettlementPreparationRecord,
   DealMilestoneSettlementRequestRecord,
   DealMilestoneSubmissionFileRecord,
   DealMilestoneSubmissionRecord,
@@ -35,8 +41,14 @@ export class InMemoryRelease1Repositories implements Release1Repositories {
   readonly auditLogRecords: AuditLogRecord[] = [];
   readonly counterpartyRecords: CounterpartyRecord[] = [];
   readonly counterpartyDealVersionAcceptanceRecords: CounterpartyDealVersionAcceptanceRecord[] = [];
+  readonly dealMilestoneDisputeAssignmentRecords: DealMilestoneDisputeAssignmentRecord[] = [];
+  readonly dealMilestoneDisputeDecisionRecords: DealMilestoneDisputeDecisionRecord[] = [];
+  readonly dealMilestoneDisputeEvidenceRecords: DealMilestoneDisputeEvidenceRecord[] = [];
+  readonly dealMilestoneDisputeRecords: DealMilestoneDisputeRecord[] = [];
   readonly dealMilestoneReviewDeadlineExpiryRecords: DealMilestoneReviewDeadlineExpiryRecord[] = [];
   readonly dealMilestoneReviewRecords: DealMilestoneReviewRecord[] = [];
+  readonly dealMilestoneSettlementExecutionTransactionRecords: DealMilestoneSettlementExecutionTransactionRecord[] = [];
+  readonly dealMilestoneSettlementPreparationRecords: DealMilestoneSettlementPreparationRecord[] = [];
   readonly dealMilestoneSettlementRequestRecords: DealMilestoneSettlementRequestRecord[] = [];
   readonly dealMilestoneSubmissionFileRecords: DealMilestoneSubmissionFileRecord[] = [];
   readonly dealMilestoneSubmissionRecords: DealMilestoneSubmissionRecord[] = [];
@@ -327,6 +339,92 @@ export class InMemoryRelease1Repositories implements Release1Repositories {
         .sort((left, right) => compareIsoTimestamps(left.reviewedAt, right.reviewedAt))
   };
 
+  readonly dealMilestoneDisputes = {
+    create: async (
+      record: DealMilestoneDisputeRecord
+    ): Promise<DealMilestoneDisputeRecord> => {
+      this.dealMilestoneDisputeRecords.push(record);
+      return record;
+    },
+    findByDealMilestoneReviewId: async (
+      dealMilestoneReviewId: string
+    ): Promise<DealMilestoneDisputeRecord | null> =>
+      this.dealMilestoneDisputeRecords.find(
+        (record) => record.dealMilestoneReviewId === dealMilestoneReviewId
+      ) ?? null,
+    findById: async (id: string): Promise<DealMilestoneDisputeRecord | null> =>
+      this.dealMilestoneDisputeRecords.find((record) => record.id === id) ?? null,
+    listByDealVersionId: async (
+      dealVersionId: string
+    ): Promise<DealMilestoneDisputeRecord[]> =>
+      this.dealMilestoneDisputeRecords
+        .filter((record) => record.dealVersionId === dealVersionId)
+        .sort((left, right) => compareIsoTimestamps(left.openedAt, right.openedAt))
+  };
+
+  readonly dealMilestoneDisputeEvidence = {
+    add: async (
+      record: DealMilestoneDisputeEvidenceRecord
+    ): Promise<DealMilestoneDisputeEvidenceRecord> => {
+      this.dealMilestoneDisputeEvidenceRecords.push(record);
+      return record;
+    },
+    listByDealMilestoneDisputeId: async (
+      dealMilestoneDisputeId: string
+    ): Promise<DealMilestoneDisputeEvidenceRecord[]> =>
+      this.dealMilestoneDisputeEvidenceRecords
+        .filter((record) => record.dealMilestoneDisputeId === dealMilestoneDisputeId)
+        .sort((left, right) => compareIsoTimestamps(left.createdAt, right.createdAt))
+  };
+
+  readonly dealMilestoneDisputeAssignments = {
+    create: async (
+      record: DealMilestoneDisputeAssignmentRecord
+    ): Promise<DealMilestoneDisputeAssignmentRecord> => {
+      this.dealMilestoneDisputeAssignmentRecords.push(record);
+      return record;
+    },
+    findById: async (
+      id: string
+    ): Promise<DealMilestoneDisputeAssignmentRecord | null> =>
+      this.dealMilestoneDisputeAssignmentRecords.find((record) => record.id === id) ??
+      null,
+    listByDealMilestoneDisputeId: async (
+      dealMilestoneDisputeId: string
+    ): Promise<DealMilestoneDisputeAssignmentRecord[]> =>
+      this.dealMilestoneDisputeAssignmentRecords
+        .filter((record) => record.dealMilestoneDisputeId === dealMilestoneDisputeId)
+        .sort((left, right) => compareIsoTimestamps(left.assignedAt, right.assignedAt))
+  };
+
+  readonly dealMilestoneDisputeDecisions = {
+    create: async (
+      record: DealMilestoneDisputeDecisionRecord
+    ): Promise<DealMilestoneDisputeDecisionRecord> => {
+      this.dealMilestoneDisputeDecisionRecords.push(record);
+      return record;
+    },
+    findByDealMilestoneDisputeId: async (
+      dealMilestoneDisputeId: string
+    ): Promise<DealMilestoneDisputeDecisionRecord | null> =>
+      this.dealMilestoneDisputeDecisionRecords.find(
+        (record) => record.dealMilestoneDisputeId === dealMilestoneDisputeId
+      ) ?? null,
+    findById: async (
+      id: string
+    ): Promise<DealMilestoneDisputeDecisionRecord | null> =>
+      this.dealMilestoneDisputeDecisionRecords.find((record) => record.id === id) ??
+      null,
+    findByDealMilestoneSettlementRequestId: async (
+      dealMilestoneSettlementRequestId: string
+    ): Promise<DealMilestoneDisputeDecisionRecord | null> =>
+      this.dealMilestoneDisputeDecisionRecords.find(
+        (record) =>
+          record.dealMilestoneSettlementRequestId ===
+          dealMilestoneSettlementRequestId
+      ) ?? null
+  };
+
   readonly dealMilestoneReviewDeadlineExpiries = {
     create: async (
       record: DealMilestoneReviewDeadlineExpiryRecord
@@ -350,10 +448,29 @@ export class InMemoryRelease1Repositories implements Release1Repositories {
 
   readonly dealMilestoneSettlementRequests = {
     create: async (
-      record: DealMilestoneSettlementRequestRecord
+      record:
+        | DealMilestoneSettlementRequestRecord
+        | (Omit<
+            DealMilestoneSettlementRequestRecord,
+            "dealMilestoneDisputeId" | "requestedByArbitratorAddress" | "source"
+          > &
+            Partial<
+              Pick<
+                DealMilestoneSettlementRequestRecord,
+                | "dealMilestoneDisputeId"
+                | "requestedByArbitratorAddress"
+                | "source"
+              >
+            >)
     ): Promise<DealMilestoneSettlementRequestRecord> => {
-      this.dealMilestoneSettlementRequestRecords.push(record);
-      return record;
+      const normalized: DealMilestoneSettlementRequestRecord = {
+        dealMilestoneDisputeId: null,
+        requestedByArbitratorAddress: null,
+        source: "BUYER_REVIEW",
+        ...record
+      };
+      this.dealMilestoneSettlementRequestRecords.push(normalized);
+      return normalized;
     },
     findByDealMilestoneReviewId: async (
       dealMilestoneReviewId: string
@@ -372,6 +489,40 @@ export class InMemoryRelease1Repositories implements Release1Repositories {
       this.dealMilestoneSettlementRequestRecords
         .filter((record) => record.dealVersionId === dealVersionId)
         .sort((left, right) => compareIsoTimestamps(left.requestedAt, right.requestedAt))
+  };
+
+  readonly dealMilestoneSettlementPreparations = {
+    create: async (
+      record: DealMilestoneSettlementPreparationRecord
+    ): Promise<DealMilestoneSettlementPreparationRecord> => {
+      this.dealMilestoneSettlementPreparationRecords.push(record);
+      return record;
+    },
+    findByDealMilestoneSettlementRequestId: async (
+      dealMilestoneSettlementRequestId: string
+    ): Promise<DealMilestoneSettlementPreparationRecord | null> =>
+      this.dealMilestoneSettlementPreparationRecords.find(
+        (record) =>
+          record.dealMilestoneSettlementRequestId === dealMilestoneSettlementRequestId
+      ) ?? null,
+    findById: async (
+      id: string
+    ): Promise<DealMilestoneSettlementPreparationRecord | null> =>
+      this.dealMilestoneSettlementPreparationRecords.find(
+        (record) => record.id === id
+      ) ?? null,
+    listByChainId: async (
+      chainId: number
+    ): Promise<DealMilestoneSettlementPreparationRecord[]> =>
+      this.dealMilestoneSettlementPreparationRecords
+        .filter((record) => record.chainId === chainId)
+        .sort((left, right) => compareIsoTimestamps(left.preparedAt, right.preparedAt)),
+    listByDealVersionId: async (
+      dealVersionId: string
+    ): Promise<DealMilestoneSettlementPreparationRecord[]> =>
+      this.dealMilestoneSettlementPreparationRecords
+        .filter((record) => record.dealVersionId === dealVersionId)
+        .sort((left, right) => compareIsoTimestamps(left.preparedAt, right.preparedAt))
   };
 
   readonly dealMilestoneSubmissionFiles = {
@@ -512,6 +663,111 @@ export class InMemoryRelease1Repositories implements Release1Repositories {
 
       record.supersededAt = supersededAt;
       record.supersededByFundingTransactionId = supersededByFundingTransactionId;
+
+      return record;
+    }
+  };
+
+  readonly dealMilestoneSettlementExecutionTransactions = {
+    create: async (
+      record: DealMilestoneSettlementExecutionTransactionRecord
+    ): Promise<DealMilestoneSettlementExecutionTransactionRecord> => {
+      this.dealMilestoneSettlementExecutionTransactionRecords.push(record);
+      return record;
+    },
+    findByChainIdAndTransactionHash: async (
+      chainId: number,
+      transactionHash: `0x${string}`
+    ): Promise<DealMilestoneSettlementExecutionTransactionRecord | null> =>
+      this.dealMilestoneSettlementExecutionTransactionRecords.find(
+        (record) =>
+          record.chainId === chainId && record.transactionHash === transactionHash
+      ) ?? null,
+    findById: async (
+      id: string
+    ): Promise<DealMilestoneSettlementExecutionTransactionRecord | null> =>
+      this.dealMilestoneSettlementExecutionTransactionRecords.find(
+        (record) => record.id === id
+      ) ?? null,
+    listByChainId: async (
+      chainId: number
+    ): Promise<DealMilestoneSettlementExecutionTransactionRecord[]> =>
+      this.dealMilestoneSettlementExecutionTransactionRecords
+        .filter((record) => record.chainId === chainId)
+        .sort((left, right) => compareIsoTimestamps(right.submittedAt, left.submittedAt)),
+    listByDealMilestoneSettlementRequestId: async (
+      dealMilestoneSettlementRequestId: string
+    ): Promise<DealMilestoneSettlementExecutionTransactionRecord[]> =>
+      this.dealMilestoneSettlementExecutionTransactionRecords
+        .filter(
+          (record) =>
+            record.dealMilestoneSettlementRequestId ===
+            dealMilestoneSettlementRequestId
+        )
+        .sort((left, right) => compareIsoTimestamps(right.submittedAt, left.submittedAt)),
+    markStalePendingEscalated: async (
+      id: string,
+      stalePendingEscalatedAt: string
+    ): Promise<DealMilestoneSettlementExecutionTransactionRecord> => {
+      const record =
+        this.dealMilestoneSettlementExecutionTransactionRecords.find(
+          (entry) => entry.id === id
+        );
+
+      if (!record) {
+        throw new Error(`Settlement execution transaction not found: ${id}`);
+      }
+
+      record.stalePendingEscalatedAt = stalePendingEscalatedAt;
+
+      return record;
+    },
+    markSuperseded: async (
+      id: string,
+      supersededByDealMilestoneSettlementExecutionTransactionId: string,
+      supersededAt: string
+    ): Promise<DealMilestoneSettlementExecutionTransactionRecord> => {
+      const record =
+        this.dealMilestoneSettlementExecutionTransactionRecords.find(
+          (entry) => entry.id === id
+        );
+
+      if (!record) {
+        throw new Error(`Settlement execution transaction not found: ${id}`);
+      }
+
+      record.supersededAt = supersededAt;
+      record.supersededByDealMilestoneSettlementExecutionTransactionId =
+        supersededByDealMilestoneSettlementExecutionTransactionId;
+
+      return record;
+    },
+    updateReconciliation: async (
+      id: string,
+      reconciliation: Pick<
+        DealMilestoneSettlementExecutionTransactionRecord,
+        | "reconciledAgreementAddress"
+        | "reconciledAt"
+        | "reconciledConfirmedAt"
+        | "reconciledMatchesTrackedAgreement"
+        | "reconciledStatus"
+      >
+    ): Promise<DealMilestoneSettlementExecutionTransactionRecord> => {
+      const record =
+        this.dealMilestoneSettlementExecutionTransactionRecords.find(
+          (entry) => entry.id === id
+        );
+
+      if (!record) {
+        throw new Error(`Settlement execution transaction not found: ${id}`);
+      }
+
+      record.reconciledAgreementAddress = reconciliation.reconciledAgreementAddress;
+      record.reconciledAt = reconciliation.reconciledAt;
+      record.reconciledConfirmedAt = reconciliation.reconciledConfirmedAt;
+      record.reconciledMatchesTrackedAgreement =
+        reconciliation.reconciledMatchesTrackedAgreement;
+      record.reconciledStatus = reconciliation.reconciledStatus;
 
       return record;
     }

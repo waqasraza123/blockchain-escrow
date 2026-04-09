@@ -114,6 +114,8 @@ contract EscrowAgreementFuzzHardeningTest is EscrowHardeningAssertions {
     ) private pure returns (EscrowAgreement.AgreementInitialization memory) {
         address buyer = _derivedAddress(buyerSeed, 1);
         address settlementToken = useSecondaryToken ? SETTLEMENT_TOKEN_B : SETTLEMENT_TOKEN_A;
+        uint256 totalAmount = _positiveAmount(amountSeed);
+        uint32 milestoneCount = _boundedMilestoneCount(totalAmount, milestoneSeed);
 
         return EscrowAgreement.AgreementInitialization({
             protocolConfig: protocolConfigAddress,
@@ -123,8 +125,9 @@ contract EscrowAgreementFuzzHardeningTest is EscrowHardeningAssertions {
             arbitrator: useOptionalArbitrator ? address(0) : APPROVED_ARBITRATOR,
             dealId: _nonZeroHash(dealSeed, 3),
             dealVersionHash: _nonZeroHash(versionSeed, 4),
-            totalAmount: _positiveAmount(amountSeed),
-            milestoneCount: _positiveMilestoneCount(milestoneSeed)
+            totalAmount: totalAmount,
+            milestoneCount: milestoneCount,
+            milestoneAmounts: _buildMilestoneAmounts(totalAmount, milestoneCount)
         });
     }
 
@@ -147,7 +150,25 @@ contract EscrowAgreementFuzzHardeningTest is EscrowHardeningAssertions {
         require(environment.agreement.dealVersionHash() == initialization.dealVersionHash, "agreement version mismatch");
         require(environment.agreement.totalAmount() == initialization.totalAmount, "agreement total mismatch");
         require(environment.agreement.milestoneCount() == initialization.milestoneCount, "agreement milestone mismatch");
+        require(
+            environment.agreement.milestoneAmountsHash() == keccak256(abi.encode(initialization.milestoneAmounts)),
+            "agreement milestone hash mismatch"
+        );
         require(environment.agreement.protocolFeeBps() == INITIAL_PROTOCOL_FEE_BPS, "agreement fee snapshot mismatch");
+    }
+
+    function _buildMilestoneAmounts(uint256 totalAmount, uint32 milestoneCount)
+        private
+        pure
+        returns (uint256[] memory milestoneAmounts)
+    {
+        milestoneAmounts = new uint256[](milestoneCount);
+        uint256 baseAmount = totalAmount / milestoneCount;
+        uint256 remainder = totalAmount % milestoneCount;
+
+        for (uint256 index = 0; index < milestoneCount; ++index) {
+            milestoneAmounts[index] = baseAmount + (index == milestoneCount - 1 ? remainder : 0);
+        }
     }
 
     function _derivedAddress(uint256 seed, uint256 salt) private pure returns (address) {
@@ -186,6 +207,11 @@ contract EscrowAgreementFuzzHardeningTest is EscrowHardeningAssertions {
 
     function _positiveMilestoneCount(uint256 seed) private pure returns (uint32) {
         return uint32((seed % 20) + 1);
+    }
+
+    function _boundedMilestoneCount(uint256 totalAmount, uint256 seed) private pure returns (uint32) {
+        uint256 maxMilestoneCount = totalAmount < 20 ? totalAmount : 20;
+        return uint32((seed % maxMilestoneCount) + 1);
     }
 }
 
@@ -278,6 +304,8 @@ contract EscrowFactoryFuzzHardeningTest is EscrowHardeningAssertions {
     function _creationFromSeed(uint256 seed, uint256 salt) private pure returns (EscrowFactory.EscrowCreation memory) {
         address buyer = _derivedAddress(seed, salt + 1);
         address seller = _derivedDistinctAddress(seed, salt + 2, buyer);
+        uint256 totalAmount = _positiveAmount(seed);
+        uint32 milestoneCount = _boundedMilestoneCount(totalAmount, seed);
 
         return EscrowFactory.EscrowCreation({
             buyer: buyer,
@@ -286,9 +314,24 @@ contract EscrowFactoryFuzzHardeningTest is EscrowHardeningAssertions {
             arbitrator: ((seed >> 8) & 1) == 1 ? address(0) : APPROVED_ARBITRATOR,
             dealId: _nonZeroHash(seed, salt + 3),
             dealVersionHash: _nonZeroHash(seed, salt + 4),
-            totalAmount: _positiveAmount(seed),
-            milestoneCount: _positiveMilestoneCount(seed)
+            totalAmount: totalAmount,
+            milestoneCount: milestoneCount,
+            milestoneAmounts: _buildMilestoneAmounts(totalAmount, milestoneCount)
         });
+    }
+
+    function _buildMilestoneAmounts(uint256 totalAmount, uint32 milestoneCount)
+        private
+        pure
+        returns (uint256[] memory milestoneAmounts)
+    {
+        milestoneAmounts = new uint256[](milestoneCount);
+        uint256 baseAmount = totalAmount / milestoneCount;
+        uint256 remainder = totalAmount % milestoneCount;
+
+        for (uint256 index = 0; index < milestoneCount; ++index) {
+            milestoneAmounts[index] = baseAmount + (index == milestoneCount - 1 ? remainder : 0);
+        }
     }
 
     function _callCreateAgreement(EscrowFactory factory, EscrowFactory.EscrowCreation memory creation)
@@ -340,6 +383,11 @@ contract EscrowFactoryFuzzHardeningTest is EscrowHardeningAssertions {
 
     function _positiveMilestoneCount(uint256 seed) private pure returns (uint32) {
         return uint32((seed % 20) + 1);
+    }
+
+    function _boundedMilestoneCount(uint256 totalAmount, uint256 seed) private pure returns (uint32) {
+        uint256 maxMilestoneCount = totalAmount < 20 ? totalAmount : 20;
+        return uint32((seed % maxMilestoneCount) + 1);
     }
 
     function _boundedOperationCount(uint256 originalLength, uint256 maxLength) private pure returns (uint256) {
