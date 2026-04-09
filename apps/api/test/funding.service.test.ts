@@ -6,6 +6,7 @@ import {
 } from "@blockchain-escrow/contracts-sdk";
 import { privateKeyToAccount } from "viem/accounts";
 
+import type { ApprovalsService } from "../src/modules/approvals/approvals.service";
 import { AuthenticatedSessionService } from "../src/modules/auth/authenticated-session.service";
 import { buildCanonicalDealId } from "../src/modules/drafts/deal-identity";
 import { DraftsService } from "../src/modules/drafts/drafts.service";
@@ -13,6 +14,7 @@ import type { FundingChainReader } from "../src/modules/funding/funding-chain-re
 import { createUnavailableFundingChainReader } from "../src/modules/funding/funding-chain-reader";
 import { FundingService } from "../src/modules/funding/funding.service";
 import type { FundingReconciliationConfiguration } from "../src/modules/funding/funding.tokens";
+import type { ApprovalRequirementSummary } from "@blockchain-escrow/shared";
 import {
   authConfiguration,
   FakeSessionTokenService,
@@ -126,7 +128,13 @@ async function seedOrganizationMembership(
 }
 
 function createServices(
-  fundingChainReader: FundingChainReader = createUnavailableFundingChainReader()
+  fundingChainReader: FundingChainReader = createUnavailableFundingChainReader(),
+  approvalRequirement: ApprovalRequirementSummary = {
+    applicablePolicy: null,
+    currentRequest: null,
+    required: false,
+    status: "NOT_REQUIRED" as const
+  }
 ) {
   const release1Repositories = new InMemoryRelease1Repositories();
   const release4Repositories = new InMemoryRelease4Repositories();
@@ -136,6 +144,9 @@ function createServices(
     authConfiguration,
     sessionTokenService
   );
+  const approvalsService = {
+    buildApprovalRequirement: async () => approvalRequirement
+  } as Pick<ApprovalsService, "buildApprovalRequirement"> as ApprovalsService;
 
   return {
     draftsService: new DraftsService(
@@ -149,7 +160,8 @@ function createServices(
       release4Repositories,
       authenticatedSessionService,
       fundingReconciliationConfiguration,
-      fundingChainReader
+      fundingChainReader,
+      approvalsService
     ),
     release1Repositories,
     release4Repositories,
@@ -158,9 +170,10 @@ function createServices(
 }
 
 async function seedFundingScenario(
-  fundingChainReader?: FundingChainReader
+  fundingChainReader?: FundingChainReader,
+  approvalRequirement?: ApprovalRequirementSummary
 ) {
-  const services = createServices(fundingChainReader);
+  const services = createServices(fundingChainReader, approvalRequirement);
   const actor = await seedAuthenticatedActor(
     services.release1Repositories,
     services.sessionTokenService
@@ -412,6 +425,35 @@ test("funding service returns a ready preparation when projections and both acce
     result.preparation.predictedAgreementAddress ?? "",
     /^0x[a-f0-9]{40}$/
   );
+});
+
+test("funding service blocks preparation when funding approval is required but missing", async () => {
+  const seeded = await seedFundingScenario(undefined, {
+    applicablePolicy: null,
+    currentRequest: null,
+    required: true,
+    status: "REQUIRED"
+  });
+
+  await createCounterpartyAcceptance(seeded);
+
+  const result = await seeded.services.fundingService.getFundingPreparation(
+    {
+      dealVersionId: seeded.version.version.id,
+      draftDealId: seeded.draft.draft.id,
+      organizationId: "org-1"
+    },
+    {
+      cookieHeader: seeded.actor.cookieHeader,
+      ipAddress: "127.0.0.1",
+      userAgent: "test-agent"
+    }
+  );
+
+  assert.equal(result.preparation.ready, false);
+  assert.equal(result.preparation.approval?.required, true);
+  assert.equal(result.preparation.approval?.status, "REQUIRED");
+  assert.ok(result.preparation.blockers.includes("APPROVAL_REQUEST_MISSING"));
 });
 
 test("funding service switches to create-and-fund preparation with live allowance on v2 deployments", async () => {

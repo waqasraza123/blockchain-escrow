@@ -7,6 +7,10 @@ import type {
 } from "@blockchain-escrow/shared";
 
 import type {
+  ApprovalPolicyRecord,
+  ApprovalPolicyStepRecord,
+  ApprovalRequestRecord,
+  ApprovalRequestStepRecord,
   ArbitratorRegistryEntryRecord,
   AuditLogRecord,
   ChainCursorRecord,
@@ -15,6 +19,7 @@ import type {
   ComplianceCheckpointRecord,
   ContractOwnershipRecord,
   CounterpartyRecord,
+  CostCenterRecord,
   CounterpartyDealVersionAcceptanceRecord,
   DealMilestoneDisputeAssignmentRecord,
   DealMilestoneDisputeDecisionRecord,
@@ -50,6 +55,7 @@ import type {
   ProtocolConfigStateRecord,
   ProtocolProposalDraftRecord,
   SessionRecord,
+  StatementSnapshotRecord,
   TemplateRecord,
   TokenAllowlistEntryRecord,
   UserRecord,
@@ -94,6 +100,16 @@ export interface OperatorAccountRepository {
   findActiveByUserId(userId: EntityId): Promise<OperatorAccountRecord | null>;
   findActiveByWalletId(walletId: EntityId): Promise<OperatorAccountRecord | null>;
   findById(id: EntityId): Promise<OperatorAccountRecord | null>;
+}
+
+export interface CostCenterRepository {
+  create(record: CostCenterRecord): Promise<CostCenterRecord>;
+  findById(id: EntityId): Promise<CostCenterRecord | null>;
+  findByOrganizationIdAndNormalizedCode(
+    organizationId: EntityId,
+    normalizedCode: string
+  ): Promise<CostCenterRecord | null>;
+  listByOrganizationId(organizationId: EntityId): Promise<CostCenterRecord[]>;
 }
 
 export interface OrganizationRepository {
@@ -183,10 +199,59 @@ export interface ComplianceCaseNoteRepository {
   ): Promise<ComplianceCaseNoteRecord[]>;
 }
 
+export interface ApprovalPolicyRepository {
+  create(record: ApprovalPolicyRecord): Promise<ApprovalPolicyRecord>;
+  findById(id: EntityId): Promise<ApprovalPolicyRecord | null>;
+  listActiveByOrganizationId(
+    organizationId: EntityId
+  ): Promise<ApprovalPolicyRecord[]>;
+  listByOrganizationId(organizationId: EntityId): Promise<ApprovalPolicyRecord[]>;
+}
+
+export interface ApprovalPolicyStepRepository {
+  create(record: ApprovalPolicyStepRecord): Promise<ApprovalPolicyStepRecord>;
+  listByApprovalPolicyId(
+    approvalPolicyId: EntityId
+  ): Promise<ApprovalPolicyStepRecord[]>;
+}
+
+export interface ApprovalRequestRepository {
+  create(record: ApprovalRequestRecord): Promise<ApprovalRequestRecord>;
+  findByDealVersionIdAndKind(
+    dealVersionId: EntityId,
+    kind: ApprovalRequestRecord["kind"]
+  ): Promise<ApprovalRequestRecord | null>;
+  findById(id: EntityId): Promise<ApprovalRequestRecord | null>;
+  listByDealVersionId(dealVersionId: EntityId): Promise<ApprovalRequestRecord[]>;
+  update(
+    id: EntityId,
+    updates: Partial<
+      Omit<ApprovalRequestRecord, "id" | "organizationId" | "draftDealId" | "dealVersionId">
+    >
+  ): Promise<ApprovalRequestRecord>;
+}
+
+export interface ApprovalRequestStepRepository {
+  create(record: ApprovalRequestStepRecord): Promise<ApprovalRequestStepRecord>;
+  findById(id: EntityId): Promise<ApprovalRequestStepRecord | null>;
+  listByApprovalRequestId(
+    approvalRequestId: EntityId
+  ): Promise<ApprovalRequestStepRecord[]>;
+  update(
+    id: EntityId,
+    updates: Partial<Omit<ApprovalRequestStepRecord, "id" | "approvalRequestId">>
+  ): Promise<ApprovalRequestStepRecord>;
+}
+
 export interface ProtocolProposalDraftRepository {
   create(record: ProtocolProposalDraftRecord): Promise<ProtocolProposalDraftRecord>;
   findById(id: EntityId): Promise<ProtocolProposalDraftRecord | null>;
   listAll(): Promise<ProtocolProposalDraftRecord[]>;
+}
+
+export interface StatementSnapshotRepository {
+  create(record: StatementSnapshotRecord): Promise<StatementSnapshotRecord>;
+  listByDealVersionId(dealVersionId: EntityId): Promise<StatementSnapshotRecord[]>;
 }
 
 export interface CounterpartyRepository {
@@ -225,6 +290,11 @@ export interface DraftDealRepository {
   listAll(): Promise<DraftDealRecord[]>;
   listByOrganizationId(organizationId: EntityId): Promise<DraftDealRecord[]>;
   listByStates(states: DraftDealRecord["state"][]): Promise<DraftDealRecord[]>;
+  updateCostCenter(
+    id: EntityId,
+    costCenterId: EntityId | null,
+    updatedAt: string
+  ): Promise<DraftDealRecord | null>;
   updateState(
     id: EntityId,
     state: DraftDealRecord["state"],
@@ -640,4 +710,13 @@ export interface Release8Repositories {
   operatorAccounts: OperatorAccountRepository;
   operatorAlerts: OperatorAlertRepository;
   protocolProposalDrafts: ProtocolProposalDraftRepository;
+}
+
+export interface Release9Repositories {
+  approvalPolicies: ApprovalPolicyRepository;
+  approvalPolicySteps: ApprovalPolicyStepRepository;
+  approvalRequests: ApprovalRequestRepository;
+  approvalRequestSteps: ApprovalRequestStepRepository;
+  costCenters: CostCenterRepository;
+  statementSnapshots: StatementSnapshotRepository;
 }

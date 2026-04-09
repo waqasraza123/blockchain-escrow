@@ -1,5 +1,6 @@
 import { Module } from "@nestjs/common";
 
+import { ApprovalsModule } from "../approvals/approvals.module";
 import { AuthModule } from "../auth/auth.module";
 import { FundingController } from "./funding.controller";
 import {
@@ -13,7 +14,7 @@ import {
 } from "./funding.tokens";
 
 @Module({
-  imports: [AuthModule],
+  imports: [AuthModule, ApprovalsModule],
   controllers: [FundingController],
   providers: [
     FundingService,

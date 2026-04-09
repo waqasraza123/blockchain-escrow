@@ -282,6 +282,7 @@ function mapTemplateRecord(record: {
 }
 
 function mapDraftDealRecord(record: {
+  costCenterId: string | null;
   createdAt: Date;
   createdByUserId: string;
   id: string;
@@ -294,6 +295,7 @@ function mapDraftDealRecord(record: {
   updatedAt: Date;
 }): DraftDealRecord {
   return {
+    costCenterId: record.costCenterId,
     createdAt: toRequiredIsoTimestamp(record.createdAt),
     createdByUserId: record.createdByUserId,
     id: record.id,
@@ -1321,6 +1323,7 @@ export class PrismaDraftDealRepository implements DraftDealRepository {
   async create(record: DraftDealRecord): Promise<DraftDealRecord> {
     const created = await this.prisma.draftDeal.create({
       data: {
+        costCenterId: record.costCenterId ?? null,
         createdAt: toDate(record.createdAt),
         createdByUserId: record.createdByUserId,
         id: record.id,
@@ -1370,6 +1373,28 @@ export class PrismaDraftDealRepository implements DraftDealRepository {
     });
 
     return records.map(mapDraftDealRecord);
+  }
+
+  async updateCostCenter(
+    id: string,
+    costCenterId: string | null,
+    updatedAt: string
+  ): Promise<DraftDealRecord | null> {
+    const existing = await this.prisma.draftDeal.findUnique({ where: { id } });
+
+    if (!existing) {
+      return null;
+    }
+
+    const updated = await this.prisma.draftDeal.update({
+      where: { id },
+      data: {
+        costCenterId,
+        updatedAt: toDate(updatedAt)
+      }
+    });
+
+    return mapDraftDealRecord(updated);
   }
 
   async updateState(

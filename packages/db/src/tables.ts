@@ -52,6 +52,18 @@ export const release8TableNames = {
 export type Release8TableName =
   (typeof release8TableNames)[keyof typeof release8TableNames];
 
+export const release9TableNames = {
+  approvalPolicies: "approval_policies",
+  approvalPolicySteps: "approval_policy_steps",
+  approvalRequests: "approval_requests",
+  approvalRequestSteps: "approval_request_steps",
+  costCenters: "cost_centers",
+  statementSnapshots: "statement_snapshots"
+} as const;
+
+export type Release9TableName =
+  (typeof release9TableNames)[keyof typeof release9TableNames];
+
 export const release4TableNames = {
   arbitratorRegistryEntryProjections: "arbitrator_registry_entry_projections",
   chainCursors: "chain_cursors",

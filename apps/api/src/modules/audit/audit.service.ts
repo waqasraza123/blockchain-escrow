@@ -277,10 +277,15 @@ export class AuditService {
         );
       }
       case "OPERATOR_ALERT":
+      case "APPROVAL_POLICY":
+      case "APPROVAL_REQUEST":
+      case "APPROVAL_REQUEST_STEP":
       case "COMPLIANCE_CHECKPOINT":
       case "COMPLIANCE_CASE":
       case "COMPLIANCE_CASE_NOTE":
+      case "COST_CENTER":
       case "PROTOCOL_PROPOSAL_DRAFT":
+      case "STATEMENT_SNAPSHOT":
         throw new ForbiddenException(
           "audit logs for operator-only entities are not available on this surface"
         );

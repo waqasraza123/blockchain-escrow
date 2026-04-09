@@ -37,6 +37,9 @@ enum AuditAction {
   AUTH_LOGOUT
   AUTH_NONCE_ISSUED
   AUTH_SESSION_VERIFIED
+  APPROVAL_POLICY_CREATED
+  APPROVAL_REQUEST_CREATED
+  APPROVAL_STEP_DECIDED
   COMPLIANCE_CASE_ASSIGNED
   COMPLIANCE_CASE_CREATED
   COMPLIANCE_CASE_NOTE_ADDED
@@ -44,6 +47,7 @@ enum AuditAction {
   COMPLIANCE_CHECKPOINT_CREATED
   COMPLIANCE_CHECKPOINT_DECIDED
   COUNTERPARTY_CREATED
+  COST_CENTER_CREATED
   DEAL_MILESTONE_DISPUTE_ARBITRATOR_ASSIGNED
   DEAL_MILESTONE_DISPUTE_DECISION_SUBMITTED
   DEAL_MILESTONE_DISPUTE_OPENED
@@ -79,6 +83,7 @@ enum AuditAction {
   OPERATOR_ALERT_ACKNOWLEDGED
   OPERATOR_ALERT_RESOLVED
   PROTOCOL_PROPOSAL_DRAFT_CREATED
+  STATEMENT_SNAPSHOT_CREATED
   TEMPLATE_CREATED
 }
 
@@ -177,11 +182,41 @@ enum ProtocolProposalAction {
   UNPAUSE_FUNDING
 }
 
+enum CostCenterStatus {
+  ACTIVE
+  ARCHIVED
+}
+
+enum ApprovalPolicyKind {
+  DEAL_FUNDING
+}
+
+enum ApprovalRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+enum ApprovalStepStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum StatementSnapshotKind {
+  DEAL_VERSION_SETTLEMENT
+}
+
 enum AuditEntityType {
+  APPROVAL_POLICY
+  APPROVAL_REQUEST
+  APPROVAL_REQUEST_STEP
   COMPLIANCE_CASE
   COMPLIANCE_CASE_NOTE
   COMPLIANCE_CHECKPOINT
   COUNTERPARTY
+  COST_CENTER
   DEAL_MILESTONE_DISPUTE
   DEAL_MILESTONE_DISPUTE_ASSIGNMENT
   DEAL_MILESTONE_DISPUTE_DECISION
@@ -201,6 +236,7 @@ enum AuditEntityType {
   OPERATOR_ALERT
   PROTOCOL_PROPOSAL_DRAFT
   SESSION
+  STATEMENT_SNAPSHOT
   TEMPLATE
   USER
   WALLET
@@ -284,7 +320,12 @@ model User {
   id                         String                 @id @db.Text
   createdAt                  DateTime               @db.Timestamptz(3)
   updatedAt                  DateTime               @db.Timestamptz(3)
+  approvalPoliciesCreated    ApprovalPolicy[]       @relation("ApprovalPolicyCreatedByUser")
+  approvalRequestsRequested  ApprovalRequest[]      @relation("ApprovalRequestRequestedByUser")
+  approvalRequestStepsDecided ApprovalRequestStep[] @relation("ApprovalRequestStepDecidedByUser")
+  costCentersCreated         CostCenter[]           @relation("CostCenterCreatedByUser")
   sessions                   Session[]
+  statementSnapshotsCreated  StatementSnapshot[]    @relation("StatementSnapshotCreatedByUser")
   wallets                    Wallet[]
   organizationsOwned         Organization[]
   operatorAccounts           OperatorAccount[]
@@ -394,6 +435,9 @@ model Organization {
   slug                   String                  @unique @db.Text
   createdAt              DateTime                @db.Timestamptz(3)
   updatedAt              DateTime                @db.Timestamptz(3)
+  approvalPolicies       ApprovalPolicy[]
+  approvalRequests       ApprovalRequest[]
+  costCenters            CostCenter[]
   createdByUser          User                    @relation(fields: [createdByUserId], references: [id], onDelete: Restrict)
   counterparties         Counterparty[]
   dealMilestoneDisputeAssignments DealMilestoneDisputeAssignment[]
@@ -415,6 +459,7 @@ model Organization {
   complianceCases        ComplianceCase[]
   complianceCheckpoints  ComplianceCheckpoint[]
   operatorAlerts         OperatorAlert[]
+  statementSnapshots     StatementSnapshot[]
   templates              Template[]
   members                OrganizationMember[]
   invites                OrganizationInvite[]
@@ -422,6 +467,31 @@ model Organization {
 
   @@index([createdByUserId], map: "organizations_created_by_user_id_idx")
   @@map("organizations")
+}
+
+model CostCenter {
+  id              String            @id @db.Text
+  organizationId  String            @db.Text
+  createdByUserId String            @db.Text
+  code            String            @db.Text
+  normalizedCode  String            @db.Text
+  name            String            @db.Text
+  description     String?           @db.Text
+  status          CostCenterStatus
+  createdAt       DateTime          @db.Timestamptz(3)
+  updatedAt       DateTime          @db.Timestamptz(3)
+  organization    Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdByUser   User              @relation("CostCenterCreatedByUser", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  approvalPolicies ApprovalPolicy[]
+  approvalRequests ApprovalRequest[]
+  draftDeals      DraftDeal[]
+  statementSnapshots StatementSnapshot[]
+
+  @@unique([organizationId, normalizedCode], map: "cost_centers_organization_id_normalized_code_key")
+  @@index([organizationId], map: "cost_centers_organization_id_idx")
+  @@index([createdByUserId], map: "cost_centers_created_by_user_id_idx")
+  @@index([status], map: "cost_centers_status_idx")
+  @@map("cost_centers")
 }
 
 model Counterparty {
@@ -502,6 +572,7 @@ model DraftDeal {
   id                 String             @id @db.Text
   organizationId     String             @db.Text
   createdByUserId    String             @db.Text
+  costCenterId       String?            @db.Text
   templateId         String?            @db.Text
   title              String             @db.Text
   summary            String?            @db.Text
@@ -509,6 +580,7 @@ model DraftDeal {
   state              DealState
   createdAt          DateTime           @db.Timestamptz(3)
   updatedAt          DateTime           @db.Timestamptz(3)
+  costCenter         CostCenter?        @relation(fields: [costCenterId], references: [id], onDelete: SetNull)
   organization       Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   createdByUser      User               @relation("DraftDealCreatedByUser", fields: [createdByUserId], references: [id], onDelete: Restrict)
   template           Template?          @relation("DraftDealTemplate", fields: [templateId], references: [id], onDelete: SetNull)
@@ -521,8 +593,11 @@ model DraftDeal {
   fundingTransactions FundingTransaction[]
   milestoneReviews   DealMilestoneReview[]
   parties            DraftDealParty[]
+  approvalRequests   ApprovalRequest[]
+  statementSnapshots StatementSnapshot[]
   versions           DealVersion[]
 
+  @@index([costCenterId], map: "draft_deals_cost_center_id_idx")
   @@index([organizationId], map: "draft_deals_organization_id_idx")
   @@index([createdByUserId], map: "draft_deals_created_by_user_id_idx")
   @@index([templateId], map: "draft_deals_template_id_idx")
@@ -570,6 +645,7 @@ model DealVersion {
   acceptances        DealVersionAcceptance[]
   counterpartyAcceptances CounterpartyDealVersionAcceptance[]
   fundingTransactions FundingTransaction[]
+  approvalRequests    ApprovalRequest[]
   milestoneDisputes  DealMilestoneDispute[]
   milestoneReviewDeadlineExpiries DealMilestoneReviewDeadlineExpiry[]
   milestoneReviews   DealMilestoneReview[]
@@ -580,6 +656,7 @@ model DealVersion {
   parties            DealVersionParty[]
   milestones         DealVersionMilestone[]
   files              DealVersionFile[]
+  statementSnapshots StatementSnapshot[]
 
   @@unique([draftDealId, versionNumber], map: "deal_versions_draft_deal_id_version_number_key")
   @@index([draftDealId], map: "deal_versions_draft_deal_id_idx")
@@ -588,6 +665,128 @@ model DealVersion {
   @@index([templateId], map: "deal_versions_template_id_idx")
   @@index([draftDealId, createdAt], map: "deal_versions_draft_deal_id_created_at_idx")
   @@map("deal_versions")
+}
+
+model ApprovalPolicy {
+  id                String                 @id @db.Text
+  organizationId    String                 @db.Text
+  createdByUserId   String                 @db.Text
+  costCenterId      String?                @db.Text
+  kind              ApprovalPolicyKind
+  name              String                 @db.Text
+  description       String?                @db.Text
+  settlementCurrency SettlementCurrency?
+  active            Boolean
+  createdAt         DateTime               @db.Timestamptz(3)
+  updatedAt         DateTime               @db.Timestamptz(3)
+  organization      Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdByUser     User                   @relation("ApprovalPolicyCreatedByUser", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  costCenter        CostCenter?            @relation(fields: [costCenterId], references: [id], onDelete: SetNull)
+  requests          ApprovalRequest[]
+  steps             ApprovalPolicyStep[]
+
+  @@index([organizationId], map: "approval_policies_organization_id_idx")
+  @@index([createdByUserId], map: "approval_policies_created_by_user_id_idx")
+  @@index([costCenterId], map: "approval_policies_cost_center_id_idx")
+  @@index([active], map: "approval_policies_active_idx")
+  @@index([kind], map: "approval_policies_kind_idx")
+  @@map("approval_policies")
+}
+
+model ApprovalPolicyStep {
+  id               String           @id @db.Text
+  approvalPolicyId String           @db.Text
+  position         Int
+  label            String           @db.Text
+  requiredRole     OrganizationRole
+  approvalPolicy   ApprovalPolicy   @relation(fields: [approvalPolicyId], references: [id], onDelete: Cascade)
+
+  @@unique([approvalPolicyId, position], map: "approval_policy_steps_policy_id_position_key")
+  @@index([approvalPolicyId], map: "approval_policy_steps_policy_id_idx")
+  @@map("approval_policy_steps")
+}
+
+model ApprovalRequest {
+  id                String                @id @db.Text
+  organizationId    String                @db.Text
+  draftDealId       String                @db.Text
+  dealVersionId     String                @db.Text
+  approvalPolicyId  String                @db.Text
+  requestedByUserId String                @db.Text
+  costCenterId      String?               @db.Text
+  kind              ApprovalPolicyKind
+  status            ApprovalRequestStatus
+  title             String                @db.Text
+  totalAmountMinor  String                @db.Text
+  settlementCurrency SettlementCurrency
+  note              String?               @db.Text
+  requestedAt       DateTime              @db.Timestamptz(3)
+  decidedAt         DateTime?             @db.Timestamptz(3)
+  organization      Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  draftDeal         DraftDeal             @relation(fields: [draftDealId], references: [id], onDelete: Cascade)
+  dealVersion       DealVersion           @relation(fields: [dealVersionId], references: [id], onDelete: Cascade)
+  approvalPolicy    ApprovalPolicy        @relation(fields: [approvalPolicyId], references: [id], onDelete: Restrict)
+  requestedByUser   User                  @relation("ApprovalRequestRequestedByUser", fields: [requestedByUserId], references: [id], onDelete: Restrict)
+  costCenter        CostCenter?           @relation(fields: [costCenterId], references: [id], onDelete: SetNull)
+  steps             ApprovalRequestStep[]
+  statementSnapshots StatementSnapshot[]
+
+  @@unique([dealVersionId, kind], map: "approval_requests_deal_version_id_kind_key")
+  @@index([organizationId], map: "approval_requests_organization_id_idx")
+  @@index([draftDealId], map: "approval_requests_draft_deal_id_idx")
+  @@index([approvalPolicyId], map: "approval_requests_policy_id_idx")
+  @@index([costCenterId], map: "approval_requests_cost_center_id_idx")
+  @@index([status], map: "approval_requests_status_idx")
+  @@index([requestedAt], map: "approval_requests_requested_at_idx")
+  @@map("approval_requests")
+}
+
+model ApprovalRequestStep {
+  id                String             @id @db.Text
+  approvalRequestId String             @db.Text
+  position          Int
+  label             String             @db.Text
+  requiredRole      OrganizationRole
+  status            ApprovalStepStatus
+  note              String?            @db.Text
+  decidedAt         DateTime?          @db.Timestamptz(3)
+  decidedByUserId   String?            @db.Text
+  approvalRequest   ApprovalRequest    @relation(fields: [approvalRequestId], references: [id], onDelete: Cascade)
+  decidedByUser     User?              @relation("ApprovalRequestStepDecidedByUser", fields: [decidedByUserId], references: [id], onDelete: SetNull)
+
+  @@unique([approvalRequestId, position], map: "approval_request_steps_request_id_position_key")
+  @@index([approvalRequestId], map: "approval_request_steps_request_id_idx")
+  @@index([status], map: "approval_request_steps_status_idx")
+  @@index([decidedByUserId], map: "approval_request_steps_decided_by_user_id_idx")
+  @@map("approval_request_steps")
+}
+
+model StatementSnapshot {
+  id                String               @id @db.Text
+  organizationId    String               @db.Text
+  draftDealId       String               @db.Text
+  dealVersionId     String               @db.Text
+  createdByUserId   String               @db.Text
+  costCenterId      String?              @db.Text
+  approvalRequestId String?              @db.Text
+  kind              StatementSnapshotKind
+  note              String?              @db.Text
+  asOf              DateTime             @db.Timestamptz(3)
+  payload           Json
+  createdAt         DateTime             @db.Timestamptz(3)
+  organization      Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  draftDeal         DraftDeal            @relation(fields: [draftDealId], references: [id], onDelete: Cascade)
+  dealVersion       DealVersion          @relation(fields: [dealVersionId], references: [id], onDelete: Cascade)
+  createdByUser     User                 @relation("StatementSnapshotCreatedByUser", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  costCenter        CostCenter?          @relation(fields: [costCenterId], references: [id], onDelete: SetNull)
+  approvalRequest   ApprovalRequest?     @relation(fields: [approvalRequestId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId], map: "statement_snapshots_organization_id_idx")
+  @@index([draftDealId], map: "statement_snapshots_draft_deal_id_idx")
+  @@index([dealVersionId, createdAt], map: "statement_snapshots_deal_version_id_created_at_idx")
+  @@index([costCenterId], map: "statement_snapshots_cost_center_id_idx")
+  @@index([approvalRequestId], map: "statement_snapshots_approval_request_id_idx")
+  @@map("statement_snapshots")
 }
 
 model DealVersionParty {

@@ -57,6 +57,7 @@ import {
   RELEASE1_REPOSITORIES,
   RELEASE4_REPOSITORIES
 } from "../../infrastructure/tokens";
+import { ApprovalsService } from "../approvals/approvals.service";
 import type { RequestMetadata } from "../auth/auth.http";
 import {
   AuthenticatedSessionService,
@@ -340,7 +341,8 @@ export class FundingService {
     @Inject(FUNDING_RECONCILIATION_CONFIGURATION)
     private readonly fundingReconciliationConfiguration: FundingReconciliationConfiguration,
     @Inject(FUNDING_CHAIN_READER)
-    private readonly fundingChainReader: FundingChainReader
+    private readonly fundingChainReader: FundingChainReader,
+    private readonly approvalsService: ApprovalsService
   ) {}
 
   async getFundingPreparation(
@@ -591,6 +593,10 @@ export class FundingService {
     context: FundingComputationContext
   ): Promise<FundingPreparationSummary> {
     const blockers: FundingPreparationBlocker[] = [];
+    const approval = await this.approvalsService.buildApprovalRequirement(
+      context.draft,
+      context.version
+    );
     const supportsCreateAndFund = deploymentSupportsCreateAndFund(context.manifest);
     const supportsMilestoneSettlement =
       deploymentSupportsMilestoneSettlementExecution(context.manifest);
@@ -598,6 +604,16 @@ export class FundingService {
 
     if (!context.latestVersion || context.latestVersion.id !== context.version.id) {
       blockers.push("VERSION_NOT_LATEST");
+    }
+
+    if (approval.required) {
+      if (!approval.currentRequest) {
+        blockers.push("APPROVAL_REQUEST_MISSING");
+      } else if (approval.currentRequest.status === "PENDING") {
+        blockers.push("APPROVAL_REQUEST_PENDING");
+      } else if (approval.currentRequest.status === "REJECTED") {
+        blockers.push("APPROVAL_REQUEST_REJECTED");
+      }
     }
 
     const organizationAcceptance = context.acceptances.find(
@@ -791,6 +807,7 @@ export class FundingService {
     return {
       agreementImplementationAddress,
       allowanceTargetAddress,
+      approval,
       arbitratorAddress: ZERO_ADDRESS as `0x${string}`,
       blockers: [...new Set(blockers)],
       buyerAllowanceMinor,

@@ -1,7 +1,11 @@
 import type {
+  ApprovalPolicyKind,
+  ApprovalRequestStatus,
+  ApprovalStepStatus,
   AuditAction,
   AuditEntityType,
   ChainId,
+  CostCenterStatus,
   DealPartyRole,
   DealPartySubjectType,
   DealState,
@@ -29,6 +33,7 @@ import type {
   ProtocolProposalTarget,
   SessionStatus,
   SettlementCurrency,
+  StatementSnapshotKind,
   TemplateSummary,
   TypedSignatureScheme,
   WalletAddress
@@ -80,6 +85,19 @@ export interface OperatorAccountRecord {
   updatedAt: IsoTimestamp;
   userId: EntityId;
   walletId: EntityId;
+}
+
+export interface CostCenterRecord {
+  code: string;
+  createdAt: IsoTimestamp;
+  createdByUserId: EntityId;
+  description: string | null;
+  id: EntityId;
+  name: string;
+  normalizedCode: string;
+  organizationId: EntityId;
+  status: CostCenterStatus;
+  updatedAt: IsoTimestamp;
 }
 
 export interface OrganizationRecord {
@@ -256,6 +274,7 @@ export interface TemplateRecord {
 }
 
 export interface DraftDealRecord {
+  costCenterId?: EntityId | null;
   createdAt: IsoTimestamp;
   createdByUserId: EntityId;
   id: EntityId;
@@ -266,6 +285,73 @@ export interface DraftDealRecord {
   templateId: EntityId | null;
   title: string;
   updatedAt: IsoTimestamp;
+}
+
+export interface ApprovalPolicyRecord {
+  active: boolean;
+  costCenterId: EntityId | null;
+  createdAt: IsoTimestamp;
+  createdByUserId: EntityId;
+  description: string | null;
+  id: EntityId;
+  kind: ApprovalPolicyKind;
+  name: string;
+  organizationId: EntityId;
+  settlementCurrency: SettlementCurrency | null;
+  updatedAt: IsoTimestamp;
+}
+
+export interface ApprovalPolicyStepRecord {
+  approvalPolicyId: EntityId;
+  id: EntityId;
+  label: string;
+  position: number;
+  requiredRole: OrganizationRole;
+}
+
+export interface ApprovalRequestRecord {
+  approvalPolicyId: EntityId;
+  costCenterId: EntityId | null;
+  decidedAt: IsoTimestamp | null;
+  dealVersionId: EntityId;
+  draftDealId: EntityId;
+  id: EntityId;
+  kind: ApprovalPolicyKind;
+  note: string | null;
+  organizationId: EntityId;
+  requestedAt: IsoTimestamp;
+  requestedByUserId: EntityId;
+  settlementCurrency: SettlementCurrency;
+  status: ApprovalRequestStatus;
+  title: string;
+  totalAmountMinor: string;
+}
+
+export interface ApprovalRequestStepRecord {
+  approvalRequestId: EntityId;
+  decidedAt: IsoTimestamp | null;
+  decidedByUserId: EntityId | null;
+  id: EntityId;
+  label: string;
+  note: string | null;
+  position: number;
+  requiredRole: OrganizationRole;
+  status: ApprovalStepStatus;
+}
+
+export interface StatementSnapshotRecord {
+  approvalRequestId: EntityId | null;
+  asOf: IsoTimestamp;
+  costCenterId: EntityId | null;
+  createdAt: IsoTimestamp;
+  createdByUserId: EntityId;
+  dealVersionId: EntityId;
+  draftDealId: EntityId;
+  id: EntityId;
+  kind: StatementSnapshotKind;
+  note: string | null;
+  organizationId: EntityId;
+  payload: JsonObject;
 }
 
 export interface DraftDealPartyRecord {

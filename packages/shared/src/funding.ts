@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import type { ApprovalRequirementSummary } from "./approvals";
 import type { ChainId, EntityId, HexString, IsoTimestamp, WalletAddress } from "./primitives";
 
 export const fundingPreparationParamsSchema = z.object({
@@ -13,6 +14,9 @@ export type FundingPreparationParams = z.infer<
 
 export const fundingPreparationBlockerSchema = z.enum([
   "AGREEMENT_ALREADY_CREATED",
+  "APPROVAL_REQUEST_MISSING",
+  "APPROVAL_REQUEST_PENDING",
+  "APPROVAL_REQUEST_REJECTED",
   "ARBITRATOR_REGISTRY_NOT_CONFIGURED",
   "BUYER_ALLOWANCE_INSUFFICIENT",
   "BUYER_ALLOWANCE_UNAVAILABLE",
@@ -97,6 +101,7 @@ export type FundingPreparationTransactionFunction = z.infer<
 export interface FundingPreparationSummary {
   agreementImplementationAddress: WalletAddress | null;
   allowanceTargetAddress: WalletAddress | null;
+  approval: ApprovalRequirementSummary | null;
   arbitratorAddress: WalletAddress | null;
   blockers: FundingPreparationBlocker[];
   buyerAllowanceMinor: string | null;

@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import type { ApprovalRequirementSummary } from "./approvals";
 import type { CounterpartySummary } from "./counterparties";
 import type { FileSummary } from "./files";
 import type {
@@ -120,6 +121,7 @@ export const createDealVersionSchema = z.object({
 export type CreateDealVersionInput = z.infer<typeof createDealVersionSchema>;
 
 export interface DraftDealSummary {
+  costCenterId: EntityId | null;
   createdAt: IsoTimestamp;
   createdByUserId: EntityId;
   escrow: DraftDealEscrowSummary | null;
@@ -829,6 +831,7 @@ export interface CreateCounterpartyDealMilestoneSubmissionResponse {
 }
 
 export interface DealVersionDetail extends DealVersionSummary {
+  approval: ApprovalRequirementSummary | null;
   bodyMarkdown: string;
   files: FileSummary[];
   fundingTransactions: FundingTransactionSummary[];

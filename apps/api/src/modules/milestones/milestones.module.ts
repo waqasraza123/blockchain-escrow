@@ -23,6 +23,7 @@ import {
       provide: MILESTONE_SETTLEMENT_EXECUTION_RECONCILIATION_CONFIGURATION,
       useFactory: loadMilestoneSettlementExecutionReconciliationConfiguration
     }
-  ]
+  ],
+  exports: [MilestonesService]
 })
 export class MilestonesModule {}

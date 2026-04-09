@@ -187,6 +187,22 @@ export class InMemoryRelease1Repositories implements Release1Repositories {
       this.draftDealRecords
         .filter((record) => states.includes(record.state))
         .sort((left, right) => compareIsoTimestamps(left.updatedAt, right.updatedAt)),
+    updateCostCenter: async (
+      id: string,
+      costCenterId: string | null,
+      updatedAt: string
+    ): Promise<DraftDealRecord | null> => {
+      const record = this.draftDealRecords.find((entry) => entry.id === id);
+
+      if (!record) {
+        return null;
+      }
+
+      record.costCenterId = costCenterId;
+      record.updatedAt = updatedAt;
+
+      return record;
+    },
     updateState: async (
       id: string,
       state: DraftDealRecord["state"],

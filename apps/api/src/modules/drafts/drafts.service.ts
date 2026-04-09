@@ -831,6 +831,7 @@ export class DraftsService {
 
     return {
       ...toDealVersionSummary(version),
+      approval: null,
       bodyMarkdown: version.bodyMarkdown,
       files,
       fundingTransactions: versionFundingTransactions.map((transaction) =>
@@ -1030,6 +1031,7 @@ export class DraftsService {
     projectionContext: DraftProjectionContext
   ): DraftDealSummary {
     return {
+      costCenterId: draft.costCenterId ?? null,
       createdAt: draft.createdAt,
       createdByUserId: draft.createdByUserId,
       escrow: this.toDraftEscrowSummary(projectionContext),
