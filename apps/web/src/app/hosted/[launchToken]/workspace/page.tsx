@@ -3,7 +3,17 @@ import {
   getHostedSession,
   getTenantPublicContext
 } from "../../../../lib/api";
-import { Card, DataTable, EmptyState, Pill, WorkspaceHeader, toneForStatus } from "../../../(workspace)/ui";
+import { LocaleTopbar } from "../../../../components/locale-topbar";
+import { formatCode } from "../../../../lib/i18n/format";
+import { getI18n } from "../../../../lib/i18n/server";
+import {
+  Card,
+  DataTable,
+  EmptyState,
+  Pill,
+  WorkspaceHeader,
+  toneForStatus
+} from "../../../(workspace)/ui";
 import {
   clearHostedSessionAction,
   submitHostedMilestoneAction,
@@ -17,6 +27,7 @@ type HostedWorkspacePageProps = {
 
 export default async function HostedWorkspacePage(props: HostedWorkspacePageProps) {
   const params = await props.params;
+  const { locale, messages } = await getI18n();
   const [session, context, tenantContext] = await Promise.all([
     getHostedSession(),
     getHostedContext(),
@@ -37,40 +48,72 @@ export default async function HostedWorkspacePage(props: HostedWorkspacePageProp
         padding: 32
       }}
     >
+      <LocaleTopbar
+        currentLocale={locale}
+        localeLabels={messages.locale}
+        subtitle={messages.publicTopbar.subtitle}
+        switcherAriaLabel={messages.switcher.ariaLabel}
+        switcherLabel={messages.switcher.label}
+        title={messages.publicTopbar.platform}
+      />
       <WorkspaceHeader
-        eyebrow="Hosted Session"
-        title={tenant ? `${tenant.settings.displayName} Hosted Workflow` : session.hostedSession.type.replaceAll("_", " ")}
-        subtitle="Scoped participant workflow backed by a short-lived hosted session cookie."
+        eyebrow={messages.hosted.hostedSession}
+        title={
+          tenant
+            ? `${tenant.settings.displayName} ${messages.hosted.hostedWorkflowSuffix}`
+            : formatCode(
+                session.hostedSession.type,
+                messages.codes.hostedSessionTypes,
+                messages.common.none
+              )
+        }
+        subtitle={messages.hosted.scopedSubtitle}
       />
       <div className="stack">
-        <Card title="Session Status">
+        <Card title={messages.hosted.sessionStatus}>
           <div className="detail-grid">
             <div>
-              <small className="muted">Status</small>
+              <small className="muted">{messages.hosted.status}</small>
               <div>
-                <Pill tone={toneForStatus(session.hostedSession.status)} value={session.hostedSession.status} />
+                <Pill
+                  tone={toneForStatus(session.hostedSession.status)}
+                  value={formatCode(
+                    session.hostedSession.status,
+                    messages.statuses,
+                    messages.common.none
+                  )}
+                />
               </div>
             </div>
             <div>
-              <small className="muted">Expires</small>
+              <small className="muted">{messages.hosted.expires}</small>
               <div className="mono">{session.hostedSession.expiresAt}</div>
             </div>
           </div>
           <form action={clearHostedSessionAction} className="actions-row">
             <input name="launchToken" type="hidden" value={params.launchToken} />
             <button className="button button-secondary" type="submit">
-              Clear Hosted Session
+              {messages.hosted.clearSession}
             </button>
           </form>
         </Card>
 
         {context.draft ? (
-          <Card title="Draft Context">
-            <DataTable headers={["Draft", "State", "Version Count"]}>
+          <Card title={messages.hosted.draftContext}>
+            <DataTable
+              headers={[messages.navigation.drafts, messages.drafts.state, "Version count"]}
+            >
               <tr>
                 <td>{context.draft.draft.title}</td>
                 <td>
-                  <Pill tone={toneForStatus(context.draft.draft.state)} value={context.draft.draft.state} />
+                  <Pill
+                    tone={toneForStatus(context.draft.draft.state)}
+                    value={formatCode(
+                      context.draft.draft.state,
+                      messages.statuses,
+                      messages.common.none
+                    )}
+                  />
                 </td>
                 <td>{context.draft.versions.length}</td>
               </tr>
@@ -79,8 +122,14 @@ export default async function HostedWorkspacePage(props: HostedWorkspacePageProp
         ) : null}
 
         {context.settlementStatement ? (
-          <Card title="Settlement Statement">
-            <DataTable headers={["Released", "Refunded", "Pending"]}>
+          <Card title={messages.hosted.milestoneStatement}>
+            <DataTable
+              headers={[
+                messages.drafts.released,
+                messages.drafts.refunded,
+                messages.drafts.pending
+              ]}
+            >
               <tr>
                 <td>{context.settlementStatement.statement.releasedAmountMinor}</td>
                 <td>{context.settlementStatement.statement.refundedAmountMinor}</td>
@@ -91,16 +140,16 @@ export default async function HostedWorkspacePage(props: HostedWorkspacePageProp
         ) : null}
 
         {session.hostedSession.type === "COUNTERPARTY_VERSION_ACCEPTANCE" ? (
-          <Card title="Submit Acceptance Signature">
+          <Card title={messages.hosted.submitAcceptanceCard}>
             <form action={submitHostedVersionAcceptanceAction} className="form-grid">
               <input name="launchToken" type="hidden" value={params.launchToken} />
               <div className="field">
-                <label htmlFor="signature">Typed Signature</label>
+                <label htmlFor="signature">{messages.hostedForms.signature}</label>
                 <textarea id="signature" name="signature" placeholder="0x..." />
               </div>
               <div className="actions-row">
                 <button className="button" type="submit">
-                  Submit Acceptance
+                  {messages.hosted.submitAcceptance}
                 </button>
               </div>
             </form>
@@ -108,20 +157,24 @@ export default async function HostedWorkspacePage(props: HostedWorkspacePageProp
         ) : null}
 
         {session.hostedSession.type === "COUNTERPARTY_MILESTONE_SUBMISSION" ? (
-          <Card title="Submit Milestone Evidence">
+          <Card title={messages.hosted.submitMilestoneCard}>
             <form action={submitHostedMilestoneAction} className="form-grid">
               <input name="launchToken" type="hidden" value={params.launchToken} />
               <div className="field">
-                <label htmlFor="statementMarkdown">Statement</label>
-                <textarea id="statementMarkdown" name="statementMarkdown" placeholder="Milestone work completed..." />
+                <label htmlFor="statementMarkdown">{messages.hostedForms.statement}</label>
+                <textarea
+                  id="statementMarkdown"
+                  name="statementMarkdown"
+                  placeholder={messages.hostedForms.statementPlaceholder}
+                />
               </div>
               <div className="field">
-                <label htmlFor="signature">Typed Signature</label>
+                <label htmlFor="signature">{messages.hostedForms.signature}</label>
                 <textarea id="signature" name="signature" placeholder="0x..." />
               </div>
               <div className="actions-row">
                 <button className="button" type="submit">
-                  Submit Milestone
+                  {messages.hosted.submitMilestone}
                 </button>
               </div>
             </form>
@@ -129,42 +182,42 @@ export default async function HostedWorkspacePage(props: HostedWorkspacePageProp
         ) : null}
 
         {session.hostedSession.type === "DISPUTE_EVIDENCE_UPLOAD" ? (
-          <Card title="Upload Evidence Metadata">
+          <Card title={messages.hosted.uploadEvidenceCard}>
             <form action={uploadHostedEvidenceAction} className="form-grid">
               <input name="launchToken" type="hidden" value={params.launchToken} />
               <div className="form-grid columns-2">
                 <div className="field">
-                  <label htmlFor="originalFilename">Original Filename</label>
+                  <label htmlFor="originalFilename">{messages.hostedForms.originalFilename}</label>
                   <input id="originalFilename" name="originalFilename" />
                 </div>
                 <div className="field">
-                  <label htmlFor="mediaType">Media Type</label>
+                  <label htmlFor="mediaType">{messages.hostedForms.mediaType}</label>
                   <input id="mediaType" name="mediaType" placeholder="application/pdf" />
                 </div>
               </div>
               <div className="form-grid columns-2">
                 <div className="field">
-                  <label htmlFor="storageKey">Storage Key</label>
+                  <label htmlFor="storageKey">{messages.hostedForms.storageKey}</label>
                   <input id="storageKey" name="storageKey" />
                 </div>
                 <div className="field">
-                  <label htmlFor="sha256Hex">SHA-256 Hex</label>
+                  <label htmlFor="sha256Hex">{messages.hostedForms.sha256Hex}</label>
                   <input id="sha256Hex" name="sha256Hex" />
                 </div>
               </div>
               <div className="form-grid columns-2">
                 <div className="field">
-                  <label htmlFor="byteSize">Byte Size</label>
+                  <label htmlFor="byteSize">{messages.hostedForms.byteSize}</label>
                   <input id="byteSize" name="byteSize" />
                 </div>
                 <div className="field">
-                  <label htmlFor="category">Category</label>
+                  <label htmlFor="category">{messages.hostedForms.category}</label>
                   <input defaultValue="EVIDENCE" id="category" name="category" />
                 </div>
               </div>
               <div className="actions-row">
                 <button className="button" type="submit">
-                  Upload Metadata and Link Evidence
+                  {messages.hosted.uploadEvidence}
                 </button>
               </div>
             </form>
@@ -172,21 +225,34 @@ export default async function HostedWorkspacePage(props: HostedWorkspacePageProp
         ) : null}
 
         {session.hostedSession.type === "DEAL_STATUS_REVIEW" ? (
-          <Card title="Status Review">
+          <Card title={messages.hosted.statusReview}>
             {context.settlementStatement ? (
-              <DataTable headers={["Milestone", "State", "Amount"]}>
+              <DataTable
+                headers={[
+                  messages.hosted.reviewMilestone,
+                  messages.hosted.reviewState,
+                  messages.hosted.reviewAmount
+                ]}
+              >
                 {context.settlementStatement.milestones.map((milestone) => (
                   <tr key={milestone.milestone.id}>
                     <td>{milestone.milestone.title}</td>
                     <td>
-                      <Pill tone={toneForStatus(milestone.state)} value={milestone.state} />
+                      <Pill
+                        tone={toneForStatus(milestone.state)}
+                        value={formatCode(
+                          milestone.state,
+                          messages.statuses,
+                          messages.common.none
+                        )}
+                      />
                     </td>
                     <td>{milestone.milestone.amountMinor}</td>
                   </tr>
                 ))}
               </DataTable>
             ) : (
-              <EmptyState body="No settlement statement is available for this hosted session." />
+              <EmptyState body={messages.hosted.evidenceBody} />
             )}
           </Card>
         ) : null}

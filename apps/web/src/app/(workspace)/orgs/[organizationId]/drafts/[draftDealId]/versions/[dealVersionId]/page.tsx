@@ -8,6 +8,8 @@ import {
   getSettlementStatement,
   previewApprovalRequirement
 } from "../../../../../../../../lib/api";
+import { formatCode } from "../../../../../../../../lib/i18n/format";
+import { getI18n } from "../../../../../../../../lib/i18n/server";
 import {
   createStatementSnapshotAction,
   requestFundingApprovalAction,
@@ -32,6 +34,7 @@ type VersionDetailPageProps = {
 
 export default async function VersionDetailPage(props: VersionDetailPageProps) {
   const { dealVersionId, draftDealId, organizationId } = await props.params;
+  const { messages } = await getI18n();
   const draft = await getDraft(organizationId, draftDealId);
   const version = draft.versions.find((entry) => entry.id === dealVersionId);
 
@@ -66,17 +69,21 @@ export default async function VersionDetailPage(props: VersionDetailPageProps) {
   return (
     <>
       <WorkspaceHeader
-        eyebrow="Version Detail"
-        subtitle="Funding, approval, and milestone custody state for the selected deal version."
+        eyebrow={messages.drafts.versionDetailEyebrow}
+        subtitle={messages.drafts.versionDetailSubtitle}
         title={version.title}
       />
       <div className="triptych-grid">
-        <Card title="Approval State">
+        <Card title={messages.drafts.approval}>
           <div className="status-callout">
-            <span className="muted">Funding approval</span>
+            <span className="muted">{messages.draftForms.fundingApproval}</span>
             <Pill
               tone={toneForStatus(currentApproval.approval.status)}
-              value={currentApproval.approval.status}
+              value={formatCode(
+                currentApproval.approval.status,
+                messages.statuses,
+                messages.common.none
+              )}
             />
           </div>
           {currentApproval.approval.required &&
@@ -87,30 +94,35 @@ export default async function VersionDetailPage(props: VersionDetailPageProps) {
               <input name="dealVersionId" type="hidden" value={dealVersionId} />
               <input name="returnPath" type="hidden" value={returnPath} />
               <div className="field">
-                <label htmlFor="funding-approval-note">Approval note</label>
+                <label htmlFor="funding-approval-note">{messages.draftForms.approvalNote}</label>
                 <textarea id="funding-approval-note" name="note" />
               </div>
               <button className="button" type="submit">
-                Request funding approval
+                {messages.draftForms.requestFundingApproval}
               </button>
             </form>
           ) : (
             <p className="empty-state">Funding can proceed without opening a new request.</p>
           )}
         </Card>
-        <Card title="Funding Preparation">
+        <Card title={messages.draftForms.fundingPreparation}>
           <div className="status-callout">
-            <span className="muted">Ready</span>
+            <span className="muted">{messages.common.ready}</span>
             <Pill
               tone={fundingPreparation.preparation.ready ? "success" : "warning"}
-              value={fundingPreparation.preparation.ready ? "READY" : "BLOCKED"}
+              value={
+                fundingPreparation.preparation.ready
+                  ? messages.common.ready
+                  : messages.common.blocked
+              }
             />
           </div>
           <div className="detail-grid">
             <div className="detail-item">
-              <span className="muted">Predicted agreement</span>
+              <span className="muted">{messages.draftForms.predictedAgreement}</span>
               <strong className="mono">
-                {fundingPreparation.preparation.predictedAgreementAddress ?? "unavailable"}
+                {fundingPreparation.preparation.predictedAgreementAddress ??
+                  messages.common.unavailable}
               </strong>
             </div>
             <div className="detail-item">
@@ -119,12 +131,16 @@ export default async function VersionDetailPage(props: VersionDetailPageProps) {
             </div>
           </div>
         </Card>
-        <Card title="Statement Snapshot">
+        <Card title={messages.drafts.statementSnapshot}>
           <div className="status-callout">
-            <span className="muted">Snapshot approval</span>
+            <span className="muted">{messages.drafts.snapshotApproval}</span>
             <Pill
               tone={toneForStatus(snapshotApproval.approval.status)}
-              value={snapshotApproval.approval.status}
+              value={formatCode(
+                snapshotApproval.approval.status,
+                messages.statuses,
+                messages.common.none
+              )}
             />
           </div>
           {snapshotApproval.approval.required &&
@@ -147,11 +163,13 @@ export default async function VersionDetailPage(props: VersionDetailPageProps) {
               />
               <input name="returnPath" type="hidden" value={returnPath} />
               <div className="field">
-                <label htmlFor="snapshot-approval-note">Approval note</label>
+                <label htmlFor="snapshot-approval-note">
+                  {messages.draftForms.snapshotApprovalNote}
+                </label>
                 <textarea id="snapshot-approval-note" name="note" />
               </div>
               <button className="button" type="submit">
-                Request snapshot approval
+                {messages.draftForms.requestSnapshotApproval}
               </button>
             </form>
           ) : (
@@ -161,29 +179,29 @@ export default async function VersionDetailPage(props: VersionDetailPageProps) {
               <input name="dealVersionId" type="hidden" value={dealVersionId} />
               <input name="returnPath" type="hidden" value={returnPath} />
               <div className="field">
-                <label htmlFor="snapshot-note">Snapshot note</label>
+                <label htmlFor="snapshot-note">{messages.drafts.snapshotNote}</label>
                 <textarea id="snapshot-note" name="note" />
               </div>
               <button className="button" type="submit">
-                Capture statement snapshot
+                {messages.draftForms.captureSnapshot}
               </button>
             </form>
           )}
         </Card>
       </div>
       <div className="split-grid">
-        <Card title="Milestone Statement">
+        <Card title={messages.drafts.milestoneStatement}>
           <div className="detail-grid">
             <div className="detail-item">
-              <span className="muted">Released</span>
+              <span className="muted">{messages.drafts.released}</span>
               <strong>{settlementStatement.statement.releasedAmountMinor}</strong>
             </div>
             <div className="detail-item">
-              <span className="muted">Refunded</span>
+              <span className="muted">{messages.drafts.refunded}</span>
               <strong>{settlementStatement.statement.refundedAmountMinor}</strong>
             </div>
             <div className="detail-item">
-              <span className="muted">Pending</span>
+              <span className="muted">{messages.drafts.pending}</span>
               <strong>{settlementStatement.statement.pendingAmountMinor}</strong>
             </div>
           </div>
@@ -191,10 +209,10 @@ export default async function VersionDetailPage(props: VersionDetailPageProps) {
         <Card
           actions={
             <Link className="button-ghost" href={`/orgs/${organizationId}/approvals`}>
-              Open approvals
+              {messages.navigation.approvals}
             </Link>
           }
-          title="Version Metadata"
+          title={messages.drafts.versionMetadata}
         >
           <div className="detail-grid">
             <div className="detail-item">
@@ -212,19 +230,29 @@ export default async function VersionDetailPage(props: VersionDetailPageProps) {
           </div>
         </Card>
       </div>
-      <Card title="Milestones">
+      <Card title={messages.drafts.milestones}>
         {settlementStatement.milestones.length === 0 ? (
           <EmptyState body="This version does not define any milestones." />
         ) : (
-          <DataTable headers={["Milestone", "State", "Amount", "Latest submission"]}>
+          <DataTable
+            headers={[
+              messages.hosted.reviewMilestone,
+              messages.drafts.state,
+              messages.hosted.reviewAmount,
+              messages.drafts.latestSubmission
+            ]}
+          >
             {settlementStatement.milestones.map((item) => (
               <tr key={item.milestone.id}>
                 <td>{item.milestone.title}</td>
                 <td>
-                  <Pill tone={toneForStatus(item.state)} value={item.state} />
+                  <Pill
+                    tone={toneForStatus(item.state)}
+                    value={formatCode(item.state, messages.statuses, messages.common.none)}
+                  />
                 </td>
                 <td>{item.milestone.amountMinor}</td>
-                <td>{item.latestSubmission?.submittedAt ?? "not submitted"}</td>
+                <td>{item.latestSubmission?.submittedAt ?? messages.common.notSubmitted}</td>
               </tr>
             ))}
           </DataTable>

@@ -1,4 +1,6 @@
 import { getHostedLaunchSession, getTenantPublicContext } from "../../../lib/api";
+import { getI18n } from "../../../lib/i18n/server";
+import { LocaleTopbar } from "../../../components/locale-topbar";
 import { Card, WorkspaceHeader } from "../../(workspace)/ui";
 import { exchangeHostedSessionAction } from "../actions";
 
@@ -8,6 +10,7 @@ type HostedLaunchPageProps = {
 
 export default async function HostedLaunchPage(props: HostedLaunchPageProps) {
   const params = await props.params;
+  const { locale, messages } = await getI18n();
   const [session, tenantContext] = await Promise.all([
     getHostedLaunchSession(params.launchToken),
     getTenantPublicContext()
@@ -27,24 +30,30 @@ export default async function HostedLaunchPage(props: HostedLaunchPageProps) {
         padding: 32
       }}
     >
-      <WorkspaceHeader
-        eyebrow="Hosted Session"
-        title={tenant ? tenant.settings.displayName : "Partner Hosted Workflow"}
-        subtitle="Launch a constrained participant flow without an organization session."
+      <LocaleTopbar
+        currentLocale={locale}
+        localeLabels={messages.locale}
+        subtitle={messages.publicTopbar.subtitle}
+        switcherAriaLabel={messages.switcher.ariaLabel}
+        switcherLabel={messages.switcher.label}
+        title={messages.publicTopbar.platform}
       />
-      <Card
-        title="Session Launch"
-      >
+      <WorkspaceHeader
+        eyebrow={messages.hosted.hostedSession}
+        title={tenant ? tenant.settings.displayName : messages.hosted.launchTitle}
+        subtitle={messages.hosted.launchSubtitle}
+      />
+      <Card title={messages.hosted.sessionLaunch}>
         <p className="muted">
           {session.hostedSession
-            ? "This hosted session is ready to exchange into a short-lived workflow cookie."
-            : "This hosted session could not be found."}
+            ? messages.hosted.launchReady
+            : messages.hosted.launchMissing}
         </p>
         {session.hostedSession ? (
           <form action={exchangeHostedSessionAction} className="actions-row">
             <input name="launchToken" type="hidden" value={params.launchToken} />
             <button className="button" type="submit">
-              Open Hosted Session
+              {messages.hosted.openHostedSession}
             </button>
           </form>
         ) : null}

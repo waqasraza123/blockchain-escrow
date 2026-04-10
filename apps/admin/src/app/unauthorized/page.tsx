@@ -1,23 +1,32 @@
 import Link from "next/link";
 
+import { LocaleTopbar } from "../../components/locale-topbar";
+import { getI18n } from "../../lib/i18n/server";
 import { Card, ConsoleHeader } from "../(console)/ui";
 
-export default function UnauthorizedPage() {
+export default async function UnauthorizedPage() {
+  const { locale, messages } = await getI18n();
+
   return (
     <main className="unauthorized">
+      <LocaleTopbar
+        currentLocale={locale}
+        localeLabels={messages.locale}
+        subtitle={messages.publicTopbar.subtitle}
+        switcherAriaLabel={messages.switcher.ariaLabel}
+        switcherLabel={messages.switcher.label}
+        title={messages.publicTopbar.title}
+      />
       <Card>
         <ConsoleHeader
-          eyebrow="Operator Access"
-          subtitle="This internal console only renders for authenticated operator accounts."
-          title="Unauthorized"
+          eyebrow={messages.unauthorized.eyebrow}
+          subtitle={messages.unauthorized.subtitle}
+          title={messages.unauthorized.title}
         />
-        <p className="muted">
-          Sign in with an allowlisted wallet session, or have an existing operator
-          account mapped to your user and wallet.
-        </p>
+        <p className="muted">{messages.unauthorized.body}</p>
         <div className="actions-row">
           <Link className="button" href="/">
-            Retry Session
+            {messages.common.retrySession}
           </Link>
         </div>
       </Card>

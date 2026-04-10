@@ -1,4 +1,6 @@
 import { listCheckpoints } from "../../../../lib/operator-api";
+import { formatCode } from "../../../../lib/i18n/format";
+import { getI18n } from "../../../../lib/i18n/server";
 import { decideCheckpointAction } from "../../actions";
 import { Card, ConsoleHeader, Pill, toneForStatus } from "../../ui";
 
@@ -10,6 +12,7 @@ export default async function CheckpointDetailPage({
   params
 }: CheckpointDetailPageProps) {
   const { checkpointId } = await params;
+  const { messages } = await getI18n();
   const checkpoints = await listCheckpoints();
   const checkpoint =
     checkpoints.checkpoints.find((entry) => entry.id === checkpointId) ?? null;
@@ -17,9 +20,9 @@ export default async function CheckpointDetailPage({
   if (!checkpoint) {
     return (
       <>
-        <ConsoleHeader eyebrow="Checkpoint" title="Not Found" />
+        <ConsoleHeader eyebrow={messages.navigation.checkpoints} title={messages.common.notFound} />
         <Card>
-          <p className="empty-state">Checkpoint {checkpointId} was not found.</p>
+          <p className="empty-state">{messages.checkpoints.notFound} <span className="mono">{checkpointId}</span>.</p>
         </Card>
       </>
     );
@@ -28,18 +31,21 @@ export default async function CheckpointDetailPage({
   return (
     <>
       <ConsoleHeader
-        eyebrow="Checkpoint Detail"
+        eyebrow={messages.checkpoints.detailEyebrow}
         subtitle={checkpoint.subject.label ?? checkpoint.subject.subjectId}
         title={checkpoint.id}
       />
-      <Card title="Checkpoint State">
+      <Card title={messages.checkpoints.title}>
         <div className="detail-grid">
           <div className="detail-item">
-            <span>Status</span>
-            <Pill tone={toneForStatus(checkpoint.status)} value={checkpoint.status} />
+            <span>{messages.checkpoints.status}</span>
+            <Pill
+              tone={toneForStatus(checkpoint.status)}
+              value={formatCode(checkpoint.status, messages.statuses, messages.common.none)}
+            />
           </div>
           <div className="detail-item">
-            <span>Kind</span>
+            <span>{messages.checkpoints.kind}</span>
             <strong>{checkpoint.kind}</strong>
           </div>
           <div className="detail-item">
@@ -47,29 +53,29 @@ export default async function CheckpointDetailPage({
             <strong className="mono">{checkpoint.createdAt}</strong>
           </div>
           <div className="detail-item">
-            <span>Decision</span>
-            <strong>{checkpoint.decisionNote ?? "pending"}</strong>
+            <span>{messages.checkpoints.decision}</span>
+            <strong>{checkpoint.decisionNote ?? messages.common.pending}</strong>
           </div>
         </div>
         <p className="muted">{checkpoint.note}</p>
       </Card>
-      <Card title="Decision">
+      <Card title={messages.checkpoints.decision}>
         <form action={decideCheckpointAction} className="form-grid">
           <input name="checkpointId" type="hidden" value={checkpoint.id} />
           <div className="field">
-            <label htmlFor="status">Status</label>
+            <label htmlFor="status">{messages.checkpoints.status}</label>
             <select defaultValue="CLEARED" id="status" name="status">
               <option value="CLEARED">Cleared</option>
               <option value="BLOCKED">Blocked</option>
             </select>
           </div>
           <div className="field">
-            <label htmlFor="note">Decision Note</label>
-            <textarea id="note" name="note" placeholder="Explain the decision" />
+            <label htmlFor="note">{messages.checkpoints.decisionNote}</label>
+            <textarea id="note" name="note" placeholder={messages.checkpoints.explainDecision} />
           </div>
           <div className="actions-row">
             <button className="button" type="submit">
-              Submit Decision
+              {messages.checkpoints.submitDecision}
             </button>
           </div>
         </form>

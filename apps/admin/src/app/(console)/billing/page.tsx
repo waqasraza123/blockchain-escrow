@@ -1,8 +1,11 @@
 import { createBillingFeeScheduleAction, createBillingPlanAction, updateBillingPlanAction } from "../actions";
 import { listAllInvoices, listBillingFeeSchedules, listBillingPlans, listPartners } from "../../../lib/operator-api";
+import { formatCode } from "../../../lib/i18n/format";
+import { getI18n } from "../../../lib/i18n/server";
 import { Card, ConsoleHeader, DataTable, EmptyState, Pill, toneForStatus } from "../ui";
 
 export default async function BillingPage() {
+  const { messages } = await getI18n();
   const plans = await listBillingPlans();
   const [partners, invoices, schedulesByPlan] = await Promise.all([
     listPartners(),
@@ -21,80 +24,80 @@ export default async function BillingPage() {
   return (
     <>
       <ConsoleHeader
-        eyebrow="Billing"
-        title="Billing Plans"
-        subtitle="Manage reusable plans, rate cards, and invoice defaults for tenant assignments."
+        eyebrow={messages.navigation.billing}
+        title={messages.billing.title}
+        subtitle={messages.billing.subtitle}
       />
       <div className="stack">
         <div className="split-grid">
-          <Card title="Create Billing Plan">
+          <Card title={messages.billing.createPlanTitle}>
             <form action={createBillingPlanAction} className="form-grid">
               <div className="field">
-                <label htmlFor="code">Code</label>
+                <label htmlFor="code">{messages.billing.code}</label>
                 <input id="code" name="code" placeholder="EMBEDDED_STARTER" />
               </div>
               <div className="field">
-                <label htmlFor="displayName">Display Name</label>
+                <label htmlFor="displayName">{messages.billing.displayName}</label>
                 <input id="displayName" name="displayName" placeholder="Embedded Starter" />
               </div>
               <div className="field">
-                <label htmlFor="baseMonthlyFeeMinor">Base Fee Minor</label>
+                <label htmlFor="baseMonthlyFeeMinor">{messages.billing.baseFeeMinor}</label>
                 <input id="baseMonthlyFeeMinor" name="baseMonthlyFeeMinor" placeholder="1000" />
               </div>
               <div className="field">
-                <label htmlFor="invoiceDueDays">Invoice Due Days</label>
+                <label htmlFor="invoiceDueDays">{messages.billing.invoiceDueDays}</label>
                 <input id="invoiceDueDays" name="invoiceDueDays" placeholder="15" />
               </div>
               <div className="actions-row">
                 <button className="button" type="submit">
-                  Create Plan
+                  {messages.billing.createPlan}
                 </button>
               </div>
             </form>
           </Card>
 
-          <Card title="Add Fee Schedule Tier">
+          <Card title={messages.billing.addTier}>
             <form action={createBillingFeeScheduleAction} className="form-grid">
               <div className="field">
-                <label htmlFor="billingPlanId">Billing Plan Id</label>
+                <label htmlFor="billingPlanId">{messages.billing.billingPlanId}</label>
                 <input id="billingPlanId" name="billingPlanId" />
               </div>
               <div className="field">
-                <label htmlFor="effectiveFrom">Effective From</label>
+                <label htmlFor="effectiveFrom">{messages.billing.effectiveFrom}</label>
                 <input id="effectiveFrom" name="effectiveFrom" placeholder="2026-05-01T00:00:00.000Z" />
               </div>
               <div className="field">
-                <label htmlFor="metric">Metric</label>
+                <label htmlFor="metric">{messages.billing.metric}</label>
                 <input id="metric" name="metric" placeholder="PARTNER_API_WRITE_REQUEST" />
               </div>
               <div className="field">
-                <label htmlFor="includedUnits">Included Units</label>
+                <label htmlFor="includedUnits">{messages.billing.includedUnits}</label>
                 <input id="includedUnits" name="includedUnits" placeholder="100" />
               </div>
               <div className="field">
-                <label htmlFor="startsAtUnit">Starts At Unit</label>
+                <label htmlFor="startsAtUnit">{messages.billing.startsAtUnit}</label>
                 <input id="startsAtUnit" name="startsAtUnit" placeholder="101" />
               </div>
               <div className="field">
-                <label htmlFor="upToUnit">Up To Unit</label>
+                <label htmlFor="upToUnit">{messages.billing.upToUnit}</label>
                 <input id="upToUnit" name="upToUnit" placeholder="1000" />
               </div>
               <div className="field">
-                <label htmlFor="unitPriceMinor">Unit Price Minor</label>
+                <label htmlFor="unitPriceMinor">{messages.billing.unitPriceMinor}</label>
                 <input id="unitPriceMinor" name="unitPriceMinor" placeholder="25" />
               </div>
               <div className="actions-row">
                 <button className="button" type="submit">
-                  Add Schedule
+                  {messages.billing.addSchedule}
                 </button>
               </div>
             </form>
           </Card>
         </div>
 
-        <Card title="Existing Billing Plans">
+        <Card title={messages.billing.existingPlans}>
           {plans.billingPlans.length === 0 ? (
-            <EmptyState body="No billing plans exist yet." />
+            <EmptyState body={messages.partners.noPlans} />
           ) : (
             <div className="stack">
               {plans.billingPlans.map((plan) => {
@@ -106,21 +109,24 @@ export default async function BillingPage() {
                   <Card key={plan.id} title={`${plan.displayName} (${plan.code})`}>
                     <div className="detail-grid">
                       <div>
-                        <small className="muted">Plan Id</small>
+                        <small className="muted">{messages.billing.planId}</small>
                         <div className="mono">{plan.id}</div>
                       </div>
                       <div>
-                        <small className="muted">Base Fee</small>
+                        <small className="muted">{messages.billing.baseFee}</small>
                         <div>{plan.baseMonthlyFeeMinor} USD minor</div>
                       </div>
                       <div>
-                        <small className="muted">Due Days</small>
+                        <small className="muted">{messages.billing.dueDays}</small>
                         <div>{plan.invoiceDueDays}</div>
                       </div>
                       <div>
-                        <small className="muted">Status</small>
+                        <small className="muted">{messages.billing.status}</small>
                         <div>
-                          <Pill tone={toneForStatus(plan.status)} value={plan.status} />
+                          <Pill
+                            tone={toneForStatus(plan.status)}
+                            value={formatCode(plan.status, messages.statuses, messages.common.none)}
+                          />
                         </div>
                       </div>
                     </div>
@@ -133,22 +139,22 @@ export default async function BillingPage() {
                           value={plan.status === "ACTIVE" ? "ARCHIVED" : "ACTIVE"}
                         />
                         <button className="button button-secondary" type="submit">
-                          {plan.status === "ACTIVE" ? "Archive" : "Activate"}
+                          {plan.status === "ACTIVE" ? messages.billing.archive : messages.partners.activate}
                         </button>
                       </form>
                     </div>
                     {schedules.length === 0 ? (
-                      <EmptyState body="No fee schedules exist for this plan yet." />
+                      <EmptyState body={messages.partners.noSchedules} />
                     ) : (
                       <DataTable
                         headers={[
                           "Schedule Id",
-                          "Effective From",
-                          "Metric",
-                          "Included",
-                          "Starts",
-                          "Up To",
-                          "Unit Price"
+                          messages.billing.effectiveFrom,
+                          messages.billing.metric,
+                          messages.billing.included,
+                          messages.billing.starts,
+                          messages.billing.upTo,
+                          messages.billing.unitPrice
                         ]}
                       >
                         {schedules.flatMap((schedule) =>
@@ -161,7 +167,7 @@ export default async function BillingPage() {
                               <td>{tier.metric}</td>
                               <td>{tier.includedUnits}</td>
                               <td>{tier.startsAtUnit}</td>
-                              <td>{tier.upToUnit ?? "unbounded"}</td>
+                              <td>{tier.upToUnit ?? messages.common.unbounded}</td>
                               <td>{tier.unitPriceMinor}</td>
                             </tr>
                           ))
@@ -175,11 +181,19 @@ export default async function BillingPage() {
           )}
         </Card>
 
-        <Card title="Invoice Queue">
+        <Card title={messages.billing.invoiceQueue}>
           {invoices.invoices.length === 0 ? (
-            <EmptyState body="No invoices have been generated yet." />
+            <EmptyState body={messages.billing.invoicesEmpty} />
           ) : (
-            <DataTable headers={["Invoice", "Tenant", "Period", "Status", "Total"]}>
+            <DataTable
+              headers={[
+                "Invoice",
+                messages.billing.tenant,
+                messages.billing.period,
+                messages.billing.status,
+                messages.billing.total
+              ]}
+            >
               {invoices.invoices.map((invoice) => (
                 <tr key={invoice.id}>
                   <td className="mono">{invoice.id}</td>
@@ -188,7 +202,10 @@ export default async function BillingPage() {
                     {invoice.periodStart.slice(0, 10)} to {invoice.periodEnd.slice(0, 10)}
                   </td>
                   <td>
-                    <Pill tone={toneForStatus(invoice.status)} value={invoice.status} />
+                    <Pill
+                      tone={toneForStatus(invoice.status)}
+                      value={formatCode(invoice.status, messages.statuses, messages.common.none)}
+                    />
                   </td>
                   <td>{invoice.totalMinor}</td>
                 </tr>

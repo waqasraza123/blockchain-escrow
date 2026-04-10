@@ -1,0 +1,767 @@
+import type { Locale } from "@blockchain-escrow/shared";
+
+export const enMessages = {
+  common: {
+    active: "Active",
+    blocked: "Blocked",
+    clear: "Clear",
+    completed: "Completed",
+    interfaceLanguage: "Interface language",
+    language: "Language",
+    loading: "Loading",
+    na: "n/a",
+    never: "never",
+    no: "No",
+    none: "none",
+    notConfigured: "not configured",
+    notFinished: "not finished",
+    notStarted: "not started",
+    notSubmitted: "not submitted",
+    organizations: "Organizations",
+    pending: "pending",
+    ready: "Ready",
+    session: "Session",
+    unavailable: "unavailable",
+    unassigned: "unassigned",
+    unbounded: "unbounded",
+    walletMissing: "wallet-missing",
+    workspace: "Customer Workspace",
+    yes: "Yes"
+  },
+  locale: {
+    ar: "العربية",
+    en: "English"
+  },
+  metadata: {
+    description: "Customer approval, finance, partner, and escrow operations workspace",
+    title: "Blockchain Escrow Workspace"
+  },
+  navigation: {
+    approvals: "Approvals",
+    dashboard: "Dashboard",
+    drafts: "Drafts",
+    finance: "Finance",
+    integrations: "Integrations"
+  },
+  publicTopbar: {
+    platform: "Blockchain Escrow",
+    subtitle: "Bilingual workspace and hosted flow access"
+  },
+  shell: {
+    brandSubtitle: "Release 11 bilingual approval, finance, and hosted workflow control plane",
+    organization: "Organization",
+    organizationsTitle: "Organizations",
+    roleLabel: "Role",
+    session: "Session"
+  },
+  switcher: {
+    ariaLabel: "Choose interface language",
+    label: "Language"
+  },
+  statuses: {
+    ACKNOWLEDGED: "Acknowledged",
+    ACTIVE: "Active",
+    APPROVED: "Approved",
+    ARCHIVED: "Archived",
+    BLOCKED: "Blocked",
+    CLEARED: "Cleared",
+    COMPLETED: "Completed",
+    CONFIRMED: "Confirmed",
+    DISABLED: "Disabled",
+    DISPUTED: "Disputed",
+    DRAFT: "Draft",
+    FAILED: "Failed",
+    FINALIZED: "Finalized",
+    FRESH: "Fresh",
+    HEALTHY: "Healthy",
+    INACTIVE: "Inactive",
+    NOT_REQUIRED: "Not required",
+    OPEN: "Open",
+    PAID: "Paid",
+    PENDING: "Pending",
+    PROCESSING: "Processing",
+    REFUNDED: "Refunded",
+    REJECTED: "Rejected",
+    RELEASED: "Released",
+    REQUIRED: "Required",
+    RESOLVED: "Resolved",
+    REVIEW_REQUIRED: "Review required",
+    SENT: "Sent",
+    STALE: "Stale",
+    SUCCESS: "Success",
+    SUPERSEDED: "Superseded",
+    UNHEALTHY: "Unhealthy",
+    VOID: "Void"
+  },
+  codes: {
+    actionKinds: {
+      FUNDING_TRANSACTION_CREATE: "Funding transaction",
+      STATEMENT_SNAPSHOT_CREATE: "Statement snapshot"
+    },
+    approvalKinds: {
+      DEAL_VERSION_SETTLEMENT: "Deal version settlement",
+      FUNDING_TRANSACTION_CREATE: "Funding transaction"
+    },
+    hostedSessionTypes: {
+      COUNTERPARTY_MILESTONE_SUBMISSION: "Counterparty milestone submission",
+      COUNTERPARTY_VERSION_ACCEPTANCE: "Counterparty version acceptance",
+      DEAL_STATUS_REVIEW: "Deal status review",
+      DISPUTE_EVIDENCE_UPLOAD: "Dispute evidence upload"
+    },
+    metrics: {
+      PARTNER_API_WRITE_REQUEST: "Partner API write requests",
+      PARTNER_HOSTED_SESSION_COMPLETED: "Hosted sessions completed",
+      PARTNER_HOSTED_SESSION_CREATED: "Hosted sessions created",
+      PARTNER_WEBHOOK_DELIVERY_ATTEMPT: "Webhook delivery attempts",
+      PARTNER_WEBHOOK_DELIVERY_SUCCESS: "Webhook delivery successes"
+    },
+    roles: {
+      ADMIN: "Admin",
+      APPROVER: "Approver",
+      MEMBER: "Member",
+      OWNER: "Owner",
+      VIEWER: "Viewer"
+    },
+    surfaces: {
+      ENTRYPOINT: "Entrypoint",
+      HOSTED: "Hosted"
+    }
+  },
+  home: {
+    continueToSignIn: "Continue to sign in",
+    legal: "Legal",
+    noOrganizationsBody:
+      "This wallet session is valid, but it is not yet a member of any organization.",
+    noOrganizationsEyebrow: "Release 11",
+    noOrganizationsTitle: "No organizations",
+    privacy: "Privacy",
+    support: "Support",
+    tenantEyebrow: "Tenant workspace",
+    tenantSubtitle:
+      "Branded embedded entrypoint for hosted workflows and platform sign-in.",
+    terms: "Terms"
+  },
+  signIn: {
+    connectWallet: "Connect wallet",
+    connecting: "Connecting...",
+    continueInto: "Continuing into",
+    eyebrow: "Platform sign-in",
+    failed: "Sign-in failed.",
+    invalidChainId: "Wallet returned an invalid chain id.",
+    lede:
+      "Wallet authentication stays on the platform domain even for white-labeled tenant entrypoints.",
+    missingAccount: "No wallet account is available.",
+    missingWallet: "No injected wallet was detected.",
+    platformName: "Blockchain Escrow",
+    siweStatement: "Sign in to Blockchain Escrow.",
+    title: "Blockchain Escrow"
+  },
+  unauthorized: {
+    body:
+      "Sign in with an allowed wallet session before using the customer workspace.",
+    eyebrow: "Wallet session required",
+    title: "Unauthorized"
+  },
+  hosted: {
+    clearSession: "Clear hosted session",
+    draftContext: "Draft context",
+    evidenceBody:
+      "No settlement statement is available for this hosted session.",
+    expires: "Expires",
+    hostedSession: "Hosted session",
+    hostedWorkflowSuffix: "Hosted workflow",
+    launchAction: "Open hosted session",
+    launchMissing: "This hosted session could not be found.",
+    launchReady:
+      "This hosted session is ready to exchange into a short-lived workflow cookie.",
+    launchSubtitle:
+      "Launch a constrained participant flow without an organization session.",
+    launchTitle: "Partner hosted workflow",
+    milestoneStatement: "Settlement statement",
+    openHostedSession: "Open hosted session",
+    reviewAmount: "Amount",
+    reviewMilestone: "Milestone",
+    reviewState: "State",
+    scopedSubtitle:
+      "Scoped participant workflow backed by a short-lived hosted session cookie.",
+    sessionLaunch: "Session launch",
+    sessionStatus: "Session status",
+    status: "Status",
+    submitAcceptance: "Submit acceptance",
+    submitAcceptanceCard: "Submit acceptance signature",
+    submitMilestone: "Submit milestone",
+    submitMilestoneCard: "Submit milestone evidence",
+    uploadEvidence: "Upload metadata and link evidence",
+    uploadEvidenceCard: "Upload evidence metadata",
+    statusReview: "Status review"
+  },
+  hostedForms: {
+    byteSize: "Byte size",
+    category: "Category",
+    mediaType: "Media type",
+    originalFilename: "Original filename",
+    sha256Hex: "SHA-256 hex",
+    signature: "Typed signature",
+    statement: "Statement",
+    statementPlaceholder: "Milestone work completed...",
+    storageKey: "Storage key"
+  },
+  dashboard: {
+    blockedApprovals: "Blocked approvals",
+    completedExports: "Completed exports",
+    eyebrow: "Release 9",
+    fundingTxs: "Funding txs",
+    openQueue: "Open queue",
+    pendingApprovals: "Pending approvals",
+    pendingExports: "Pending exports",
+    recentApprovalRequests: "Recent approval requests",
+    recentFinanceExports: "Recent finance exports",
+    settlementExecutions: "Settlement executions",
+    snapshots: "Snapshots",
+    subtitle:
+      "Approvals, statement history, export operations, and linked tenant visibility for the active organization.",
+    title: "Organization dashboard",
+    viewFinance: "View finance"
+  },
+  approvals: {
+    action: "Action",
+    approvalRequests: "Approval requests",
+    decidedAt: "Decided at",
+    decisionNote: "Decision note",
+    detailEyebrow: "Approval detail",
+    detailSubtitle:
+      "Review the immutable request fingerprint, subject, and step history.",
+    label: "Label",
+    position: "Position",
+    queueEmpty: "No approval requests have been opened yet.",
+    queueEyebrow: "Approvals",
+    queueSubtitle:
+      "Sequential approval requests across funding, statements, and governed org actions.",
+    queueTitle: "Approval queue",
+    rejectStep: "Reject step",
+    requestTitle: "Approval requests",
+    requiredRole: "Required role",
+    requested: "Requested",
+    status: "Status",
+    steps: "Steps",
+    stepHistory: "Step history",
+    subject: "Subject",
+    subjectFingerprint: "Subject fingerprint",
+    summary: "Summary",
+    summaryAction: "Action",
+    summaryStatus: "Status",
+    title: "Approval queue",
+    decisionPanel: "Decision panel",
+    noPendingStep: "This approval request has no actionable pending step.",
+    approveStep: "Approve step"
+  },
+  finance: {
+    active: "Active",
+    approvalPolicies: "Approval policies",
+    artifacts: "Artifacts",
+    code: "Code",
+    costCenters: "Cost centers",
+    createExport: "Create finance export",
+    currency: "Currency",
+    dateFrom: "Date from",
+    dateTo: "Date to",
+    exportJobs: "Export jobs",
+    kind: "Kind",
+    name: "Name",
+    pendingExports: "Pending exports",
+    queueExportJob: "Queue export job",
+    refundedAmount: "Refunded amount",
+    releasedAmount: "Released amount",
+    snapshots: "Snapshots",
+    statementSnapshots: "Statement snapshots",
+    status: "Status",
+    steps: "Steps",
+    subtitle:
+      "Cost centers, approval policies, statement history, and export jobs for the active organization.",
+    title: "Finance controls",
+    financeCenter: "Finance center",
+    version: "Version"
+  },
+  integrations: {
+    apiKeys: "API keys",
+    billingInvoices: "Recent invoices",
+    brand: "Brand",
+    displayName: "Display name",
+    domains: "Tenant domains",
+    event: "Event",
+    expires: "Expires",
+    hostedSessions: "Hosted sessions",
+    invoice: "Invoice",
+    lastDelivery: "Last delivery",
+    linkedPartners: "Linked partners",
+    name: "Name",
+    noApiKeys: "No partner API keys have been issued.",
+    noBilling: "No tenant invoices have been generated yet.",
+    noDeliveries: "No partner webhook deliveries have been recorded.",
+    noDomains: "No tenant domains are configured.",
+    noHostedSessions: "No hosted sessions have been launched.",
+    noLinkedPartners: "No linked partner accounts exist for this organization.",
+    noSubscriptions: "No webhook subscriptions exist.",
+    partnerIntegrations: "Partner integrations",
+    prefix: "Prefix",
+    recentDeliveries: "Recent deliveries",
+    slug: "Slug",
+    status: "Status",
+    subtitle:
+      "Read-only visibility into linked partners, issued keys, hosted sessions, tenant domains, and webhook delivery health.",
+    surface: "Surface",
+    tenant: "Tenant",
+    total: "Total",
+    type: "Type",
+    webhookSubscriptions: "Webhook subscriptions"
+  },
+  drafts: {
+    actions: "Actions",
+    approval: "Approval",
+    currency: "Currency",
+    detailEyebrow: "Draft detail",
+    detailSubtitle:
+      "Versions, parties, and approval-bearing finance context for this escrow draft.",
+    draftQueue: "Draft queue",
+    draftSummary: "Draft summary",
+    draftWorkspace: "Draft workspace",
+    empty: "No draft deals exist for this organization yet.",
+    latestSubmission: "Latest submission",
+    latestVersion: "Latest version",
+    milestoneStatement: "Milestone statement",
+    milestones: "Milestones",
+    milestonesCount: "Milestones",
+    openVersion: "Open version",
+    parties: "Parties",
+    pending: "Pending",
+    refunded: "Refunded",
+    released: "Released",
+    snapshotApproval: "Snapshot approval",
+    snapshotNote: "Snapshot note",
+    statementSnapshot: "Statement snapshot",
+    state: "State",
+    subtitle:
+      "Track escrow drafts, parties, versions, funding posture, and custody state.",
+    title: "Draft deals",
+    versions: "Versions",
+    versionDetailEyebrow: "Version detail",
+    versionDetailSubtitle:
+      "Funding, approval, and milestone custody state for the selected deal version.",
+    versionMetadata: "Version metadata"
+  },
+  draftForms: {
+    approvalNote: "Approval note",
+    captureSnapshot: "Capture statement snapshot",
+    files: "Files",
+    fundingApproval: "Funding approval",
+    fundingPreparation: "Funding preparation",
+    predictedAgreement: "Predicted agreement",
+    requestFundingApproval: "Request funding approval",
+    requestSnapshotApproval: "Request snapshot approval",
+    snapshotApprovalNote: "Approval note"
+  },
+  exports: {
+    artifacts: "Artifacts",
+    created: "Created",
+    detailEyebrow: "Export detail",
+    detailSubtitle:
+      "Queued finance artifacts generated by the worker from Release 9 reporting projections.",
+    filename: "Filename",
+    filters: "Filters",
+    finished: "Finished",
+    format: "Format",
+    jobSummary: "Job summary",
+    preview: "Preview",
+    size: "Size",
+    started: "Started",
+    status: "Status",
+    workerPending:
+      "The worker has not persisted any export artifacts for this job yet."
+  }
+};
+
+export type WebMessages = typeof enMessages;
+
+export const arMessages = {
+  common: {
+    active: "نشط",
+    blocked: "محجوب",
+    clear: "مسح",
+    completed: "مكتمل",
+    interfaceLanguage: "لغة الواجهة",
+    language: "اللغة",
+    loading: "جارٍ التحميل",
+    na: "غير متاح",
+    never: "أبدًا",
+    no: "لا",
+    none: "لا يوجد",
+    notConfigured: "غير مهيأ",
+    notFinished: "لم يكتمل",
+    notStarted: "لم يبدأ",
+    notSubmitted: "لم يتم الإرسال",
+    organizations: "المؤسسات",
+    pending: "قيد الانتظار",
+    ready: "جاهز",
+    session: "الجلسة",
+    unavailable: "غير متاح",
+    unassigned: "غير مُسند",
+    unbounded: "غير محدود",
+    walletMissing: "المحفظة غير موجودة",
+    workspace: "مساحة عمل العملاء",
+    yes: "نعم"
+  },
+  locale: {
+    ar: "العربية",
+    en: "English"
+  },
+  metadata: {
+    description: "مساحة عمل العملاء للموافقات والمالية والشركاء وعمليات الضمان",
+    title: "مساحة عمل Blockchain Escrow"
+  },
+  navigation: {
+    approvals: "الموافقات",
+    dashboard: "لوحة المعلومات",
+    drafts: "المسودات",
+    finance: "المالية",
+    integrations: "التكاملات"
+  },
+  publicTopbar: {
+    platform: "Blockchain Escrow",
+    subtitle: "وصول ثنائي اللغة إلى مساحة العمل والتدفقات المستضافة"
+  },
+  shell: {
+    brandSubtitle:
+      "مركز تحكم ثنائي اللغة للإصدار 11 للموافقات والمالية والتدفقات المستضافة",
+    organization: "المؤسسة",
+    organizationsTitle: "المؤسسات",
+    roleLabel: "الدور",
+    session: "الجلسة"
+  },
+  switcher: {
+    ariaLabel: "اختر لغة الواجهة",
+    label: "اللغة"
+  },
+  statuses: {
+    ACKNOWLEDGED: "تم الإقرار",
+    ACTIVE: "نشط",
+    APPROVED: "تمت الموافقة",
+    ARCHIVED: "مؤرشف",
+    BLOCKED: "محجوب",
+    CLEARED: "تمت التصفية",
+    COMPLETED: "مكتمل",
+    CONFIRMED: "مؤكد",
+    DISABLED: "معطل",
+    DISPUTED: "متنازع عليه",
+    DRAFT: "مسودة",
+    FAILED: "فشل",
+    FINALIZED: "نهائي",
+    FRESH: "حديث",
+    HEALTHY: "سليم",
+    INACTIVE: "غير نشط",
+    NOT_REQUIRED: "غير مطلوب",
+    OPEN: "مفتوح",
+    PAID: "مدفوع",
+    PENDING: "قيد الانتظار",
+    PROCESSING: "قيد المعالجة",
+    REFUNDED: "تم رد المبلغ",
+    REJECTED: "مرفوض",
+    RELEASED: "تم الإفراج",
+    REQUIRED: "مطلوب",
+    RESOLVED: "تم الحل",
+    REVIEW_REQUIRED: "مراجعة مطلوبة",
+    SENT: "مرسل",
+    STALE: "متأخر",
+    SUCCESS: "ناجح",
+    SUPERSEDED: "تم الاستبدال",
+    UNHEALTHY: "غير سليم",
+    VOID: "ملغي"
+  },
+  codes: {
+    actionKinds: {
+      FUNDING_TRANSACTION_CREATE: "معاملة التمويل",
+      STATEMENT_SNAPSHOT_CREATE: "لقطة كشف"
+    },
+    approvalKinds: {
+      DEAL_VERSION_SETTLEMENT: "تسوية نسخة الصفقة",
+      FUNDING_TRANSACTION_CREATE: "معاملة التمويل"
+    },
+    hostedSessionTypes: {
+      COUNTERPARTY_MILESTONE_SUBMISSION: "إرسال مرحلة من الطرف المقابل",
+      COUNTERPARTY_VERSION_ACCEPTANCE: "قبول نسخة من الطرف المقابل",
+      DEAL_STATUS_REVIEW: "مراجعة حالة الصفقة",
+      DISPUTE_EVIDENCE_UPLOAD: "رفع أدلة النزاع"
+    },
+    metrics: {
+      PARTNER_API_WRITE_REQUEST: "طلبات كتابة واجهة الشريك",
+      PARTNER_HOSTED_SESSION_COMPLETED: "الجلسات المستضافة المكتملة",
+      PARTNER_HOSTED_SESSION_CREATED: "الجلسات المستضافة المنشأة",
+      PARTNER_WEBHOOK_DELIVERY_ATTEMPT: "محاولات تسليم Webhook",
+      PARTNER_WEBHOOK_DELIVERY_SUCCESS: "عمليات تسليم Webhook الناجحة"
+    },
+    roles: {
+      ADMIN: "مسؤول",
+      APPROVER: "معتمد",
+      MEMBER: "عضو",
+      OWNER: "مالك",
+      VIEWER: "مشاهد"
+    },
+    surfaces: {
+      ENTRYPOINT: "نقطة الدخول",
+      HOSTED: "مستضاف"
+    }
+  },
+  home: {
+    continueToSignIn: "الاستمرار إلى تسجيل الدخول",
+    legal: "الاسم القانوني",
+    noOrganizationsBody:
+      "جلسة هذه المحفظة صالحة، لكنها ليست عضوًا في أي مؤسسة حتى الآن.",
+    noOrganizationsEyebrow: "الإصدار 11",
+    noOrganizationsTitle: "لا توجد مؤسسات",
+    privacy: "الخصوصية",
+    support: "الدعم",
+    tenantEyebrow: "مساحة عمل المستأجر",
+    tenantSubtitle:
+      "نقطة دخول مخصصة ومضمنة للتدفقات المستضافة وتسجيل الدخول عبر المنصة.",
+    terms: "الشروط"
+  },
+  signIn: {
+    connectWallet: "ربط المحفظة",
+    connecting: "جارٍ الاتصال...",
+    continueInto: "الاستمرار إلى",
+    eyebrow: "تسجيل الدخول عبر المنصة",
+    failed: "فشل تسجيل الدخول.",
+    invalidChainId: "أعادت المحفظة معرّف سلسلة غير صالح.",
+    lede:
+      "يبقى التحقق بالمحفظة على نطاق المنصة حتى عند استخدام نقاط دخول مستأجرين ذات علامة بيضاء.",
+    missingAccount: "لا يوجد حساب محفظة متاح.",
+    missingWallet: "لم يتم العثور على محفظة مدمجة.",
+    platformName: "Blockchain Escrow",
+    siweStatement: "سجّل الدخول إلى Blockchain Escrow.",
+    title: "Blockchain Escrow"
+  },
+  unauthorized: {
+    body:
+      "سجّل الدخول باستخدام جلسة محفظة مسموح بها قبل استخدام مساحة عمل العملاء.",
+    eyebrow: "مطلوب جلسة محفظة",
+    title: "غير مصرح"
+  },
+  hosted: {
+    clearSession: "مسح الجلسة المستضافة",
+    draftContext: "سياق المسودة",
+    evidenceBody: "لا يتوفر كشف تسوية لهذه الجلسة المستضافة.",
+    expires: "ينتهي في",
+    hostedSession: "جلسة مستضافة",
+    hostedWorkflowSuffix: "تدفق مستضاف",
+    launchAction: "فتح الجلسة المستضافة",
+    launchMissing: "تعذر العثور على هذه الجلسة المستضافة.",
+    launchReady:
+      "هذه الجلسة المستضافة جاهزة للتحويل إلى ملف ارتباط قصير الأجل للتدفق.",
+    launchSubtitle:
+      "ابدأ تدفق مشارك مقيّدًا دون الحاجة إلى جلسة مؤسسة.",
+    launchTitle: "تدفق شريك مستضاف",
+    milestoneStatement: "كشف التسوية",
+    openHostedSession: "فتح الجلسة المستضافة",
+    reviewAmount: "المبلغ",
+    reviewMilestone: "المرحلة",
+    reviewState: "الحالة",
+    scopedSubtitle:
+      "تدفق مشارك مقيّد ومدعوم بملف ارتباط قصير الأجل لجلسة مستضافة.",
+    sessionLaunch: "بدء الجلسة",
+    sessionStatus: "حالة الجلسة",
+    status: "الحالة",
+    submitAcceptance: "إرسال القبول",
+    submitAcceptanceCard: "إرسال توقيع القبول",
+    submitMilestone: "إرسال المرحلة",
+    submitMilestoneCard: "إرسال أدلة المرحلة",
+    uploadEvidence: "رفع البيانات الوصفية وربط الأدلة",
+    uploadEvidenceCard: "رفع بيانات الأدلة الوصفية",
+    statusReview: "مراجعة الحالة"
+  },
+  hostedForms: {
+    byteSize: "حجم البايت",
+    category: "الفئة",
+    mediaType: "نوع الوسائط",
+    originalFilename: "اسم الملف الأصلي",
+    sha256Hex: "قيمة SHA-256 السداسية",
+    signature: "التوقيع المطبوع",
+    statement: "البيان",
+    statementPlaceholder: "تم إنجاز عمل المرحلة...",
+    storageKey: "مفتاح التخزين"
+  },
+  dashboard: {
+    blockedApprovals: "الموافقات المحجوبة",
+    completedExports: "عمليات التصدير المكتملة",
+    eyebrow: "الإصدار 9",
+    fundingTxs: "معاملات التمويل",
+    openQueue: "فتح القائمة",
+    pendingApprovals: "الموافقات المعلقة",
+    pendingExports: "عمليات التصدير المعلقة",
+    recentApprovalRequests: "أحدث طلبات الموافقة",
+    recentFinanceExports: "أحدث صادرات المالية",
+    settlementExecutions: "تنفيذات التسوية",
+    snapshots: "اللقطات",
+    subtitle:
+      "الموافقات وسجل الكشوف وعمليات التصدير ورؤية المستأجر المرتبط للمؤسسة النشطة.",
+    title: "لوحة معلومات المؤسسة",
+    viewFinance: "عرض المالية"
+  },
+  approvals: {
+    action: "الإجراء",
+    approvalRequests: "طلبات الموافقة",
+    decidedAt: "تاريخ القرار",
+    decisionNote: "ملاحظة القرار",
+    detailEyebrow: "تفصيل الموافقة",
+    detailSubtitle:
+      "راجع البصمة الثابتة للطلب والموضوع وسجل الخطوات.",
+    label: "الاسم",
+    position: "الترتيب",
+    queueEmpty: "لم يتم فتح أي طلبات موافقة بعد.",
+    queueEyebrow: "الموافقات",
+    queueSubtitle:
+      "طلبات موافقة متسلسلة عبر التمويل والكشوف والإجراءات المؤسسية المحكومة.",
+    queueTitle: "قائمة الموافقات",
+    rejectStep: "رفض الخطوة",
+    requestTitle: "طلبات الموافقة",
+    requiredRole: "الدور المطلوب",
+    requested: "تاريخ الطلب",
+    status: "الحالة",
+    steps: "الخطوات",
+    stepHistory: "سجل الخطوات",
+    subject: "الموضوع",
+    subjectFingerprint: "بصمة الموضوع",
+    summary: "الملخص",
+    summaryAction: "الإجراء",
+    summaryStatus: "الحالة",
+    title: "قائمة الموافقات",
+    decisionPanel: "لوحة القرار",
+    noPendingStep: "لا يحتوي طلب الموافقة هذا على خطوة معلقة قابلة للتنفيذ.",
+    approveStep: "اعتماد الخطوة"
+  },
+  finance: {
+    active: "نشط",
+    approvalPolicies: "سياسات الموافقة",
+    artifacts: "الملفات الناتجة",
+    code: "الرمز",
+    costCenters: "مراكز التكلفة",
+    createExport: "إنشاء تصدير مالي",
+    currency: "العملة",
+    dateFrom: "من تاريخ",
+    dateTo: "إلى تاريخ",
+    exportJobs: "وظائف التصدير",
+    kind: "النوع",
+    name: "الاسم",
+    pendingExports: "عمليات التصدير المعلقة",
+    queueExportJob: "إضافة وظيفة تصدير إلى القائمة",
+    refundedAmount: "المبلغ المسترد",
+    releasedAmount: "المبلغ المُفرج عنه",
+    snapshots: "اللقطات",
+    statementSnapshots: "لقطات الكشوف",
+    status: "الحالة",
+    steps: "الخطوات",
+    subtitle:
+      "مراكز التكلفة وسياسات الموافقة وسجل الكشوف ووظائف التصدير للمؤسسة النشطة.",
+    title: "ضوابط المالية",
+    financeCenter: "مركز المالية",
+    version: "النسخة"
+  },
+  integrations: {
+    apiKeys: "مفاتيح API",
+    billingInvoices: "أحدث الفواتير",
+    brand: "العلامة",
+    displayName: "الاسم المعروض",
+    domains: "نطاقات المستأجر",
+    event: "الحدث",
+    expires: "ينتهي",
+    hostedSessions: "الجلسات المستضافة",
+    invoice: "الفاتورة",
+    lastDelivery: "آخر تسليم",
+    linkedPartners: "الشركاء المرتبطون",
+    name: "الاسم",
+    noApiKeys: "لم يتم إصدار أي مفاتيح API للشركاء.",
+    noBilling: "لم يتم إنشاء أي فواتير للمستأجر بعد.",
+    noDeliveries: "لم يتم تسجيل أي عمليات تسليم Webhook للشركاء.",
+    noDomains: "لا توجد نطاقات مستأجر مهيأة.",
+    noHostedSessions: "لم يتم إطلاق أي جلسات مستضافة.",
+    noLinkedPartners: "لا توجد حسابات شركاء مرتبطة لهذه المؤسسة.",
+    noSubscriptions: "لا توجد اشتراكات Webhook.",
+    partnerIntegrations: "تكاملات الشركاء",
+    prefix: "المقدمة",
+    recentDeliveries: "أحدث عمليات التسليم",
+    slug: "المعرف",
+    status: "الحالة",
+    subtitle:
+      "رؤية للقراءة فقط للشركاء المرتبطين والمفاتيح الصادرة والجلسات المستضافة ونطاقات المستأجر وصحة تسليم Webhook.",
+    surface: "السطح",
+    tenant: "المستأجر",
+    total: "الإجمالي",
+    type: "النوع",
+    webhookSubscriptions: "اشتراكات Webhook"
+  },
+  drafts: {
+    actions: "الإجراءات",
+    approval: "الموافقة",
+    currency: "العملة",
+    detailEyebrow: "تفصيل المسودة",
+    detailSubtitle:
+      "النسخ والأطراف وسياق المالية المرتبط بالموافقة لهذه المسودة.",
+    draftQueue: "قائمة المسودات",
+    draftSummary: "ملخص المسودة",
+    draftWorkspace: "مساحة عمل المسودات",
+    empty: "لا توجد صفقات مسودة لهذه المؤسسة بعد.",
+    latestSubmission: "آخر إرسال",
+    latestVersion: "أحدث نسخة",
+    milestoneStatement: "كشف المرحلة",
+    milestones: "المراحل",
+    milestonesCount: "عدد المراحل",
+    openVersion: "فتح النسخة",
+    parties: "الأطراف",
+    pending: "معلق",
+    refunded: "مسترد",
+    released: "تم الإفراج",
+    snapshotApproval: "موافقة اللقطة",
+    snapshotNote: "ملاحظة اللقطة",
+    statementSnapshot: "لقطة الكشف",
+    state: "الحالة",
+    subtitle:
+      "تتبع مسودات الضمان والأطراف والنسخ ووضع التمويل وحالة الحفظ.",
+    title: "الصفقات المسودة",
+    versions: "النسخ",
+    versionDetailEyebrow: "تفصيل النسخة",
+    versionDetailSubtitle:
+      "التمويل والموافقة وحالة حفظ المراحل للنسخة المحددة من الصفقة.",
+    versionMetadata: "بيانات النسخة"
+  },
+  draftForms: {
+    approvalNote: "ملاحظة الموافقة",
+    captureSnapshot: "التقاط لقطة الكشف",
+    files: "الملفات",
+    fundingApproval: "موافقة التمويل",
+    fundingPreparation: "تهيئة التمويل",
+    predictedAgreement: "الاتفاقية المتوقعة",
+    requestFundingApproval: "طلب موافقة التمويل",
+    requestSnapshotApproval: "طلب موافقة اللقطة",
+    snapshotApprovalNote: "ملاحظة الموافقة"
+  },
+  exports: {
+    artifacts: "الملفات الناتجة",
+    created: "تاريخ الإنشاء",
+    detailEyebrow: "تفصيل التصدير",
+    detailSubtitle:
+      "ملفات مالية في قائمة الانتظار أنشأها العامل من إسقاطات تقارير الإصدار 9.",
+    filename: "اسم الملف",
+    filters: "عوامل التصفية",
+    finished: "انتهى",
+    format: "الصيغة",
+    jobSummary: "ملخص الوظيفة",
+    preview: "معاينة",
+    size: "الحجم",
+    started: "بدأ",
+    status: "الحالة",
+    workerPending: "لم يحفظ العامل أي ملفات تصدير لهذه الوظيفة بعد."
+  }
+} satisfies WebMessages;
+
+export const webMessages: Record<Locale, WebMessages> = {
+  ar: arMessages,
+  en: enMessages
+};

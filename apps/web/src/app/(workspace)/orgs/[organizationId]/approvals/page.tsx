@@ -1,6 +1,8 @@
 import Link from "next/link";
 
 import { listApprovalRequests } from "../../../../../lib/api";
+import { formatCode } from "../../../../../lib/i18n/format";
+import { getI18n } from "../../../../../lib/i18n/server";
 import {
   Card,
   DataTable,
@@ -16,29 +18,41 @@ type ApprovalsPageProps = {
 
 export default async function ApprovalsPage(props: ApprovalsPageProps) {
   const { organizationId } = await props.params;
+  const { messages } = await getI18n();
   const approvals = await listApprovalRequests(organizationId);
 
   return (
     <>
       <WorkspaceHeader
-        eyebrow="Approvals"
-        subtitle="Sequential approval requests across funding, statements, and governed org actions."
-        title="Approval Queue"
+        eyebrow={messages.approvals.queueEyebrow}
+        subtitle={messages.approvals.queueSubtitle}
+        title={messages.approvals.queueTitle}
       />
-      <Card title="Approval Requests">
+      <Card title={messages.approvals.requestTitle}>
         {approvals.approvalRequests.length === 0 ? (
-          <EmptyState body="No approval requests have been opened yet." />
+          <EmptyState body={messages.approvals.queueEmpty} />
         ) : (
-          <DataTable headers={["Action", "Status", "Subject", "Requested", "Steps"]}>
+          <DataTable
+            headers={[
+              messages.approvals.action,
+              messages.approvals.status,
+              messages.approvals.subject,
+              messages.approvals.requested,
+              messages.approvals.steps
+            ]}
+          >
             {approvals.approvalRequests.map((request) => (
               <tr key={request.id}>
                 <td>
                   <Link href={`/orgs/${organizationId}/approvals/${request.id}`}>
-                    {request.kind}
+                    {formatCode(request.kind, messages.codes.actionKinds, messages.common.none)}
                   </Link>
                 </td>
                 <td>
-                  <Pill tone={toneForStatus(request.status)} value={request.status} />
+                  <Pill
+                    tone={toneForStatus(request.status)}
+                    value={formatCode(request.status, messages.statuses, messages.common.none)}
+                  />
                 </td>
                 <td>{request.subject.label ?? request.subject.id}</td>
                 <td className="mono">{request.requestedAt}</td>

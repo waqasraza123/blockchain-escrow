@@ -4,6 +4,8 @@ import {
   updateCaseStatusAction
 } from "../../actions";
 import { getCase } from "../../../../lib/operator-api";
+import { formatCode } from "../../../../lib/i18n/format";
+import { getI18n } from "../../../../lib/i18n/server";
 import { Card, ConsoleHeader, Pill, toneForStatus } from "../../ui";
 
 type CaseDetailPageProps = {
@@ -12,40 +14,44 @@ type CaseDetailPageProps = {
 
 export default async function CaseDetailPage({ params }: CaseDetailPageProps) {
   const { caseId } = await params;
+  const { messages } = await getI18n();
   const detail = await getCase(caseId);
 
   return (
     <>
       <ConsoleHeader
-        eyebrow="Case Detail"
+        eyebrow={messages.cases.detailEyebrow}
         subtitle={detail.case.summary}
         title={detail.case.title}
       />
-      <Card title="Case State">
+      <Card title={messages.cases.statusCard}>
         <div className="detail-grid">
           <div className="detail-item">
-            <span>Status</span>
-            <Pill tone={toneForStatus(detail.case.status)} value={detail.case.status} />
-          </div>
-          <div className="detail-item">
-            <span>Severity</span>
+            <span>{messages.cases.status}</span>
             <Pill
-              tone={toneForStatus(detail.case.severity)}
-              value={detail.case.severity}
+              tone={toneForStatus(detail.case.status)}
+              value={formatCode(detail.case.status, messages.statuses, messages.common.none)}
             />
           </div>
           <div className="detail-item">
-            <span>Assigned Operator</span>
-            <strong>{detail.case.assignedOperatorAccountId ?? "unassigned"}</strong>
+            <span>{messages.cases.severity}</span>
+            <Pill
+              tone={toneForStatus(detail.case.severity)}
+              value={formatCode(detail.case.severity, messages.statuses, messages.common.none)}
+            />
           </div>
           <div className="detail-item">
-            <span>Subject</span>
+            <span>{messages.cases.assignedOperator}</span>
+            <strong>{detail.case.assignedOperatorAccountId ?? messages.common.none}</strong>
+          </div>
+          <div className="detail-item">
+            <span>{messages.cases.subject}</span>
             <strong>{detail.case.subject.label ?? detail.case.subject.subjectId}</strong>
           </div>
         </div>
       </Card>
       <div className="split-grid">
-        <Card title="Notes">
+        <Card title={messages.cases.notes}>
           <div className="stack">
             {detail.notes.length === 0 ? (
               <p className="empty-state">No case notes recorded yet.</p>
@@ -62,41 +68,41 @@ export default async function CaseDetailPage({ params }: CaseDetailPageProps) {
           <form action={addCaseNoteAction} className="form-grid">
             <input name="caseId" type="hidden" value={detail.case.id} />
             <div className="field">
-              <label htmlFor="bodyMarkdown">Add Note</label>
+              <label htmlFor="bodyMarkdown">{messages.cases.bodyMarkdown}</label>
               <textarea id="bodyMarkdown" name="bodyMarkdown" />
             </div>
             <div className="actions-row">
               <button className="button" type="submit">
-                Add Note
+                {messages.cases.addNote}
               </button>
             </div>
           </form>
         </Card>
         <div className="stack">
-          <Card title="Assignment">
+          <Card title={messages.cases.assignment}>
             <form action={assignCaseAction} className="form-grid">
               <input name="caseId" type="hidden" value={detail.case.id} />
               <div className="field">
-                <label htmlFor="assignedOperatorAccountId">Operator Account Id</label>
+                <label htmlFor="assignedOperatorAccountId">{messages.cases.assignedOperator}</label>
                 <input
                   defaultValue={detail.case.assignedOperatorAccountId ?? ""}
                   id="assignedOperatorAccountId"
                   name="assignedOperatorAccountId"
-                  placeholder="blank to unassign"
+                  placeholder={messages.common.blankToUnassign}
                 />
               </div>
               <div className="actions-row">
                 <button className="button button-secondary" type="submit">
-                  Update Assignment
+                  {messages.cases.updateAssignment}
                 </button>
               </div>
             </form>
           </Card>
-          <Card title="Status">
+          <Card title={messages.cases.status}>
             <form action={updateCaseStatusAction} className="form-grid">
               <input name="caseId" type="hidden" value={detail.case.id} />
               <div className="field">
-                <label htmlFor="status">Next Status</label>
+                <label htmlFor="status">{messages.cases.status}</label>
                 <select defaultValue={detail.case.status} id="status" name="status">
                   <option value="OPEN">Open</option>
                   <option value="IN_REVIEW">In Review</option>
@@ -106,7 +112,7 @@ export default async function CaseDetailPage({ params }: CaseDetailPageProps) {
               </div>
               <div className="actions-row">
                 <button className="button" type="submit">
-                  Update Status
+                  {messages.cases.updateStatus}
                 </button>
               </div>
             </form>

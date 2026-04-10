@@ -1,50 +1,56 @@
 import { getHealth } from "../../../lib/operator-api";
+import { formatBoolean, formatCode } from "../../../lib/i18n/format";
+import { getI18n } from "../../../lib/i18n/server";
 import { Card, ConsoleHeader, Pill, toneForStatus } from "../ui";
 
 export default async function HealthPage() {
+  const { messages } = await getI18n();
   const health = await getHealth();
 
   return (
     <>
       <ConsoleHeader
-        eyebrow="Health"
-        subtitle="API-aggregated service readiness, deployment metadata, and Release 4 cursor freshness."
-        title="Platform Health"
+        eyebrow={messages.navigation.health}
+        subtitle={messages.health.serviceStatus}
+        title={messages.health.title}
       />
       <div className="split-grid">
         {[health.api, health.worker, health.indexer].map((service) => (
           <Card key={service.service} title={service.service.toUpperCase()}>
             <div className="detail-grid">
               <div className="detail-item">
-                <span>Status</span>
-                <Pill tone={toneForStatus(service.status)} value={service.status} />
+                <span>{messages.health.status}</span>
+                <Pill
+                  tone={toneForStatus(service.status)}
+                  value={formatCode(service.status, messages.statuses, messages.common.none)}
+                />
               </div>
               <div className="detail-item">
-                <span>Ready</span>
-                <strong>{service.ready ? "true" : "false"}</strong>
+                <span>{messages.health.ready}</span>
+                <strong>{formatBoolean(service.ready, messages)}</strong>
               </div>
             </div>
             <pre className="mono">{JSON.stringify(service.details, null, 2)}</pre>
           </Card>
         ))}
       </div>
-      <Card title="Chain Visibility">
+      <Card title={messages.health.chainVisibility}>
         <div className="detail-grid">
           <div className="detail-item">
-            <span>Cursor Fresh</span>
-            <Pill tone={health.cursorFresh ? "success" : "danger"} value={health.cursorFresh ? "YES" : "NO"} />
+            <span>{messages.health.cursorFresh}</span>
+            <Pill tone={health.cursorFresh ? "success" : "danger"} value={formatBoolean(health.cursorFresh, messages)} />
           </div>
           <div className="detail-item">
-            <span>Cursor Updated</span>
-            <strong className="mono">{health.cursorUpdatedAt ?? "unavailable"}</strong>
+            <span>{messages.health.cursorUpdated}</span>
+            <strong className="mono">{health.cursorUpdatedAt ?? messages.common.na}</strong>
           </div>
           <div className="detail-item">
-            <span>Network</span>
-            <strong>{health.manifest?.network ?? "untracked"}</strong>
+            <span>{messages.health.network}</span>
+            <strong>{health.manifest?.network ?? messages.common.na}</strong>
           </div>
           <div className="detail-item">
-            <span>Contract Version</span>
-            <strong>{health.manifest?.contractVersion ?? "n/a"}</strong>
+            <span>{messages.health.contractVersion}</span>
+            <strong>{health.manifest?.contractVersion ?? messages.common.na}</strong>
           </div>
         </div>
       </Card>

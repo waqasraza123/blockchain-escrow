@@ -1,4 +1,6 @@
 import { getReconciliation } from "../../../lib/operator-api";
+import { formatCode } from "../../../lib/i18n/format";
+import { getI18n } from "../../../lib/i18n/server";
 import {
   Card,
   ConsoleHeader,
@@ -10,58 +12,62 @@ import {
 } from "../ui";
 
 export default async function ReconciliationPage() {
+  const { messages } = await getI18n();
   const reconciliation = await getReconciliation();
 
   return (
     <>
       <ConsoleHeader
-        eyebrow="Reconciliation"
-        subtitle="Funding, settlement execution, disputes, and unresolved operator review pressure."
-        title="Reconciliation Queue"
+        eyebrow={messages.navigation.reconciliation}
+        subtitle={messages.reconciliation.subtitle}
+        title={messages.reconciliation.title}
       />
       <MetricGrid
         items={[
-          { label: "stale funding", value: reconciliation.staleFundingCount },
+          { label: messages.codes.metrics.staleFunding, value: reconciliation.staleFundingCount },
           {
-            label: "failed funding",
+            label: messages.codes.metrics.failedFunding,
             value: reconciliation.failedFundingCount
           },
           {
-            label: "mismatched funding",
+            label: messages.codes.metrics.mismatchedFunding,
             value: reconciliation.mismatchedFundingCount
           },
           {
-            label: "stale settlement",
+            label: messages.codes.metrics.staleSettlement,
             value: reconciliation.staleSettlementExecutionCount
           },
           {
-            label: "failed settlement",
+            label: messages.codes.metrics.failedSettlement,
             value: reconciliation.failedSettlementExecutionCount
           },
           {
-            label: "mismatched settlement",
+            label: messages.codes.metrics.mismatchedSettlement,
             value: reconciliation.mismatchedSettlementExecutionCount
           },
-          { label: "open disputes", value: reconciliation.openDisputeCount },
+          { label: messages.codes.metrics.openDisputes, value: reconciliation.openDisputeCount },
           {
-            label: "review pressure",
+            label: messages.codes.metrics.reviewPressure,
             value: reconciliation.unresolvedOperatorReviewCount
           }
         ]}
       />
-      <Card title="Queue">
+      <Card title={messages.reconciliation.queue}>
         {reconciliation.queue.length === 0 ? (
-          <EmptyState body="No reconciliation items currently require intervention." />
+          <EmptyState body={messages.reconciliation.empty} />
         ) : (
-          <DataTable headers={["Kind", "Status", "Subject", "Agreement", "Updated"]}>
+          <DataTable headers={[messages.reconciliation.kind, messages.reconciliation.status, messages.reconciliation.subject, messages.reconciliation.agreement, messages.reconciliation.updated]}>
             {reconciliation.queue.map((item) => (
               <tr key={`${item.kind}:${item.entityId}`}>
                 <td>{item.kind}</td>
                 <td>
-                  <Pill tone={toneForStatus(item.status)} value={item.status} />
+                  <Pill
+                    tone={toneForStatus(item.status)}
+                    value={formatCode(item.status, messages.statuses, messages.common.none)}
+                  />
                 </td>
                 <td>{item.subject.label ?? item.subject.subjectId}</td>
-                <td className="mono">{item.agreementAddress ?? "n/a"}</td>
+                <td className="mono">{item.agreementAddress ?? messages.common.na}</td>
                 <td className="mono">{item.updatedAt}</td>
               </tr>
             ))}

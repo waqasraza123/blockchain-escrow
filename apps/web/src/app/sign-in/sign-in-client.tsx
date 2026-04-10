@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 
+import { useI18n } from "../../lib/i18n/provider";
+
 type SignInClientProps = {
   returnPath: string;
   tenantLabel: string | null;
@@ -18,6 +20,7 @@ declare global {
 function buildSiweMessage(input: {
   chainId: number;
   nonce: string;
+  statement: string;
   uri: string;
   walletAddress: string;
 }) {
@@ -27,7 +30,7 @@ function buildSiweMessage(input: {
   return `${domain} wants you to sign in with your Ethereum account:
 ${input.walletAddress}
 
-Sign in to Blockchain Escrow.
+${input.statement}
 
 URI: ${input.uri}
 Version: 1
@@ -37,6 +40,7 @@ Issued At: ${issuedAt}`;
 }
 
 export function SignInClient(props: SignInClientProps) {
+  const { messages } = useI18n();
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -46,7 +50,7 @@ export function SignInClient(props: SignInClientProps) {
 
     try {
       if (!window.ethereum) {
-        throw new Error("No injected wallet was detected.");
+        throw new Error(messages.signIn.missingWallet);
       }
 
       const accounts = (await window.ethereum.request({
@@ -55,7 +59,7 @@ export function SignInClient(props: SignInClientProps) {
       const walletAddress = accounts[0];
 
       if (!walletAddress) {
-        throw new Error("No wallet account is available.");
+        throw new Error(messages.signIn.missingAccount);
       }
 
       const rawChainId = (await window.ethereum.request({
@@ -64,7 +68,7 @@ export function SignInClient(props: SignInClientProps) {
       const chainId = Number.parseInt(rawChainId, 16);
 
       if (!Number.isInteger(chainId) || chainId <= 0) {
-        throw new Error("Wallet returned an invalid chain id.");
+        throw new Error(messages.signIn.invalidChainId);
       }
 
       const nonceResponse = await fetch("/api/auth/nonce", {
@@ -83,6 +87,7 @@ export function SignInClient(props: SignInClientProps) {
       const message = buildSiweMessage({
         chainId,
         nonce: nonceBody.nonce,
+        statement: messages.signIn.siweStatement,
         uri: `${window.location.origin}/sign-in`,
         walletAddress
       });
@@ -110,7 +115,7 @@ export function SignInClient(props: SignInClientProps) {
 
       window.location.assign(props.returnPath);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Sign-in failed.");
+      setError(caught instanceof Error ? caught.message : messages.signIn.failed);
     } finally {
       setIsLoading(false);
     }
@@ -119,10 +124,12 @@ export function SignInClient(props: SignInClientProps) {
   return (
     <div className="stack">
       <button className="button" disabled={isLoading} onClick={handleClick} type="button">
-        {isLoading ? "Connecting..." : "Connect Wallet"}
+        {isLoading ? messages.signIn.connecting : messages.signIn.connectWallet}
       </button>
       {props.tenantLabel ? (
-        <p className="muted">Continuing into {props.tenantLabel}.</p>
+        <p className="muted">
+          {messages.signIn.continueInto} {props.tenantLabel}.
+        </p>
       ) : null}
       {error ? <p className="empty-state">{error}</p> : null}
     </div>

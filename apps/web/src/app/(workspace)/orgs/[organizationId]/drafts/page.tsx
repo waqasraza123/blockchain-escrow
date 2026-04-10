@@ -1,6 +1,8 @@
 import Link from "next/link";
 
 import { listDrafts } from "../../../../../lib/api";
+import { formatCode } from "../../../../../lib/i18n/format";
+import { getI18n } from "../../../../../lib/i18n/server";
 import {
   Card,
   DataTable,
@@ -16,20 +18,28 @@ type DraftsPageProps = {
 
 export default async function DraftsPage(props: DraftsPageProps) {
   const { organizationId } = await props.params;
+  const { messages } = await getI18n();
   const drafts = await listDrafts(organizationId);
 
   return (
     <>
       <WorkspaceHeader
-        eyebrow="Draft Workspace"
-        subtitle="Track escrow drafts, parties, versions, funding posture, and custody state."
-        title="Draft Deals"
+        eyebrow={messages.drafts.draftWorkspace}
+        subtitle={messages.drafts.subtitle}
+        title={messages.drafts.title}
       />
-      <Card title="Draft Queue">
+      <Card title={messages.drafts.draftQueue}>
         {drafts.drafts.length === 0 ? (
-          <EmptyState body="No draft deals exist for this organization yet." />
+          <EmptyState body={messages.drafts.empty} />
         ) : (
-          <DataTable headers={["Title", "State", "Latest version", "Currency"]}>
+          <DataTable
+            headers={[
+              "Title",
+              messages.drafts.state,
+              messages.drafts.latestVersion,
+              messages.drafts.currency
+            ]}
+          >
             {drafts.drafts.map((item) => (
               <tr key={item.draft.id}>
                 <td>
@@ -38,9 +48,12 @@ export default async function DraftsPage(props: DraftsPageProps) {
                   </Link>
                 </td>
                 <td>
-                  <Pill tone={toneForStatus(item.draft.state)} value={item.draft.state} />
+                  <Pill
+                    tone={toneForStatus(item.draft.state)}
+                    value={formatCode(item.draft.state, messages.statuses, messages.common.none)}
+                  />
                 </td>
-                <td>{item.latestVersion?.versionNumber ?? "none"}</td>
+                <td>{item.latestVersion?.versionNumber ?? messages.common.none}</td>
                 <td>{item.draft.settlementCurrency}</td>
               </tr>
             ))}

@@ -1,8 +1,11 @@
 import { redirect } from "next/navigation";
 
+import { LocaleTopbar } from "../components/locale-topbar";
 import { getSession, getTenantPublicContext } from "../lib/api";
+import { getI18n } from "../lib/i18n/server";
 
 export default async function HomePage() {
+  const { locale, messages } = await getI18n();
   const tenantContext = await getTenantPublicContext();
 
   if (tenantContext.tenant?.activeDomain.surface === "ENTRYPOINT") {
@@ -17,6 +20,14 @@ export default async function HomePage() {
           gridTemplateColumns: "1fr"
         }}
       >
+        <LocaleTopbar
+          currentLocale={locale}
+          localeLabels={messages.locale}
+          subtitle={messages.publicTopbar.subtitle}
+          switcherAriaLabel={messages.switcher.ariaLabel}
+          switcherLabel={messages.switcher.label}
+          title={messages.publicTopbar.platform}
+        />
         <section
           className="workspace-card"
           style={{
@@ -26,19 +37,17 @@ export default async function HomePage() {
             width: "100%"
           }}
         >
-          <p className="eyebrow">Tenant Workspace</p>
+          <p className="eyebrow">{messages.home.tenantEyebrow}</p>
           <h1>{tenant.settings.displayName}</h1>
-          <p className="lede">
-            Branded embedded entrypoint for hosted workflows and platform sign-in.
-          </p>
+          <p className="lede">{messages.home.tenantSubtitle}</p>
           <div className="stack">
             <div className="detail-grid">
               <div>
-                <small className="muted">Support</small>
+                <small className="muted">{messages.home.support}</small>
                 <div>{tenant.settings.supportEmail}</div>
               </div>
               <div>
-                <small className="muted">Legal</small>
+                <small className="muted">{messages.home.legal}</small>
                 <div>{tenant.settings.legalName}</div>
               </div>
             </div>
@@ -52,13 +61,13 @@ export default async function HomePage() {
                   color: tenant.settings.textColorHex
                 }}
               >
-                Continue To Sign-In
+                {messages.home.continueToSignIn}
               </a>
             </div>
             <div className="inline-list">
-              <a href={tenant.settings.supportUrl}>Support</a>
-              <a href={tenant.settings.termsOfServiceUrl}>Terms</a>
-              <a href={tenant.settings.privacyPolicyUrl}>Privacy</a>
+              <a href={tenant.settings.supportUrl}>{messages.home.support}</a>
+              <a href={tenant.settings.termsOfServiceUrl}>{messages.home.terms}</a>
+              <a href={tenant.settings.privacyPolicyUrl}>{messages.home.privacy}</a>
             </div>
           </div>
         </section>
@@ -77,12 +86,18 @@ export default async function HomePage() {
   if (!firstOrganization) {
     return (
       <main className="workspace-shell" style={{ gridTemplateColumns: "1fr" }}>
+        <LocaleTopbar
+          currentLocale={locale}
+          localeLabels={messages.locale}
+          subtitle={messages.publicTopbar.subtitle}
+          switcherAriaLabel={messages.switcher.ariaLabel}
+          switcherLabel={messages.switcher.label}
+          title={messages.publicTopbar.platform}
+        />
         <section className="workspace-card">
-          <p className="eyebrow">Release 9</p>
-          <h1>No Organizations</h1>
-          <p className="lede">
-            This wallet session is valid, but it is not yet a member of any organization.
-          </p>
+          <p className="eyebrow">{messages.home.noOrganizationsEyebrow}</p>
+          <h1>{messages.home.noOrganizationsTitle}</h1>
+          <p className="lede">{messages.home.noOrganizationsBody}</p>
         </section>
       </main>
     );

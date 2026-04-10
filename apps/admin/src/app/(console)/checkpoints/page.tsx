@@ -1,6 +1,8 @@
 import Link from "next/link";
 
 import { listCheckpoints } from "../../../lib/operator-api";
+import { formatCode } from "../../../lib/i18n/format";
+import { getI18n } from "../../../lib/i18n/server";
 import { createCheckpointAction } from "../actions";
 import {
   Card,
@@ -12,20 +14,21 @@ import {
 } from "../ui";
 
 export default async function CheckpointsPage() {
+  const { messages } = await getI18n();
   const checkpoints = await listCheckpoints();
 
   return (
     <>
       <ConsoleHeader
         eyebrow="Sanctions"
-        subtitle="Manual sanctions checkpoints linked to operational subjects."
-        title="Compliance Checkpoints"
+        subtitle={messages.checkpoints.subtitle}
+        title={messages.checkpoints.title}
       />
       <div className="split-grid">
-        <Card title="Create Checkpoint">
+        <Card title={messages.checkpoints.createTitle}>
           <form action={createCheckpointAction} className="form-grid">
             <div className="field">
-              <label htmlFor="subjectType">Subject Type</label>
+              <label htmlFor="subjectType">{messages.checkpoints.subjectType}</label>
               <select defaultValue="DRAFT_DEAL" id="subjectType" name="subjectType">
                 <option value="DRAFT_DEAL">Draft Deal</option>
                 <option value="ESCROW_AGREEMENT">Escrow Agreement</option>
@@ -37,38 +40,38 @@ export default async function CheckpointsPage() {
               </select>
             </div>
             <div className="field">
-              <label htmlFor="subjectId">Subject Id</label>
+              <label htmlFor="subjectId">{messages.checkpoints.subjectId}</label>
               <input id="subjectId" name="subjectId" placeholder="entity id or address" />
             </div>
             <div className="field">
-              <label htmlFor="note">Checkpoint Note</label>
-              <textarea id="note" name="note" placeholder="Why this checkpoint exists" />
+              <label htmlFor="note">{messages.checkpoints.note}</label>
+              <textarea id="note" name="note" placeholder={messages.checkpoints.whyExists} />
             </div>
             <div className="actions-row">
               <button className="button" type="submit">
-                Create Checkpoint
+                {messages.checkpoints.create}
               </button>
             </div>
           </form>
         </Card>
-        <Card title="Current Queue">
+        <Card title={messages.checkpoints.currentQueue}>
           {checkpoints.checkpoints.length === 0 ? (
             <EmptyState body="No sanctions checkpoints have been created." />
           ) : (
-            <DataTable headers={["Status", "Subject", "Created", "Open"]}>
+            <DataTable headers={[messages.checkpoints.status, messages.checkpoints.subject, "Created", messages.checkpoints.open]}>
               {checkpoints.checkpoints.slice(0, 12).map((checkpoint) => (
                 <tr key={checkpoint.id}>
                   <td>
                     <Pill
                       tone={toneForStatus(checkpoint.status)}
-                      value={checkpoint.status}
+                      value={formatCode(checkpoint.status, messages.statuses, messages.common.none)}
                     />
                   </td>
                   <td>{checkpoint.subject.label ?? checkpoint.subject.subjectId}</td>
                   <td className="mono">{checkpoint.createdAt}</td>
                   <td>
                     <Link className="link-text" href={`/checkpoints/${checkpoint.id}`}>
-                      Detail
+                      {messages.cases.detail}
                     </Link>
                   </td>
                 </tr>

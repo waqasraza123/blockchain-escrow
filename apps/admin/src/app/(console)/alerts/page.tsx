@@ -1,4 +1,6 @@
 import { listAlerts } from "../../../lib/operator-api";
+import { formatCode } from "../../../lib/i18n/format";
+import { getI18n } from "../../../lib/i18n/server";
 import { acknowledgeAlertAction, resolveAlertAction } from "../actions";
 import {
   Card,
@@ -10,25 +12,29 @@ import {
 } from "../ui";
 
 export default async function AlertsPage() {
+  const { messages } = await getI18n();
   const alerts = await listAlerts();
 
   return (
     <>
       <ConsoleHeader
-        eyebrow="Compliance"
-        subtitle="Deterministic worker alerts for transaction drift, stale queues, disputes, and service signals."
-        title="Operator Alerts"
+        eyebrow={messages.alerts.compliance}
+        subtitle={messages.alerts.subtitle}
+        title={messages.alerts.title}
       />
-      <Card title="Alerts Queue">
+      <Card title={messages.alerts.queue}>
         {alerts.alerts.length === 0 ? (
-          <EmptyState body="No alerts are currently stored." />
+          <EmptyState body={messages.alerts.empty} />
         ) : (
-          <DataTable headers={["Kind", "Status", "Subject", "Updated", "Actions"]}>
+          <DataTable headers={[messages.alerts.kind, messages.alerts.status, messages.alerts.subject, messages.alerts.updated, messages.alerts.actions]}>
             {alerts.alerts.map((alert) => (
               <tr key={alert.id}>
                 <td>{alert.kind}</td>
                 <td>
-                  <Pill tone={toneForStatus(alert.status)} value={alert.status} />
+                  <Pill
+                    tone={toneForStatus(alert.status)}
+                    value={formatCode(alert.status, messages.statuses, messages.common.none)}
+                  />
                 </td>
                 <td>{alert.subject.label ?? alert.subject.subjectId}</td>
                 <td className="mono">{alert.lastDetectedAt}</td>
@@ -36,16 +42,16 @@ export default async function AlertsPage() {
                   <div className="actions-row">
                     <form action={acknowledgeAlertAction}>
                       <input name="alertId" type="hidden" value={alert.id} />
-                      <input name="note" placeholder="ack note" />
+                      <input name="note" placeholder={messages.alerts.acknowledgemNote} />
                       <button className="button button-secondary" type="submit">
-                        Acknowledge
+                        {messages.alerts.acknowledge}
                       </button>
                     </form>
                     <form action={resolveAlertAction}>
                       <input name="alertId" type="hidden" value={alert.id} />
-                      <input name="note" placeholder="resolution note" />
+                      <input name="note" placeholder={messages.alerts.resolutionNote} />
                       <button className="button" type="submit">
-                        Resolve
+                        {messages.alerts.resolve}
                       </button>
                     </form>
                   </div>

@@ -15,6 +15,8 @@ import {
   updatePartnerWebhookSubscriptionAction
 } from "../../actions";
 import { getPartnerAccount, listBillingFeeSchedules, listBillingPlans } from "../../../../lib/operator-api";
+import { formatCode } from "../../../../lib/i18n/format";
+import { getI18n } from "../../../../lib/i18n/server";
 import {
   Card,
   ConsoleHeader,
@@ -45,6 +47,7 @@ function nextInvoiceStatuses(status: string): string[] {
 
 export default async function PartnerAccountPage(props: PartnerAccountPageProps) {
   const params = await props.params;
+  const { messages } = await getI18n();
   const detail = await getPartnerAccount(params.partnerAccountId);
   const billingPlans = await listBillingPlans();
   const billingSchedules =
@@ -55,77 +58,80 @@ export default async function PartnerAccountPage(props: PartnerAccountPageProps)
   return (
     <>
       <ConsoleHeader
-        eyebrow="Partner Detail"
+        eyebrow={messages.partners.detailEyebrow}
         title={detail.partner.name}
-        subtitle={`${detail.links.length} links, ${detail.apiKeys.length} API keys, ${detail.subscriptions.length} webhook subscriptions, ${detail.domains.length} tenant domains.`}
+        subtitle={`${detail.links.length} ${messages.partners.partnerSummary}`}
       />
       <div className="stack">
-        <Card title="Partner">
+        <Card title={messages.partners.partner}>
           <div className="detail-grid">
             <div>
-              <small className="muted">Slug</small>
+              <small className="muted">{messages.partners.slug}</small>
               <div className="mono">{detail.partner.slug}</div>
             </div>
             <div>
-              <small className="muted">Status</small>
+              <small className="muted">{messages.partners.status}</small>
               <div>
-                <Pill tone={toneForStatus(detail.partner.status)} value={detail.partner.status} />
+                <Pill
+                  tone={toneForStatus(detail.partner.status)}
+                  value={formatCode(detail.partner.status, messages.statuses, messages.common.none)}
+                />
               </div>
             </div>
             <div>
-              <small className="muted">Partner Id</small>
+              <small className="muted">{messages.partners.partnerId}</small>
               <div className="mono">{detail.partner.id}</div>
             </div>
           </div>
         </Card>
 
         <div className="split-grid">
-          <Card title="Tenant Settings">
+          <Card title={messages.partners.settings}>
             <form action={upsertTenantSettingsAction} className="form-grid">
               <input name="partnerAccountId" type="hidden" value={detail.partner.id} />
               <div className="form-grid columns-2">
                 <div className="field">
-                  <label htmlFor="displayName">Display Name</label>
+                  <label htmlFor="displayName">{messages.partners.displayName}</label>
                   <input defaultValue={detail.settings?.displayName ?? ""} id="displayName" name="displayName" />
                 </div>
                 <div className="field">
-                  <label htmlFor="legalName">Legal Name</label>
+                  <label htmlFor="legalName">{messages.partners.legalName}</label>
                   <input defaultValue={detail.settings?.legalName ?? ""} id="legalName" name="legalName" />
                 </div>
               </div>
               <div className="form-grid columns-2">
                 <div className="field">
-                  <label htmlFor="supportEmail">Support Email</label>
+                  <label htmlFor="supportEmail">{messages.partners.supportEmail}</label>
                   <input defaultValue={detail.settings?.supportEmail ?? ""} id="supportEmail" name="supportEmail" />
                 </div>
                 <div className="field">
-                  <label htmlFor="supportUrl">Support URL</label>
+                  <label htmlFor="supportUrl">{messages.partners.supportUrl}</label>
                   <input defaultValue={detail.settings?.supportUrl ?? ""} id="supportUrl" name="supportUrl" />
                 </div>
               </div>
               <div className="form-grid columns-2">
                 <div className="field">
-                  <label htmlFor="termsOfServiceUrl">Terms URL</label>
+                  <label htmlFor="termsOfServiceUrl">{messages.partners.termsUrl}</label>
                   <input defaultValue={detail.settings?.termsOfServiceUrl ?? ""} id="termsOfServiceUrl" name="termsOfServiceUrl" />
                 </div>
                 <div className="field">
-                  <label htmlFor="privacyPolicyUrl">Privacy URL</label>
+                  <label htmlFor="privacyPolicyUrl">{messages.partners.privacyUrl}</label>
                   <input defaultValue={detail.settings?.privacyPolicyUrl ?? ""} id="privacyPolicyUrl" name="privacyPolicyUrl" />
                 </div>
               </div>
               <div className="form-grid columns-2">
                 <div className="field">
-                  <label htmlFor="logoAssetId">Logo Asset Id</label>
+                  <label htmlFor="logoAssetId">{messages.partners.logoAssetId}</label>
                   <input defaultValue={detail.settings?.logoAssetId ?? ""} id="logoAssetId" name="logoAssetId" />
                 </div>
                 <div className="field">
-                  <label htmlFor="faviconAssetId">Favicon Asset Id</label>
+                  <label htmlFor="faviconAssetId">{messages.partners.faviconAssetId}</label>
                   <input defaultValue={detail.settings?.faviconAssetId ?? ""} id="faviconAssetId" name="faviconAssetId" />
                 </div>
               </div>
               <div className="form-grid columns-2">
                 <div className="field">
-                  <label htmlFor="primaryColorHex">Primary</label>
+                  <label htmlFor="primaryColorHex">{messages.partners.primary}</label>
                   <input defaultValue={detail.settings?.primaryColorHex ?? "#0b1020"} id="primaryColorHex" name="primaryColorHex" />
                 </div>
                 <div className="field">
@@ -135,7 +141,7 @@ export default async function PartnerAccountPage(props: PartnerAccountPageProps)
               </div>
               <div className="form-grid columns-2">
                 <div className="field">
-                  <label htmlFor="backgroundColorHex">Background</label>
+                  <label htmlFor="backgroundColorHex">{messages.partners.background}</label>
                   <input defaultValue={detail.settings?.backgroundColorHex ?? "#f5f1e8"} id="backgroundColorHex" name="backgroundColorHex" />
                 </div>
                 <div className="field">
@@ -144,44 +150,44 @@ export default async function PartnerAccountPage(props: PartnerAccountPageProps)
                 </div>
               </div>
               <div className="actions-row">
-                <button className="button" type="submit">Save Tenant Settings</button>
+                <button className="button" type="submit">{messages.partners.saveTenantSettings}</button>
               </div>
             </form>
           </Card>
 
-          <Card title="Brand Assets">
+          <Card title={messages.partners.brandAssets}>
             <form action={registerPartnerBrandAssetAction} className="form-grid">
               <input name="partnerAccountId" type="hidden" value={detail.partner.id} />
               <div className="field">
-                <label htmlFor="role">Role</label>
+                <label htmlFor="role">{messages.partners.role}</label>
                 <input id="role" name="role" placeholder="LOGO or FAVICON" />
               </div>
               <div className="field">
-                <label htmlFor="originalFilename">Original Filename</label>
+                <label htmlFor="originalFilename">{messages.partners.originalFilename}</label>
                 <input id="originalFilename" name="originalFilename" />
               </div>
               <div className="field">
-                <label htmlFor="mediaType">Media Type</label>
+                <label htmlFor="mediaType">{messages.partners.mediaType}</label>
                 <input id="mediaType" name="mediaType" placeholder="image/svg+xml" />
               </div>
               <div className="field">
-                <label htmlFor="byteSize">Byte Size</label>
+                <label htmlFor="byteSize">{messages.partners.byteSize}</label>
                 <input id="byteSize" name="byteSize" />
               </div>
               <div className="field">
-                <label htmlFor="sha256Hex">SHA-256</label>
+                <label htmlFor="sha256Hex">{messages.partners.sha256}</label>
                 <input id="sha256Hex" name="sha256Hex" />
               </div>
               <div className="field">
-                <label htmlFor="storageKey">Storage Key</label>
+                <label htmlFor="storageKey">{messages.partners.storageKey}</label>
                 <input id="storageKey" name="storageKey" />
               </div>
               <div className="actions-row">
-                <button className="button" type="submit">Register Asset</button>
+                <button className="button" type="submit">{messages.partners.registerAsset}</button>
               </div>
             </form>
             {detail.brandAssets.length > 0 ? (
-              <DataTable headers={["Role", "Filename", "Storage Key"]}>
+              <DataTable headers={[messages.partners.role, messages.partners.filename, messages.partners.storageKey]}>
                 {detail.brandAssets.map((asset) => (
                   <tr key={asset.id}>
                     <td>{asset.role}</td>
@@ -191,37 +197,47 @@ export default async function PartnerAccountPage(props: PartnerAccountPageProps)
                 ))}
               </DataTable>
             ) : (
-              <EmptyState body="No brand assets registered." />
+              <EmptyState body={messages.partners.noAssets} />
             )}
           </Card>
         </div>
 
         <div className="split-grid">
-          <Card title="Tenant Domains">
+          <Card title={messages.partners.domains}>
             <form action={createTenantDomainAction} className="form-grid">
               <input name="partnerAccountId" type="hidden" value={detail.partner.id} />
               <div className="field">
-                <label htmlFor="hostname">Hostname</label>
+                <label htmlFor="hostname">{messages.partners.hostname}</label>
                 <input id="hostname" name="hostname" placeholder="tenant.example.com" />
               </div>
               <div className="field">
-                <label htmlFor="surface">Surface</label>
+                <label htmlFor="surface">{messages.partners.surface}</label>
                 <input id="surface" name="surface" placeholder="ENTRYPOINT or HOSTED" />
               </div>
               <div className="actions-row">
-                <button className="button" type="submit">Create Domain</button>
+                <button className="button" type="submit">{messages.partners.createDomain}</button>
               </div>
             </form>
             {detail.domains.length === 0 ? (
-              <EmptyState body="No tenant domains exist." />
+              <EmptyState body={messages.partners.noDomains} />
             ) : (
-              <DataTable headers={["Hostname", "Surface", "Status", "Actions"]}>
+              <DataTable
+                headers={[
+                  messages.partners.hostname,
+                  messages.partners.surface,
+                  messages.partners.status,
+                  "Actions"
+                ]}
+              >
                 {detail.domains.map((domain) => (
                   <tr key={domain.id}>
                     <td className="mono">{domain.hostname}</td>
                     <td>{domain.surface}</td>
                     <td>
-                      <Pill tone={toneForStatus(domain.status)} value={domain.status} />
+                      <Pill
+                        tone={toneForStatus(domain.status)}
+                        value={formatCode(domain.status, messages.statuses, messages.common.none)}
+                      />
                     </td>
                     <td>
                       <div className="actions-row">
@@ -233,12 +249,12 @@ export default async function PartnerAccountPage(props: PartnerAccountPageProps)
                         <form action={activateTenantDomainAction}>
                           <input name="partnerAccountId" type="hidden" value={detail.partner.id} />
                           <input name="domainId" type="hidden" value={domain.id} />
-                          <button className="button button-secondary" type="submit">Activate</button>
+                          <button className="button button-secondary" type="submit">{messages.partners.activate}</button>
                         </form>
                         <form action={disableTenantDomainAction}>
                           <input name="partnerAccountId" type="hidden" value={detail.partner.id} />
                           <input name="domainId" type="hidden" value={domain.id} />
-                          <button className="button button-secondary" type="submit">Disable</button>
+                          <button className="button button-secondary" type="submit">{messages.partners.disable}</button>
                         </form>
                       </div>
                     </td>
@@ -248,73 +264,83 @@ export default async function PartnerAccountPage(props: PartnerAccountPageProps)
             )}
           </Card>
 
-          <Card title="Billing Assignment">
+          <Card title={messages.partners.billingAssignment}>
             <form action={assignBillingPlanAction} className="form-grid">
               <input name="partnerAccountId" type="hidden" value={detail.partner.id} />
               <div className="field">
-                <label htmlFor="billingPlanId">Billing Plan Id</label>
+                <label htmlFor="billingPlanId">{messages.billing.billingPlanId}</label>
                 <input id="billingPlanId" name="billingPlanId" defaultValue={detail.billing?.activeAssignment?.billingPlanId ?? ""} />
               </div>
               <div className="field">
-                <label htmlFor="billingFeeScheduleId">Fee Schedule Id</label>
+                <label htmlFor="billingFeeScheduleId">{messages.billing.feeScheduleId}</label>
                 <input id="billingFeeScheduleId" name="billingFeeScheduleId" defaultValue={detail.billing?.activeAssignment?.billingFeeScheduleId ?? ""} />
               </div>
               <div className="field">
-                <label htmlFor="effectiveFrom">Effective From</label>
+                <label htmlFor="effectiveFrom">{messages.billing.effectiveFrom}</label>
                 <input id="effectiveFrom" name="effectiveFrom" placeholder="2026-05-01T00:00:00.000Z" />
               </div>
               <div className="actions-row">
-                <button className="button" type="submit">Assign Billing Plan</button>
+                <button className="button" type="submit">{messages.partners.assignPlan}</button>
               </div>
             </form>
             <div className="detail-grid">
               <div>
-                <small className="muted">Current Assignment</small>
-                <div className="mono">{detail.billing?.activeAssignment?.id ?? "none"}</div>
+                <small className="muted">{messages.partners.activeAssignment}</small>
+                <div className="mono">{detail.billing?.activeAssignment?.id ?? messages.common.none}</div>
               </div>
               <div>
-                <small className="muted">Plan Id</small>
+                <small className="muted">{messages.partners.planId}</small>
                 <div className="mono">
-                  {detail.billing?.activeAssignment?.billingPlanId ?? "none"}
+                  {detail.billing?.activeAssignment?.billingPlanId ?? messages.common.none}
                 </div>
               </div>
               <div>
-                <small className="muted">Fee Schedule Id</small>
+                <small className="muted">{messages.partners.feeScheduleId}</small>
                 <div className="mono">
-                  {detail.billing?.activeAssignment?.billingFeeScheduleId ?? "none"}
+                  {detail.billing?.activeAssignment?.billingFeeScheduleId ?? messages.common.none}
                 </div>
               </div>
               <div>
-                <small className="muted">Current Usage Metrics</small>
+                <small className="muted">{messages.billing.currentUsageMetrics}</small>
                 <div>{detail.billing?.currentUsage?.metrics.length ?? 0}</div>
               </div>
             </div>
             {billingPlans.billingPlans.length > 0 ? (
-              <DataTable headers={["Plan", "Plan Id", "Base Fee", "Status"]}>
+              <DataTable
+                headers={[
+                  messages.billing.plan,
+                  messages.billing.planId,
+                  messages.billing.baseFee,
+                  messages.billing.status
+                ]}
+              >
                 {billingPlans.billingPlans.map((plan) => (
                   <tr key={plan.id}>
                     <td>{plan.displayName}</td>
                     <td className="mono">{plan.id}</td>
                     <td>{plan.baseMonthlyFeeMinor}</td>
                     <td>
-                      <Pill tone={toneForStatus(plan.status)} value={plan.status} />
+                      <Pill
+                        tone={toneForStatus(plan.status)}
+                        value={formatCode(plan.status, messages.statuses, messages.common.none)}
+                      />
                     </td>
                   </tr>
                 ))}
               </DataTable>
             ) : (
-              <EmptyState body="No billing plans are available yet." />
+              <EmptyState body={messages.partners.noPlans} />
             )}
             {billingSchedules?.billingFeeSchedules.length ? (
               <DataTable
                 headers={[
                   "Schedule Id",
-                  "Effective From",
-                  "Metric",
-                  "Included",
-                  "Starts",
-                  "Up To",
-                  "Unit Price"
+                  messages.billing.effectiveFrom,
+                  messages.billing.metric,
+                  messages.billing.included,
+                  messages.billing.starts,
+                  messages.billing.upTo,
+                  messages.billing.unitPrice
                 ]}
               >
                 {billingSchedules.billingFeeSchedules.flatMap((schedule) =>
@@ -325,7 +351,7 @@ export default async function PartnerAccountPage(props: PartnerAccountPageProps)
                       <td>{tier.metric}</td>
                       <td>{tier.includedUnits}</td>
                       <td>{tier.startsAtUnit}</td>
-                      <td>{tier.upToUnit ?? "unbounded"}</td>
+                      <td>{tier.upToUnit ?? messages.common.unbounded}</td>
                       <td>{tier.unitPriceMinor}</td>
                     </tr>
                   ))
@@ -335,12 +361,12 @@ export default async function PartnerAccountPage(props: PartnerAccountPageProps)
           </Card>
         </div>
 
-        <Card title="Usage and Invoices">
+        <Card title={messages.partners.invoices}>
           <div className="split-grid">
             <div>
-              <h3>Current Period Usage</h3>
+              <h3>{messages.partners.currentPeriodUsage}</h3>
               {detail.billing?.currentUsage?.metrics.length ? (
-                <DataTable headers={["Metric", "Count"]}>
+                <DataTable headers={[messages.partners.metric, messages.billing.count]}>
                   {detail.billing.currentUsage.metrics.map((metric) => (
                     <tr key={metric.metric}>
                       <td>{metric.metric}</td>
@@ -349,7 +375,7 @@ export default async function PartnerAccountPage(props: PartnerAccountPageProps)
                   ))}
                 </DataTable>
               ) : (
-                <EmptyState body="No current-period usage has been metered." />
+                <EmptyState body={messages.partners.noUsage} />
               )}
               {detail.billing?.currentUsage ? (
                 <p className="muted mono">
@@ -360,7 +386,7 @@ export default async function PartnerAccountPage(props: PartnerAccountPageProps)
             <div>
               <h3>Previous Period Usage</h3>
               {detail.billing?.previousUsage?.metrics.length ? (
-                <DataTable headers={["Metric", "Count"]}>
+                <DataTable headers={[messages.partners.metric, messages.billing.count]}>
                   {detail.billing.previousUsage.metrics.map((metric) => (
                     <tr key={metric.metric}>
                       <td>{metric.metric}</td>
@@ -379,7 +405,7 @@ export default async function PartnerAccountPage(props: PartnerAccountPageProps)
             </div>
           </div>
           {detail.billing?.recentInvoices.length ? (
-            <DataTable headers={["Invoice", "Period", "Status", "Total", "Actions"]}>
+            <DataTable headers={["Invoice", messages.billing.period, messages.billing.status, messages.billing.total, messages.partners.invoiceActions]}>
               {detail.billing.recentInvoices.map((invoice) => (
                 <tr key={invoice.id}>
                   <td className="mono">{invoice.id}</td>
@@ -387,7 +413,10 @@ export default async function PartnerAccountPage(props: PartnerAccountPageProps)
                     {invoice.periodStart.slice(0, 10)} to {invoice.periodEnd.slice(0, 10)}
                   </td>
                   <td>
-                    <Pill tone={toneForStatus(invoice.status)} value={invoice.status} />
+                    <Pill
+                      tone={toneForStatus(invoice.status)}
+                      value={formatCode(invoice.status, messages.statuses, messages.common.none)}
+                    />
                   </td>
                   <td>{invoice.totalMinor}</td>
                   <td>
@@ -398,7 +427,7 @@ export default async function PartnerAccountPage(props: PartnerAccountPageProps)
                           <input name="invoiceId" type="hidden" value={invoice.id} />
                           <input name="status" type="hidden" value={status} />
                           <button className="button button-secondary" type="submit">
-                            {status}
+                            {formatCode(status, messages.statuses, messages.common.none)}
                           </button>
                         </form>
                       ))}

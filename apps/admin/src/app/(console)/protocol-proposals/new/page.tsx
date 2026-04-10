@@ -1,4 +1,5 @@
 import { createProtocolProposalAction } from "../../actions";
+import { getI18n } from "../../../../lib/i18n/server";
 import { Card, ConsoleHeader } from "../../ui";
 
 const exampleInputByAction: Record<string, string> = {
@@ -10,22 +11,30 @@ const exampleInputByAction: Record<string, string> = {
 };
 
 export default function NewProtocolProposalPage() {
+  const placeholder = exampleInputByAction.SET_PROTOCOL_FEE_BPS ?? "";
+
+  return <NewProtocolProposalPageContent examplePlaceholder={placeholder} />;
+}
+
+async function NewProtocolProposalPageContent(props: { examplePlaceholder: string }) {
+  const { messages } = await getI18n();
+
   return (
     <>
       <ConsoleHeader
-        eyebrow="Protocol Admin"
-        subtitle="Create immutable Safe proposal drafts backed by manifest-aware calldata generation."
-        title="New Proposal Draft"
+        eyebrow={messages.protocol.proposalAdmin}
+        subtitle={messages.protocol.subtitle}
+        title={messages.protocol.draftTitle}
       />
-      <Card title="Proposal Builder">
+      <Card title={messages.protocol.builder}>
         <form action={createProtocolProposalAction} className="form-grid">
           <div className="form-grid columns-2">
             <div className="field">
-              <label htmlFor="chainId">Chain Id</label>
+              <label htmlFor="chainId">{messages.protocol.chainId}</label>
               <input defaultValue="84532" id="chainId" name="chainId" />
             </div>
             <div className="field">
-              <label htmlFor="target">Target</label>
+              <label htmlFor="target">{messages.protocol.target}</label>
               <select defaultValue="ProtocolConfig" id="target" name="target">
                 <option value="ProtocolConfig">ProtocolConfig</option>
                 <option value="TokenAllowlist">TokenAllowlist</option>
@@ -34,7 +43,7 @@ export default function NewProtocolProposalPage() {
             </div>
           </div>
           <div className="field">
-            <label htmlFor="action">Action</label>
+            <label htmlFor="action">{messages.protocol.action}</label>
             <select defaultValue="SET_PROTOCOL_FEE_BPS" id="action" name="action">
               {[
                 "ALLOW_TOKEN",
@@ -58,13 +67,13 @@ export default function NewProtocolProposalPage() {
             </select>
           </div>
           <div className="field">
-            <label htmlFor="description">Description</label>
-            <textarea id="description" name="description" placeholder="Why this proposal is needed" />
+            <label htmlFor="description">{messages.protocol.description}</label>
+            <textarea id="description" name="description" placeholder={messages.protocol.whyNeeded} />
           </div>
           <div className="field">
-            <label htmlFor="input">Input JSON</label>
+            <label htmlFor="input">{messages.protocol.input}</label>
             <textarea
-              defaultValue={exampleInputByAction.SET_PROTOCOL_FEE_BPS}
+              defaultValue={props.examplePlaceholder}
               id="input"
               name="input"
             />
@@ -76,7 +85,7 @@ export default function NewProtocolProposalPage() {
           </p>
           <div className="actions-row">
             <button className="button" type="submit">
-              Create Proposal Draft
+              {messages.protocol.createDraft}
             </button>
           </div>
         </form>

@@ -9,6 +9,7 @@ export * from "./files";
 export * from "./funding";
 export * from "./funding-reconciliation";
 export * from "./indexer";
+export * from "./locale";
 export * from "./organizations";
 export * from "./operator";
 export * from "./partner";

@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { listProtocolProposals } from "../../../lib/operator-api";
+import { getI18n } from "../../../lib/i18n/server";
 import {
   Card,
   ConsoleHeader,
@@ -9,27 +10,28 @@ import {
 } from "../ui";
 
 export default async function ProtocolProposalsPage() {
+  const { messages } = await getI18n();
   const proposals = await listProtocolProposals();
 
   return (
     <>
       <ConsoleHeader
-        eyebrow="Protocol Admin"
-        subtitle="Safe-oriented proposal drafts for registry, config, and pause changes."
-        title="Protocol Proposals"
+        eyebrow={messages.protocol.proposalAdmin}
+        subtitle={messages.protocol.subtitle}
+        title={messages.protocol.title}
       />
       <Card
         actions={
           <Link className="button" href="/protocol-proposals/new">
-            New Proposal
+            {messages.protocol.newProposal}
           </Link>
         }
-        title="Draft Proposals"
+        title={messages.protocol.drafts}
       >
         {proposals.proposals.length === 0 ? (
-          <EmptyState body="No Safe proposal drafts have been created yet." />
+          <EmptyState body={messages.protocol.noDrafts} />
         ) : (
-          <DataTable headers={["Action", "Target", "Chain", "Created", "Open"]}>
+          <DataTable headers={[messages.protocol.action, messages.protocol.target, messages.protocol.chain, "Created", messages.protocol.open]}>
             {proposals.proposals.map((proposal) => (
               <tr key={proposal.id}>
                 <td>{proposal.action}</td>

@@ -1,4 +1,6 @@
 import { searchOperator } from "../../../lib/operator-api";
+import { formatCode } from "../../../lib/i18n/format";
+import { getI18n } from "../../../lib/i18n/server";
 import { Card, ConsoleHeader, DataTable, EmptyState, Pill, toneForStatus } from "../ui";
 
 type SearchPageProps = {
@@ -7,39 +9,47 @@ type SearchPageProps = {
 
 export default async function SearchPage({ searchParams }: SearchPageProps) {
   const params = await searchParams;
+  const { messages } = await getI18n();
   const query = params.q?.trim() ?? "";
   const results = query ? await searchOperator(query) : null;
 
   return (
     <>
       <ConsoleHeader
-        eyebrow="Search"
-        subtitle="Search deals, versions, agreements, disputes, and tracked transactions."
-        title="Global Operator Search"
+        eyebrow={messages.navigation.search}
+        subtitle={messages.search.subtitle}
+        title={messages.search.title}
       />
-      <Card title="Lookup">
+      <Card title={messages.search.lookup}>
         <form action="/search" className="form-grid">
           <div className="field">
-            <label htmlFor="q">Query</label>
+            <label htmlFor="q">{messages.search.query}</label>
             <input
               defaultValue={query}
               id="q"
               name="q"
-              placeholder="deal id, tx hash, agreement address, title"
+              placeholder={messages.search.placeholder}
             />
           </div>
           <div className="actions-row">
             <button className="button" type="submit">
-              Search
+              {messages.search.search}
             </button>
           </div>
         </form>
       </Card>
       <Card title="Results">
         {!query ? (
-          <EmptyState body="Run a query to search the operator index." />
+          <EmptyState body={messages.search.empty} />
         ) : results && results.hits.length > 0 ? (
-          <DataTable headers={["Entity", "Identifier", "Status", "Route"]}>
+          <DataTable
+            headers={[
+              messages.search.entity,
+              messages.search.identifier,
+              messages.search.status,
+              messages.search.route
+            ]}
+          >
             {results.hits.map((hit) => (
               <tr key={`${hit.entityType}:${hit.id}`}>
                 <td>
@@ -52,7 +62,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
                 <td>
                   <Pill
                     tone={toneForStatus(hit.status)}
-                    value={hit.status ?? "UNKNOWN"}
+                    value={formatCode(hit.status ?? "UNKNOWN", messages.statuses, messages.common.none)}
                   />
                 </td>
                 <td>
@@ -64,7 +74,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
             ))}
           </DataTable>
         ) : (
-          <EmptyState body="No operational entities matched that query." />
+          <EmptyState body={messages.search.noResults} />
         )}
       </Card>
     </>
