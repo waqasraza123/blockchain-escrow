@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { AuthenticatedSessionService } from "../src/modules/auth/authenticated-session.service";
+import { ApprovalRuntimeService } from "../src/modules/approvals/approval-runtime.service";
 import { ApprovalsService } from "../src/modules/approvals/approvals.service";
 import { DraftsService } from "../src/modules/drafts/drafts.service";
 import { MilestonesService } from "../src/modules/milestones/milestones.service";
@@ -95,6 +96,7 @@ function createServices() {
     release1Repositories,
     release4Repositories,
     authenticatedSessionService,
+    new ApprovalRuntimeService(release9Repositories),
     milestoneReviewConfiguration,
     milestoneSettlementExecutionReconciliationConfiguration
   );
@@ -104,12 +106,14 @@ function createServices() {
       release1Repositories,
       release9Repositories,
       authenticatedSessionService,
+      new ApprovalRuntimeService(release9Repositories),
       milestonesService
     ),
     draftsService: new DraftsService(
       release1Repositories,
       release4Repositories,
       authenticatedSessionService,
+      new ApprovalRuntimeService(release9Repositories),
       fundingReconciliationConfiguration
     ),
     release1Repositories,
@@ -206,7 +210,7 @@ test("approvals service creates and resolves a funding approval request from the
     "org-1",
     {
       costCenterId: createdCostCenter.costCenter.id,
-      kind: "DEAL_FUNDING",
+      kind: "FUNDING_TRANSACTION_CREATE",
       name: "Engineering funding approval",
       settlementCurrency: "USDC",
       steps: [
@@ -237,7 +241,7 @@ test("approvals service creates and resolves a funding approval request from the
       organizationId: "org-1"
     },
     {
-      kind: "DEAL_FUNDING",
+      kind: "FUNDING_TRANSACTION_CREATE",
       note: "Funding approval for production rollout"
     },
     requestMetadata(actor.cookieHeader)

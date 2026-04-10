@@ -58,6 +58,8 @@ export const release9TableNames = {
   approvalRequests: "approval_requests",
   approvalRequestSteps: "approval_request_steps",
   costCenters: "cost_centers",
+  financeExportArtifacts: "finance_export_artifacts",
+  financeExportJobs: "finance_export_jobs",
   statementSnapshots: "statement_snapshots"
 } as const;
 

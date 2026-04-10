@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
+import { ApprovalRuntimeService } from "../src/modules/approvals/approval-runtime.service";
 import { AuthenticatedSessionService } from "../src/modules/auth/authenticated-session.service";
 import { TemplatesService } from "../src/modules/templates/templates.service";
 import {
@@ -9,6 +10,7 @@ import {
   seedAuthenticatedActor
 } from "./helpers/auth-test-context";
 import { InMemoryRelease1Repositories } from "./helpers/in-memory-release1-repositories";
+import { InMemoryRelease9Repositories } from "./helpers/in-memory-release9-repositories";
 
 async function seedOrganizationMembership(
   repositories: InMemoryRelease1Repositories,
@@ -44,6 +46,7 @@ async function seedOrganizationMembership(
 
 function createTemplatesService() {
   const repositories = new InMemoryRelease1Repositories();
+  const release9Repositories = new InMemoryRelease9Repositories();
   const sessionTokenService = new FakeSessionTokenService();
   const authenticatedSessionService = new AuthenticatedSessionService(
     repositories,
@@ -53,10 +56,12 @@ function createTemplatesService() {
 
   return {
     repositories,
+    release9Repositories,
     sessionTokenService,
     templatesService: new TemplatesService(
       repositories,
-      authenticatedSessionService
+      authenticatedSessionService,
+      new ApprovalRuntimeService(release9Repositories)
     )
   };
 }

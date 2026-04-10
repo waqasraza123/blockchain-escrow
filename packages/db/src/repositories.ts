@@ -42,6 +42,8 @@ import type {
   EscrowAgreementMilestoneSettlementRecord,
   EscrowAgreementRecord,
   FeeVaultStateRecord,
+  FinanceExportArtifactRecord,
+  FinanceExportJobRecord,
   FileRecord,
   FundingTransactionRecord,
   IndexedBlockRecord,
@@ -217,16 +219,20 @@ export interface ApprovalPolicyStepRepository {
 
 export interface ApprovalRequestRepository {
   create(record: ApprovalRequestRecord): Promise<ApprovalRequestRecord>;
-  findByDealVersionIdAndKind(
-    dealVersionId: EntityId,
-    kind: ApprovalRequestRecord["kind"]
-  ): Promise<ApprovalRequestRecord | null>;
+  findBySubjectFingerprint(input: {
+    kind: ApprovalRequestRecord["kind"];
+    organizationId: EntityId;
+    subjectFingerprint: string;
+    subjectId: EntityId;
+    subjectType: ApprovalRequestRecord["subjectType"];
+  }): Promise<ApprovalRequestRecord | null>;
   findById(id: EntityId): Promise<ApprovalRequestRecord | null>;
+  listByOrganizationId(organizationId: EntityId): Promise<ApprovalRequestRecord[]>;
   listByDealVersionId(dealVersionId: EntityId): Promise<ApprovalRequestRecord[]>;
   update(
     id: EntityId,
     updates: Partial<
-      Omit<ApprovalRequestRecord, "id" | "organizationId" | "draftDealId" | "dealVersionId">
+      Omit<ApprovalRequestRecord, "id" | "organizationId" | "subjectFingerprint">
     >
   ): Promise<ApprovalRequestRecord>;
 }
@@ -251,7 +257,26 @@ export interface ProtocolProposalDraftRepository {
 
 export interface StatementSnapshotRepository {
   create(record: StatementSnapshotRecord): Promise<StatementSnapshotRecord>;
+  listByOrganizationId(organizationId: EntityId): Promise<StatementSnapshotRecord[]>;
   listByDealVersionId(dealVersionId: EntityId): Promise<StatementSnapshotRecord[]>;
+}
+
+export interface FinanceExportJobRepository {
+  claimNextPending(startedAt: IsoTimestamp): Promise<FinanceExportJobRecord | null>;
+  create(record: FinanceExportJobRecord): Promise<FinanceExportJobRecord>;
+  findById(id: EntityId): Promise<FinanceExportJobRecord | null>;
+  listByOrganizationId(organizationId: EntityId): Promise<FinanceExportJobRecord[]>;
+  update(
+    id: EntityId,
+    updates: Partial<Omit<FinanceExportJobRecord, "id" | "organizationId" | "createdAt" | "createdByUserId" | "filters">>
+  ): Promise<FinanceExportJobRecord>;
+}
+
+export interface FinanceExportArtifactRepository {
+  create(record: FinanceExportArtifactRecord): Promise<FinanceExportArtifactRecord>;
+  listByFinanceExportJobId(
+    financeExportJobId: EntityId
+  ): Promise<FinanceExportArtifactRecord[]>;
 }
 
 export interface CounterpartyRepository {
@@ -718,5 +743,7 @@ export interface Release9Repositories {
   approvalRequests: ApprovalRequestRepository;
   approvalRequestSteps: ApprovalRequestStepRepository;
   costCenters: CostCenterRepository;
+  financeExportArtifacts: FinanceExportArtifactRepository;
+  financeExportJobs: FinanceExportJobRepository;
   statementSnapshots: StatementSnapshotRepository;
 }

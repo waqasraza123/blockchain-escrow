@@ -4,18 +4,26 @@ import {
   Get,
   Param,
   Post,
+  Query,
   Req
 } from "@nestjs/common";
 import type {
+  ApprovalRequestDetailResponse,
   CreateApprovalPolicyResponse,
   CreateApprovalRequestResponse,
   CreateCostCenterResponse,
+  CreateFinanceExportResponse,
   CreateStatementSnapshotResponse,
   DecideApprovalStepResponse,
+  FinanceExportJobDetailResponse,
   GetCurrentApprovalRequestResponse,
+  ListApprovalRequestsResponse,
   ListApprovalPoliciesResponse,
   ListCostCentersResponse,
+  ListFinanceExportsResponse,
   ListStatementSnapshotsResponse,
+  PreviewApprovalRequirementResponse,
+  ReportingDashboardResponse,
   UpdateDraftCostCenterResponse
 } from "@blockchain-escrow/shared";
 
@@ -101,6 +109,69 @@ export class ApprovalsController {
     );
   }
 
+  @Post("approval-requirements/preview")
+  async previewApprovalRequirement(
+    @Param("organizationId") organizationId: string,
+    @Body() body: unknown,
+    @Req() request: HttpRequestLike
+  ): Promise<PreviewApprovalRequirementResponse> {
+    return this.approvalsService.previewApprovalRequirement(
+      organizationId,
+      body,
+      readRequestMetadata(request)
+    );
+  }
+
+  @Get("approval-requests")
+  async listApprovalRequests(
+    @Param("organizationId") organizationId: string,
+    @Query("actionKind") actionKind: string | undefined,
+    @Query("dealVersionId") dealVersionId: string | undefined,
+    @Query("draftDealId") draftDealId: string | undefined,
+    @Query("status") status: string | undefined,
+    @Query("subjectId") subjectId: string | undefined,
+    @Query("subjectType") subjectType: string | undefined,
+    @Req() request: HttpRequestLike
+  ): Promise<ListApprovalRequestsResponse> {
+    return this.approvalsService.listApprovalRequests(
+      {
+        actionKind,
+        dealVersionId,
+        draftDealId,
+        organizationId,
+        status,
+        subjectId,
+        subjectType
+      },
+      readRequestMetadata(request)
+    );
+  }
+
+  @Get("approval-requests/:approvalRequestId")
+  async getApprovalRequestDetail(
+    @Param("organizationId") organizationId: string,
+    @Param("approvalRequestId") approvalRequestId: string,
+    @Req() request: HttpRequestLike
+  ): Promise<ApprovalRequestDetailResponse> {
+    return this.approvalsService.getApprovalRequestDetail(
+      { approvalRequestId, organizationId },
+      readRequestMetadata(request)
+    );
+  }
+
+  @Post("approval-requests")
+  async createActionApprovalRequest(
+    @Param("organizationId") organizationId: string,
+    @Body() body: unknown,
+    @Req() request: HttpRequestLike
+  ): Promise<CreateApprovalRequestResponse> {
+    return this.approvalsService.createActionApprovalRequest(
+      organizationId,
+      body,
+      readRequestMetadata(request)
+    );
+  }
+
   @Post("drafts/:draftDealId/versions/:dealVersionId/approval-requests")
   async createApprovalRequest(
     @Param("organizationId") organizationId: string,
@@ -144,6 +215,20 @@ export class ApprovalsController {
     );
   }
 
+  @Get("statement-snapshots")
+  async listOrganizationStatementSnapshots(
+    @Param("organizationId") organizationId: string,
+    @Query("costCenterId") costCenterId: string | undefined,
+    @Query("dealVersionId") dealVersionId: string | undefined,
+    @Query("draftDealId") draftDealId: string | undefined,
+    @Req() request: HttpRequestLike
+  ): Promise<ListStatementSnapshotsResponse> {
+    return this.approvalsService.listOrganizationStatementSnapshots(
+      { costCenterId, dealVersionId, draftDealId, organizationId },
+      readRequestMetadata(request)
+    );
+  }
+
   @Post("drafts/:draftDealId/versions/:dealVersionId/statement-snapshots")
   async createStatementSnapshot(
     @Param("organizationId") organizationId: string,
@@ -155,6 +240,54 @@ export class ApprovalsController {
     return this.approvalsService.createStatementSnapshot(
       { dealVersionId, draftDealId, organizationId },
       body,
+      readRequestMetadata(request)
+    );
+  }
+
+  @Get("reports/dashboard")
+  async getReportingDashboard(
+    @Param("organizationId") organizationId: string,
+    @Req() request: HttpRequestLike
+  ): Promise<ReportingDashboardResponse> {
+    return this.approvalsService.getReportingDashboard(
+      { organizationId },
+      readRequestMetadata(request)
+    );
+  }
+
+  @Get("finance-exports")
+  async listFinanceExports(
+    @Param("organizationId") organizationId: string,
+    @Query("status") status: string | undefined,
+    @Req() request: HttpRequestLike
+  ): Promise<ListFinanceExportsResponse> {
+    return this.approvalsService.listFinanceExports(
+      { organizationId, status },
+      readRequestMetadata(request)
+    );
+  }
+
+  @Post("finance-exports")
+  async createFinanceExport(
+    @Param("organizationId") organizationId: string,
+    @Body() body: unknown,
+    @Req() request: HttpRequestLike
+  ): Promise<CreateFinanceExportResponse> {
+    return this.approvalsService.createFinanceExport(
+      organizationId,
+      body,
+      readRequestMetadata(request)
+    );
+  }
+
+  @Get("finance-exports/:exportJobId")
+  async getFinanceExport(
+    @Param("organizationId") organizationId: string,
+    @Param("exportJobId") exportJobId: string,
+    @Req() request: HttpRequestLike
+  ): Promise<FinanceExportJobDetailResponse> {
+    return this.approvalsService.getFinanceExportJob(
+      { exportJobId, organizationId },
       readRequestMetadata(request)
     );
   }

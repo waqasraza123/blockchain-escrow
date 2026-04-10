@@ -4,8 +4,12 @@ export interface WorkerRunSnapshot {
   readonly autoResolvedOperatorAlertCount: number;
   readonly blockedMilestoneSettlementPreparationCount: number;
   readonly clearedFundingReconciliationCount: number;
+  readonly completedFinanceExportJobCount: number;
   readonly clearedMilestoneSettlementExecutionReconciliationCount: number;
   readonly expiredMilestoneReviewDeadlineCount: number;
+  readonly failedFinanceExportJobCount: number;
+  readonly generatedFinanceExportArtifactCount: number;
+  readonly processedFinanceExportJobCount: number;
   readonly preparedMilestoneSettlementCount: number;
   readonly reconciledDraftCustodyStateCount: number;
   readonly reconciledFundingTransactionCount: number;

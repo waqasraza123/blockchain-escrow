@@ -1,9 +1,11 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 
+import "./globals.css";
+
 export const metadata: Metadata = {
-  title: "blockchain-escrow",
-  description: "B2B escrow platform scaffold"
+  title: "Blockchain Escrow Workspace",
+  description: "Customer approval, finance, and escrow operations workspace"
 };
 
 type RootLayoutProps = {

@@ -11,6 +11,8 @@ import type {
   DealState,
   EntityId,
   FileCategory,
+  FinanceExportArtifactFormat,
+  FinanceExportJobStatus,
   FundingTransactionReconciledStatus,
   HexString,
   IndexedContractName,
@@ -24,6 +26,7 @@ import type {
   OperatorSubjectType,
   MilestoneSettlementRequestKind,
   MilestoneSettlementRequestSource,
+  ApprovalSubjectType,
   ComplianceCaseStatus,
   ComplianceCheckpointKind,
   ComplianceCheckpointStatus,
@@ -313,18 +316,24 @@ export interface ApprovalRequestRecord {
   approvalPolicyId: EntityId;
   costCenterId: EntityId | null;
   decidedAt: IsoTimestamp | null;
-  dealVersionId: EntityId;
-  draftDealId: EntityId;
+  dealVersionId: EntityId | null;
+  dealVersionMilestoneId: EntityId | null;
+  draftDealId: EntityId | null;
   id: EntityId;
   kind: ApprovalPolicyKind;
+  metadata: JsonObject | null;
   note: string | null;
   organizationId: EntityId;
   requestedAt: IsoTimestamp;
   requestedByUserId: EntityId;
-  settlementCurrency: SettlementCurrency;
+  settlementCurrency: SettlementCurrency | null;
   status: ApprovalRequestStatus;
+  subjectFingerprint: string;
+  subjectId: EntityId;
+  subjectLabel: string | null;
+  subjectType: ApprovalSubjectType;
   title: string;
-  totalAmountMinor: string;
+  totalAmountMinor: string | null;
 }
 
 export interface ApprovalRequestStepRecord {
@@ -352,6 +361,31 @@ export interface StatementSnapshotRecord {
   note: string | null;
   organizationId: EntityId;
   payload: JsonObject;
+}
+
+export interface FinanceExportJobRecord {
+  createdAt: IsoTimestamp;
+  createdByUserId: EntityId;
+  errorMessage: string | null;
+  failedAt: IsoTimestamp | null;
+  filters: JsonObject;
+  finishedAt: IsoTimestamp | null;
+  id: EntityId;
+  organizationId: EntityId;
+  startedAt: IsoTimestamp | null;
+  status: FinanceExportJobStatus;
+}
+
+export interface FinanceExportArtifactRecord {
+  body: string;
+  createdAt: IsoTimestamp;
+  fileId: EntityId | null;
+  filename: string;
+  format: FinanceExportArtifactFormat;
+  id: EntityId;
+  mediaType: string;
+  financeExportJobId: EntityId;
+  sizeBytes: number;
 }
 
 export interface DraftDealPartyRecord {

@@ -4,6 +4,8 @@ import type {
   ApprovalRequestRecord,
   ApprovalRequestStepRecord,
   CostCenterRecord,
+  FinanceExportArtifactRecord,
+  FinanceExportJobRecord,
   Release9Repositories,
   StatementSnapshotRecord
 } from "@blockchain-escrow/db";
@@ -18,6 +20,8 @@ export class InMemoryRelease9Repositories implements Release9Repositories {
   readonly approvalRequestRecords: ApprovalRequestRecord[] = [];
   readonly approvalRequestStepRecords: ApprovalRequestStepRecord[] = [];
   readonly costCenterRecords: CostCenterRecord[] = [];
+  readonly financeExportArtifactRecords: FinanceExportArtifactRecord[] = [];
+  readonly financeExportJobRecords: FinanceExportJobRecord[] = [];
   readonly statementSnapshotRecords: StatementSnapshotRecord[] = [];
 
   readonly costCenters = {
@@ -83,15 +87,29 @@ export class InMemoryRelease9Repositories implements Release9Repositories {
       this.approvalRequestRecords.push(record);
       return record;
     },
-    findByDealVersionIdAndKind: async (
-      dealVersionId: string,
-      kind: ApprovalRequestRecord["kind"]
-    ): Promise<ApprovalRequestRecord | null> =>
+    findBySubjectFingerprint: async (input: {
+      kind: ApprovalRequestRecord["kind"];
+      organizationId: string;
+      subjectFingerprint: string;
+      subjectId: string;
+      subjectType: ApprovalRequestRecord["subjectType"];
+    }): Promise<ApprovalRequestRecord | null> =>
       this.approvalRequestRecords.find(
-        (record) => record.dealVersionId === dealVersionId && record.kind === kind
+        (record) =>
+          record.kind === input.kind &&
+          record.organizationId === input.organizationId &&
+          record.subjectFingerprint === input.subjectFingerprint &&
+          record.subjectId === input.subjectId &&
+          record.subjectType === input.subjectType
       ) ?? null,
     findById: async (id: string): Promise<ApprovalRequestRecord | null> =>
       this.approvalRequestRecords.find((record) => record.id === id) ?? null,
+    listByOrganizationId: async (
+      organizationId: string
+    ): Promise<ApprovalRequestRecord[]> =>
+      this.approvalRequestRecords
+        .filter((record) => record.organizationId === organizationId)
+        .sort((left, right) => compareIsoTimestamps(right.requestedAt, left.requestedAt)),
     listByDealVersionId: async (
       dealVersionId: string
     ): Promise<ApprovalRequestRecord[]> =>
@@ -158,6 +176,78 @@ export class InMemoryRelease9Repositories implements Release9Repositories {
     ): Promise<StatementSnapshotRecord[]> =>
       this.statementSnapshotRecords
         .filter((record) => record.dealVersionId === dealVersionId)
+        .sort((left, right) => compareIsoTimestamps(right.createdAt, left.createdAt)),
+    listByOrganizationId: async (
+      organizationId: string
+    ): Promise<StatementSnapshotRecord[]> =>
+      this.statementSnapshotRecords
+        .filter((record) => record.organizationId === organizationId)
         .sort((left, right) => compareIsoTimestamps(right.createdAt, left.createdAt))
+  };
+
+  readonly financeExportJobs = {
+    claimNextPending: async (startedAt: string): Promise<FinanceExportJobRecord | null> => {
+      const record =
+        this.financeExportJobRecords.find((entry) => entry.status === "PENDING") ?? null;
+
+      if (!record) {
+        return null;
+      }
+
+      Object.assign(record, {
+        errorMessage: null,
+        failedAt: null,
+        finishedAt: null,
+        startedAt,
+        status: "PROCESSING"
+      } satisfies Partial<FinanceExportJobRecord>);
+
+      return record;
+    },
+    create: async (record: FinanceExportJobRecord): Promise<FinanceExportJobRecord> => {
+      this.financeExportJobRecords.push(record);
+      return record;
+    },
+    findById: async (id: string): Promise<FinanceExportJobRecord | null> =>
+      this.financeExportJobRecords.find((record) => record.id === id) ?? null,
+    listByOrganizationId: async (
+      organizationId: string
+    ): Promise<FinanceExportJobRecord[]> =>
+      this.financeExportJobRecords
+        .filter((record) => record.organizationId === organizationId)
+        .sort((left, right) => compareIsoTimestamps(right.createdAt, left.createdAt)),
+    update: async (
+      id: string,
+      updates: Partial<
+        Omit<
+          FinanceExportJobRecord,
+          "id" | "organizationId" | "createdAt" | "createdByUserId" | "filters"
+        >
+      >
+    ): Promise<FinanceExportJobRecord> => {
+      const record = this.financeExportJobRecords.find((entry) => entry.id === id) ?? null;
+
+      if (!record) {
+        throw new Error(`Finance export job not found: ${id}`);
+      }
+
+      Object.assign(record, updates);
+      return record;
+    }
+  };
+
+  readonly financeExportArtifacts = {
+    create: async (
+      record: FinanceExportArtifactRecord
+    ): Promise<FinanceExportArtifactRecord> => {
+      this.financeExportArtifactRecords.push(record);
+      return record;
+    },
+    listByFinanceExportJobId: async (
+      financeExportJobId: string
+    ): Promise<FinanceExportArtifactRecord[]> =>
+      this.financeExportArtifactRecords
+        .filter((record) => record.financeExportJobId === financeExportJobId)
+        .sort((left, right) => compareIsoTimestamps(left.createdAt, right.createdAt))
   };
 }

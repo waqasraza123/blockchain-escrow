@@ -1,0 +1,381 @@
+:root {
+  --bg: #f4f1eb;
+  --bg-deep: #e6e0d6;
+  --panel: rgba(255, 255, 255, 0.78);
+  --panel-strong: #fffdfa;
+  --ink: #171717;
+  --muted: #5e5a55;
+  --line: rgba(23, 23, 23, 0.09);
+  --accent: #0f5b78;
+  --accent-soft: rgba(15, 91, 120, 0.1);
+  --warn: #ad6a0b;
+  --danger: #a63232;
+  --success: #2d7d4f;
+  --shadow: 0 16px 40px rgba(26, 22, 18, 0.09);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  background:
+    radial-gradient(circle at top left, rgba(15, 91, 120, 0.15), transparent 30%),
+    radial-gradient(circle at bottom right, rgba(173, 106, 11, 0.1), transparent 26%),
+    linear-gradient(180deg, #f8f5ee 0%, #f1ebe0 55%, #ebe4d7 100%);
+  color: var(--ink);
+}
+
+body {
+  margin: 0;
+  font-family: "Space Grotesk", "IBM Plex Sans", "Avenir Next", sans-serif;
+  min-height: 100vh;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+}
+
+.workspace-shell {
+  display: grid;
+  gap: 24px;
+  grid-template-columns: 290px minmax(0, 1fr);
+  margin: 0 auto;
+  max-width: 1560px;
+  min-height: 100vh;
+  padding: 24px;
+}
+
+.workspace-sidebar,
+.workspace-card {
+  backdrop-filter: blur(18px);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 28px;
+  box-shadow: var(--shadow);
+}
+
+.workspace-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  height: calc(100vh - 48px);
+  padding: 22px;
+  position: sticky;
+  top: 24px;
+}
+
+.workspace-main {
+  display: grid;
+  gap: 20px;
+  padding: 4px 0 40px;
+}
+
+.brand-block,
+.session-block,
+.org-switcher {
+  border-bottom: 1px solid var(--line);
+  display: grid;
+  gap: 8px;
+  padding-bottom: 14px;
+}
+
+.brand-block strong {
+  font-size: 1.1rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.brand-block span,
+.muted {
+  color: var(--muted);
+}
+
+.session-block,
+.org-switcher {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.75), rgba(248, 243, 236, 0.92));
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  padding: 14px 16px;
+}
+
+.sidebar-nav {
+  display: grid;
+  gap: 8px;
+}
+
+.sidebar-link {
+  border: 1px solid transparent;
+  border-radius: 16px;
+  color: var(--muted);
+  padding: 12px 14px;
+  transition:
+    transform 160ms ease,
+    color 160ms ease,
+    border-color 160ms ease,
+    background-color 160ms ease;
+}
+
+.sidebar-link:hover {
+  background: rgba(255, 255, 255, 0.62);
+  border-color: var(--line);
+  color: var(--ink);
+  transform: translateX(2px);
+}
+
+.page-header {
+  display: grid;
+  gap: 10px;
+}
+
+.page-header h1 {
+  font-family: "IBM Plex Serif", "Iowan Old Style", serif;
+  font-size: clamp(2rem, 5vw, 3.3rem);
+  line-height: 0.94;
+  margin: 0;
+}
+
+.eyebrow {
+  color: var(--accent);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.lede {
+  color: var(--muted);
+  line-height: 1.55;
+  margin: 0;
+  max-width: 72ch;
+}
+
+.workspace-card {
+  display: grid;
+  gap: 16px;
+  overflow: hidden;
+  padding: 20px;
+}
+
+.card-header {
+  align-items: flex-start;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+}
+
+.card-header h2 {
+  font-family: "IBM Plex Serif", "Iowan Old Style", serif;
+  font-size: 1.22rem;
+  margin: 0;
+}
+
+.metric-grid,
+.split-grid,
+.triptych-grid,
+.detail-grid {
+  display: grid;
+  gap: 14px;
+}
+
+.metric-grid {
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+}
+
+.split-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.triptych-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.detail-grid {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.metric-card,
+.detail-item,
+.status-callout {
+  background: rgba(255, 255, 255, 0.58);
+  border: 1px solid rgba(23, 23, 23, 0.07);
+  border-radius: 18px;
+  display: grid;
+  gap: 8px;
+  padding: 16px;
+}
+
+.metric-card strong {
+  font-size: 2rem;
+  line-height: 1;
+}
+
+.mono {
+  font-family: "IBM Plex Mono", "SFMono-Regular", monospace;
+}
+
+.pill {
+  border-radius: 999px;
+  display: inline-flex;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 7px 11px;
+  text-transform: uppercase;
+}
+
+.pill-neutral {
+  background: rgba(23, 23, 23, 0.08);
+}
+
+.pill-warning {
+  background: rgba(173, 106, 11, 0.12);
+  color: var(--warn);
+}
+
+.pill-danger {
+  background: rgba(166, 50, 50, 0.12);
+  color: var(--danger);
+}
+
+.pill-success {
+  background: rgba(45, 125, 79, 0.12);
+  color: var(--success);
+}
+
+.pill-info {
+  background: rgba(15, 91, 120, 0.12);
+  color: var(--accent);
+}
+
+.table-wrap {
+  overflow-x: auto;
+}
+
+.data-table {
+  border-collapse: collapse;
+  min-width: 100%;
+}
+
+.data-table th,
+.data-table td {
+  border-bottom: 1px solid var(--line);
+  padding: 12px 8px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.data-table th {
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.button,
+.button-ghost {
+  align-items: center;
+  border-radius: 14px;
+  cursor: pointer;
+  display: inline-flex;
+  justify-content: center;
+  min-height: 42px;
+  padding: 0 16px;
+}
+
+.button {
+  background: var(--ink);
+  border: 1px solid var(--ink);
+  color: white;
+}
+
+.button-ghost {
+  background: transparent;
+  border: 1px solid var(--line);
+}
+
+.actions-row,
+.card-actions,
+.inline-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.inline-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+}
+
+.inline-list a {
+  color: var(--accent);
+}
+
+.form-stack {
+  display: grid;
+  gap: 10px;
+}
+
+.field {
+  display: grid;
+  gap: 6px;
+}
+
+.field input,
+.field textarea {
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  min-height: 44px;
+  padding: 10px 12px;
+}
+
+.field textarea {
+  min-height: 120px;
+}
+
+.empty-state {
+  color: var(--muted);
+  margin: 0;
+}
+
+.code-block {
+  background: rgba(23, 23, 23, 0.04);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  overflow: auto;
+  padding: 14px;
+  white-space: pre-wrap;
+}
+
+@media (max-width: 1120px) {
+  .workspace-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .workspace-sidebar {
+    height: auto;
+    position: static;
+  }
+}
+
+@media (max-width: 760px) {
+  .workspace-shell {
+    padding: 16px;
+  }
+
+  .split-grid,
+  .triptych-grid {
+    grid-template-columns: 1fr;
+  }
+}

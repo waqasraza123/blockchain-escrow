@@ -12,6 +12,7 @@ import {
   createOrganizationInviteSchema,
   createOrganizationSchema,
   updateOrganizationMemberRoleSchema,
+  type JsonObject,
   type AcceptOrganizationInviteResponse,
   type CreateOrganizationInviteResponse,
   type CreateOrganizationResponse,
@@ -38,6 +39,7 @@ import {
 import { RELEASE1_REPOSITORIES } from "../../infrastructure/tokens";
 import type { RequestMetadata } from "../auth/auth.http";
 import { AuthenticatedSessionService } from "../auth/authenticated-session.service";
+import { ApprovalRuntimeService } from "../approvals/approval-runtime.service";
 
 const organizationInviteTtlSeconds = 60 * 60 * 24 * 7;
 
@@ -104,7 +106,8 @@ export class OrganizationsService {
   constructor(
     @Inject(RELEASE1_REPOSITORIES)
     private readonly repositories: Release1Repositories,
-    private readonly authenticatedSessionService: AuthenticatedSessionService
+    private readonly authenticatedSessionService: AuthenticatedSessionService,
+    private readonly approvalRuntimeService: ApprovalRuntimeService
   ) {}
 
   async listMemberships(
@@ -230,6 +233,29 @@ export class OrganizationsService {
     if (parsed.data.role === "OWNER" && authorized.membership.role !== "OWNER") {
       throw new ForbiddenException("only an owner can invite another owner");
     }
+
+    await this.approvalRuntimeService.assertMutationApproved({
+      actionKind: "ORGANIZATION_INVITE_CREATE",
+      costCenterId: null,
+      dealVersionId: null,
+      dealVersionMilestoneId: null,
+      draftDealId: null,
+      input: parsed.data as unknown as JsonObject,
+      organizationId,
+      settlementCurrency: null,
+      subjectId: this.approvalRuntimeService.buildSubjectId({
+        actionKind: "ORGANIZATION_INVITE_CREATE",
+        organizationId,
+        subjectType: "ORGANIZATION_INVITE",
+        value: parsed.data
+      }),
+      subjectLabel: parsed.data.email,
+      subjectMetadata: null,
+      subjectSnapshot: { organizationId },
+      subjectType: "ORGANIZATION_INVITE",
+      title: parsed.data.email,
+      totalAmountMinor: null
+    });
 
     const existingPending =
       await this.repositories.organizationInvites.findPendingByOrganizationIdAndEmail(
@@ -384,6 +410,28 @@ export class OrganizationsService {
       throw new BadRequestException("only pending invites can be revoked");
     }
 
+    await this.approvalRuntimeService.assertMutationApproved({
+      actionKind: "ORGANIZATION_INVITE_REVOKE",
+      costCenterId: null,
+      dealVersionId: null,
+      dealVersionMilestoneId: null,
+      draftDealId: null,
+      input: { inviteId } as JsonObject,
+      organizationId,
+      settlementCurrency: null,
+      subjectId: invite.id,
+      subjectLabel: invite.email,
+      subjectMetadata: null,
+      subjectSnapshot: {
+        email: invite.email,
+        role: invite.role,
+        status: invite.status
+      },
+      subjectType: "ORGANIZATION_INVITE",
+      title: invite.email,
+      totalAmountMinor: null
+    });
+
     const revoked = await this.repositories.organizationInvites.revoke(invite.id);
 
     if (!revoked) {
@@ -443,6 +491,27 @@ export class OrganizationsService {
         throw new BadRequestException("cannot remove the last owner");
       }
     }
+
+    await this.approvalRuntimeService.assertMutationApproved({
+      actionKind: "ORGANIZATION_MEMBER_REMOVE",
+      costCenterId: null,
+      dealVersionId: null,
+      dealVersionMilestoneId: null,
+      draftDealId: null,
+      input: { memberId } as JsonObject,
+      organizationId,
+      settlementCurrency: null,
+      subjectId: member.id,
+      subjectLabel: member.userId,
+      subjectMetadata: null,
+      subjectSnapshot: {
+        role: member.role,
+        userId: member.userId
+      },
+      subjectType: "ORGANIZATION_MEMBER",
+      title: member.userId,
+      totalAmountMinor: null
+    });
 
     const removed = await this.repositories.organizationMembers.remove(member.id);
 
@@ -519,6 +588,28 @@ export class OrganizationsService {
         member: toMemberSummary(member)
       };
     }
+
+    await this.approvalRuntimeService.assertMutationApproved({
+      actionKind: "ORGANIZATION_MEMBER_ROLE_UPDATE",
+      costCenterId: null,
+      dealVersionId: null,
+      dealVersionMilestoneId: null,
+      draftDealId: null,
+      input: parsed.data as unknown as JsonObject,
+      organizationId,
+      settlementCurrency: null,
+      subjectId: member.id,
+      subjectLabel: member.userId,
+      subjectMetadata: null,
+      subjectSnapshot: {
+        currentRole: member.role,
+        nextRole: parsed.data.role,
+        userId: member.userId
+      },
+      subjectType: "ORGANIZATION_MEMBER",
+      title: member.userId,
+      totalAmountMinor: null
+    });
 
     const updated = await this.repositories.organizationMembers.updateRole(
       member.id,

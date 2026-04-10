@@ -12,6 +12,7 @@ import {
   createTemplateSchema,
   organizationTemplateParamsSchema,
   organizationTemplatesParamsSchema,
+  type JsonObject,
   type CreateTemplateResponse,
   type ListTemplatesResponse,
   type TemplateDetailResponse,
@@ -32,6 +33,7 @@ import {
   AuthenticatedSessionService,
   type AuthenticatedSessionContext
 } from "../auth/authenticated-session.service";
+import { ApprovalRuntimeService } from "../approvals/approval-runtime.service";
 
 function normalizeTemplateName(name: string): string {
   return name.trim().replace(/\s+/g, " ").toLowerCase();
@@ -56,7 +58,8 @@ export class TemplatesService {
   constructor(
     @Inject(RELEASE1_REPOSITORIES)
     private readonly repositories: Release1Repositories,
-    private readonly authenticatedSessionService: AuthenticatedSessionService
+    private readonly authenticatedSessionService: AuthenticatedSessionService,
+    private readonly approvalRuntimeService: ApprovalRuntimeService
   ) {}
 
   async listTemplates(
@@ -117,6 +120,28 @@ export class TemplatesService {
       requestMetadata,
       "ADMIN"
     );
+    await this.approvalRuntimeService.assertMutationApproved({
+      actionKind: "TEMPLATE_CREATE",
+      costCenterId: null,
+      dealVersionId: null,
+      dealVersionMilestoneId: null,
+      draftDealId: null,
+      input: parsed.data as unknown as JsonObject,
+      organizationId,
+      settlementCurrency: null,
+      subjectId: this.approvalRuntimeService.buildSubjectId({
+        actionKind: "TEMPLATE_CREATE",
+        organizationId,
+        subjectType: "TEMPLATE",
+        value: parsed.data
+      }),
+      subjectLabel: parsed.data.name,
+      subjectMetadata: null,
+      subjectSnapshot: { organizationId },
+      subjectType: "TEMPLATE",
+      title: parsed.data.name,
+      totalAmountMinor: null
+    });
     const normalizedName = normalizeTemplateName(parsed.data.name);
     const existing =
       await this.repositories.templates.findByOrganizationIdAndNormalizedName(

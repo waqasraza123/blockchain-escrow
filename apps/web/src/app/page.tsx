@@ -1,18 +1,29 @@
-const pageStyle = {
-  fontFamily: "sans-serif",
-  margin: "0 auto",
-  maxWidth: "720px",
-  padding: "48px 24px"
-} as const;
+import { redirect } from "next/navigation";
 
-export default function HomePage() {
-  return (
-    <main style={pageStyle}>
-      <h1>blockchain-escrow</h1>
-      <p>Release 0 web scaffold.</p>
-      <p>
-        This app will later host buyer, seller, reviewer, and finance workflows.
-      </p>
-    </main>
-  );
+import { getSession } from "../lib/api";
+
+export default async function HomePage() {
+  const session = await getSession(true);
+
+  if (!session) {
+    redirect("/unauthorized");
+  }
+
+  const firstOrganization = session.organizations[0]?.organizationId;
+
+  if (!firstOrganization) {
+    return (
+      <main className="workspace-shell" style={{ gridTemplateColumns: "1fr" }}>
+        <section className="workspace-card">
+          <p className="eyebrow">Release 9</p>
+          <h1>No Organizations</h1>
+          <p className="lede">
+            This wallet session is valid, but it is not yet a member of any organization.
+          </p>
+        </section>
+      </main>
+    );
+  }
+
+  redirect(`/orgs/${firstOrganization}`);
 }

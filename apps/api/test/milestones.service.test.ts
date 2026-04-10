@@ -6,6 +6,7 @@ import { privateKeyToAccount } from "viem/accounts";
 
 import { AuditService } from "../src/modules/audit/audit.service";
 import { AuthenticatedSessionService } from "../src/modules/auth/authenticated-session.service";
+import { ApprovalRuntimeService } from "../src/modules/approvals/approval-runtime.service";
 import {
   buildCanonicalDealId,
   buildCanonicalDealVersionHash
@@ -25,6 +26,7 @@ import {
 } from "./helpers/auth-test-context";
 import { InMemoryRelease1Repositories } from "./helpers/in-memory-release1-repositories";
 import { InMemoryRelease4Repositories } from "./helpers/in-memory-release4-repositories";
+import { InMemoryRelease9Repositories } from "./helpers/in-memory-release9-repositories";
 
 const counterpartyAccount = privateKeyToAccount(
   "0x8b3a350cf5c34c9194ca7a545d6a76fc4d6f8d4894d3e9d2046df1d5c8d14d14"
@@ -144,12 +146,14 @@ async function upsertRelease4Cursor(
 function createServices() {
   const repositories = new InMemoryRelease1Repositories();
   const release4Repositories = new InMemoryRelease4Repositories();
+  const release9Repositories = new InMemoryRelease9Repositories();
   const sessionTokenService = new FakeSessionTokenService();
   const authenticatedSessionService = new AuthenticatedSessionService(
     repositories,
     authConfiguration,
     sessionTokenService
   );
+  const approvalRuntimeService = new ApprovalRuntimeService(release9Repositories);
 
   return {
     auditService: new AuditService(repositories, authenticatedSessionService),
@@ -157,17 +161,20 @@ function createServices() {
       repositories,
       release4Repositories,
       authenticatedSessionService,
+      approvalRuntimeService,
       fundingReconciliationConfiguration
     ),
     milestonesService: new MilestonesService(
       repositories,
       release4Repositories,
       authenticatedSessionService,
+      approvalRuntimeService,
       milestoneReviewConfiguration,
       milestoneSettlementExecutionReconciliationConfiguration
     ),
     release1Repositories: repositories,
     release4Repositories,
+    release9Repositories,
     sessionTokenService
   };
 }

@@ -37,6 +37,7 @@ enum AuditAction {
   AUTH_LOGOUT
   AUTH_NONCE_ISSUED
   AUTH_SESSION_VERIFIED
+  APPROVAL_MUTATION_BLOCKED
   APPROVAL_POLICY_CREATED
   APPROVAL_REQUEST_CREATED
   APPROVAL_STEP_DECIDED
@@ -83,6 +84,9 @@ enum AuditAction {
   OPERATOR_ALERT_ACKNOWLEDGED
   OPERATOR_ALERT_RESOLVED
   PROTOCOL_PROPOSAL_DRAFT_CREATED
+  FINANCE_EXPORT_CREATED
+  FINANCE_EXPORT_COMPLETED
+  FINANCE_EXPORT_FAILED
   STATEMENT_SNAPSHOT_CREATED
   TEMPLATE_CREATED
 }
@@ -188,7 +192,55 @@ enum CostCenterStatus {
 }
 
 enum ApprovalPolicyKind {
-  DEAL_FUNDING
+  ORGANIZATION_INVITE_CREATE
+  ORGANIZATION_INVITE_REVOKE
+  ORGANIZATION_MEMBER_REMOVE
+  ORGANIZATION_MEMBER_ROLE_UPDATE
+  COUNTERPARTY_CREATE
+  FILE_CREATE
+  TEMPLATE_CREATE
+  DRAFT_DEAL_CREATE
+  DEAL_VERSION_CREATE
+  DEAL_VERSION_ACCEPT
+  DRAFT_DEAL_COUNTERPARTY_WALLET_UPDATE
+  DRAFT_DEAL_COST_CENTER_UPDATE
+  COST_CENTER_CREATE
+  APPROVAL_POLICY_CREATE
+  APPROVAL_REQUEST_CREATE
+  APPROVAL_STEP_DECISION
+  STATEMENT_SNAPSHOT_CREATE
+  FUNDING_TRANSACTION_CREATE
+  DEAL_MILESTONE_SUBMISSION_CREATE
+  DEAL_MILESTONE_REVIEW_CREATE
+  DEAL_MILESTONE_SETTLEMENT_REQUEST_CREATE
+  DEAL_MILESTONE_DISPUTE_CREATE
+  DEAL_MILESTONE_DISPUTE_ASSIGN_ARBITRATOR
+  DEAL_MILESTONE_DISPUTE_DECISION_CREATE
+  DEAL_MILESTONE_SETTLEMENT_EXECUTION_TRANSACTION_CREATE
+  FINANCE_EXPORT_CREATE
+}
+
+enum ApprovalSubjectType {
+  ORGANIZATION
+  ORGANIZATION_INVITE
+  ORGANIZATION_MEMBER
+  COUNTERPARTY
+  FILE
+  TEMPLATE
+  DRAFT_DEAL
+  DEAL_VERSION
+  DEAL_VERSION_PARTY
+  COST_CENTER
+  APPROVAL_POLICY
+  APPROVAL_REQUEST
+  APPROVAL_REQUEST_STEP
+  DEAL_VERSION_MILESTONE
+  DEAL_MILESTONE_SUBMISSION
+  DEAL_MILESTONE_REVIEW
+  DEAL_MILESTONE_SETTLEMENT_REQUEST
+  DEAL_MILESTONE_DISPUTE
+  DEAL_MILESTONE_SETTLEMENT_EXECUTION_TRANSACTION
+  FINANCE_EXPORT_JOB
 }
 
 enum ApprovalRequestStatus {
@@ -206,6 +258,18 @@ enum ApprovalStepStatus {
 
 enum StatementSnapshotKind {
   DEAL_VERSION_SETTLEMENT
+}
+
+enum FinanceExportJobStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+enum FinanceExportArtifactFormat {
+  CSV
+  JSON
 }
 
 enum AuditEntityType {
@@ -236,6 +300,8 @@ enum AuditEntityType {
   OPERATOR_ALERT
   PROTOCOL_PROPOSAL_DRAFT
   SESSION
+  FINANCE_EXPORT_JOB
+  FINANCE_EXPORT_ARTIFACT
   STATEMENT_SNAPSHOT
   TEMPLATE
   USER
@@ -342,6 +408,7 @@ model User {
   filesCreated               StoredFile[]           @relation("StoredFileCreatedByUser")
   fundingTransactionsSubmitted FundingTransaction[] @relation("FundingTransactionSubmittedByUser")
   templatesCreated           Template[]             @relation("TemplateCreatedByUser")
+  financeExportJobsCreated   FinanceExportJob[]     @relation("FinanceExportJobCreatedByUser")
   organizationRoles          OrganizationMember[]
   invitesSent                OrganizationInvite[]   @relation("OrganizationInviteInvitedByUser")
   auditLogs                  AuditLog[]             @relation("AuditActorUser")
@@ -456,6 +523,7 @@ model Organization {
   draftDeals             DraftDeal[]
   files                  StoredFile[]
   fundingTransactions    FundingTransaction[]
+  financeExportJobs      FinanceExportJob[]
   complianceCases        ComplianceCase[]
   complianceCheckpoints  ComplianceCheckpoint[]
   operatorAlerts         OperatorAlert[]
@@ -709,33 +777,44 @@ model ApprovalPolicyStep {
 model ApprovalRequest {
   id                String                @id @db.Text
   organizationId    String                @db.Text
-  draftDealId       String                @db.Text
-  dealVersionId     String                @db.Text
+  draftDealId       String?               @db.Text
+  dealVersionId     String?               @db.Text
+  dealVersionMilestoneId String?          @db.Text
   approvalPolicyId  String                @db.Text
   requestedByUserId String                @db.Text
   costCenterId      String?               @db.Text
   kind              ApprovalPolicyKind
+  subjectType       ApprovalSubjectType
+  subjectId         String                @db.Text
+  subjectFingerprint String               @db.Text
+  subjectLabel      String?               @db.Text
   status            ApprovalRequestStatus
   title             String                @db.Text
-  totalAmountMinor  String                @db.Text
-  settlementCurrency SettlementCurrency
+  totalAmountMinor  String?               @db.Text
+  settlementCurrency SettlementCurrency?
+  metadata          Json?
   note              String?               @db.Text
   requestedAt       DateTime              @db.Timestamptz(3)
   decidedAt         DateTime?             @db.Timestamptz(3)
   organization      Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  draftDeal         DraftDeal             @relation(fields: [draftDealId], references: [id], onDelete: Cascade)
-  dealVersion       DealVersion           @relation(fields: [dealVersionId], references: [id], onDelete: Cascade)
+  draftDeal         DraftDeal?            @relation(fields: [draftDealId], references: [id], onDelete: Cascade)
+  dealVersion       DealVersion?          @relation(fields: [dealVersionId], references: [id], onDelete: Cascade)
+  dealVersionMilestone DealVersionMilestone? @relation(fields: [dealVersionMilestoneId], references: [id], onDelete: SetNull)
   approvalPolicy    ApprovalPolicy        @relation(fields: [approvalPolicyId], references: [id], onDelete: Restrict)
   requestedByUser   User                  @relation("ApprovalRequestRequestedByUser", fields: [requestedByUserId], references: [id], onDelete: Restrict)
   costCenter        CostCenter?           @relation(fields: [costCenterId], references: [id], onDelete: SetNull)
   steps             ApprovalRequestStep[]
   statementSnapshots StatementSnapshot[]
 
-  @@unique([dealVersionId, kind], map: "approval_requests_deal_version_id_kind_key")
   @@index([organizationId], map: "approval_requests_organization_id_idx")
   @@index([draftDealId], map: "approval_requests_draft_deal_id_idx")
+  @@index([dealVersionId], map: "approval_requests_deal_version_id_idx")
+  @@index([dealVersionMilestoneId], map: "approval_requests_deal_version_milestone_id_idx")
   @@index([approvalPolicyId], map: "approval_requests_policy_id_idx")
   @@index([costCenterId], map: "approval_requests_cost_center_id_idx")
+  @@index([kind], map: "approval_requests_kind_idx")
+  @@index([subjectType, subjectId], map: "approval_requests_subject_idx")
+  @@index([subjectFingerprint], map: "approval_requests_subject_fingerprint_idx")
   @@index([status], map: "approval_requests_status_idx")
   @@index([requestedAt], map: "approval_requests_requested_at_idx")
   @@map("approval_requests")
@@ -789,6 +868,44 @@ model StatementSnapshot {
   @@map("statement_snapshots")
 }
 
+model FinanceExportJob {
+  id              String                @id @db.Text
+  organizationId  String                @db.Text
+  createdByUserId String                @db.Text
+  status          FinanceExportJobStatus
+  filters         Json
+  errorMessage    String?               @db.Text
+  createdAt       DateTime              @db.Timestamptz(3)
+  startedAt       DateTime?             @db.Timestamptz(3)
+  finishedAt      DateTime?             @db.Timestamptz(3)
+  failedAt        DateTime?             @db.Timestamptz(3)
+  organization    Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdByUser   User                  @relation("FinanceExportJobCreatedByUser", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  artifacts       FinanceExportArtifact[]
+
+  @@index([organizationId], map: "finance_export_jobs_organization_id_idx")
+  @@index([createdByUserId], map: "finance_export_jobs_created_by_user_id_idx")
+  @@index([status], map: "finance_export_jobs_status_idx")
+  @@index([createdAt], map: "finance_export_jobs_created_at_idx")
+  @@map("finance_export_jobs")
+}
+
+model FinanceExportArtifact {
+  id                String                      @id @db.Text
+  financeExportJobId String                     @db.Text
+  fileId            String?                     @db.Text
+  format            FinanceExportArtifactFormat
+  filename          String                      @db.Text
+  mediaType         String                      @db.Text
+  body              String                      @db.Text
+  sizeBytes         Int
+  createdAt         DateTime                    @db.Timestamptz(3)
+  financeExportJob  FinanceExportJob            @relation(fields: [financeExportJobId], references: [id], onDelete: Cascade)
+
+  @@index([financeExportJobId], map: "finance_export_artifacts_job_id_idx")
+  @@map("finance_export_artifacts")
+}
+
 model DealVersionParty {
   id             String              @id @db.Text
   dealVersionId  String              @db.Text
@@ -828,6 +945,7 @@ model DealVersionMilestone {
   settlementPreparations DealMilestoneSettlementPreparation[]
   settlementRequests DealMilestoneSettlementRequest[]
   submissions   DealMilestoneSubmission[]
+  approvalRequests ApprovalRequest[]
 
   @@unique([dealVersionId, position], map: "deal_version_milestones_deal_version_id_position_key")
   @@index([dealVersionId], map: "deal_version_milestones_deal_version_id_idx")

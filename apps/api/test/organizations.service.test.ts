@@ -6,10 +6,12 @@ import type {
   SessionTokenService
 } from "@blockchain-escrow/security";
 
+import { ApprovalRuntimeService } from "../src/modules/approvals/approval-runtime.service";
 import { AuthenticatedSessionService } from "../src/modules/auth/authenticated-session.service";
 import type { AuthConfiguration } from "../src/modules/auth/auth.tokens";
 import { OrganizationsService } from "../src/modules/organizations/organizations.service";
 import { InMemoryRelease1Repositories } from "./helpers/in-memory-release1-repositories";
+import { InMemoryRelease9Repositories } from "./helpers/in-memory-release9-repositories";
 
 const authConfiguration: AuthConfiguration = {
   cookie: {
@@ -96,6 +98,7 @@ async function seedAuthenticatedActor(
 
 function createOrganizationsService() {
   const repositories = new InMemoryRelease1Repositories();
+  const release9Repositories = new InMemoryRelease9Repositories();
   const sessionTokenService = new FakeSessionTokenService();
   const authenticatedSessionService = new AuthenticatedSessionService(
     repositories,
@@ -106,9 +109,11 @@ function createOrganizationsService() {
   return {
     organizationsService: new OrganizationsService(
       repositories,
-      authenticatedSessionService
+      authenticatedSessionService,
+      new ApprovalRuntimeService(release9Repositories)
     ),
     repositories,
+    release9Repositories,
     sessionTokenService
   };
 }

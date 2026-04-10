@@ -11,6 +11,7 @@ import {
   createFileSchema,
   organizationFileParamsSchema,
   organizationFilesParamsSchema,
+  type JsonObject,
   type CreateFileResponse,
   type FileDetailResponse,
   type FileSummary,
@@ -31,6 +32,7 @@ import {
   AuthenticatedSessionService,
   type AuthenticatedSessionContext
 } from "../auth/authenticated-session.service";
+import { ApprovalRuntimeService } from "../approvals/approval-runtime.service";
 
 function toFileSummary(file: FileRecord): FileSummary {
   return {
@@ -53,7 +55,8 @@ export class FilesService {
   constructor(
     @Inject(RELEASE1_REPOSITORIES)
     private readonly repositories: Release1Repositories,
-    private readonly authenticatedSessionService: AuthenticatedSessionService
+    private readonly authenticatedSessionService: AuthenticatedSessionService,
+    private readonly approvalRuntimeService: ApprovalRuntimeService
   ) {}
 
   async listFiles(
@@ -114,6 +117,28 @@ export class FilesService {
       requestMetadata,
       "MEMBER"
     );
+    await this.approvalRuntimeService.assertMutationApproved({
+      actionKind: "FILE_CREATE",
+      costCenterId: null,
+      dealVersionId: null,
+      dealVersionMilestoneId: null,
+      draftDealId: null,
+      input: parsed.data as unknown as JsonObject,
+      organizationId,
+      settlementCurrency: null,
+      subjectId: this.approvalRuntimeService.buildSubjectId({
+        actionKind: "FILE_CREATE",
+        organizationId,
+        subjectType: "FILE",
+        value: parsed.data
+      }),
+      subjectLabel: parsed.data.originalFilename,
+      subjectMetadata: null,
+      subjectSnapshot: { organizationId },
+      subjectType: "FILE",
+      title: parsed.data.originalFilename,
+      totalAmountMinor: null
+    });
     const existing = await this.repositories.files.findByOrganizationIdAndStorageKey(
       organizationId,
       parsed.data.storageKey

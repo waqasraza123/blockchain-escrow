@@ -11,6 +11,7 @@ import {
   createCounterpartySchema,
   organizationCounterpartiesParamsSchema,
   organizationCounterpartyParamsSchema,
+  type JsonObject,
   type CounterpartyDetailResponse,
   type CounterpartySummary,
   type CreateCounterpartyResponse,
@@ -31,6 +32,7 @@ import {
   AuthenticatedSessionService,
   type AuthenticatedSessionContext
 } from "../auth/authenticated-session.service";
+import { ApprovalRuntimeService } from "../approvals/approval-runtime.service";
 
 function normalizeCounterpartyName(name: string): string {
   return name.trim().replace(/\s+/g, " ").toLowerCase();
@@ -56,7 +58,8 @@ export class CounterpartiesService {
   constructor(
     @Inject(RELEASE1_REPOSITORIES)
     private readonly repositories: Release1Repositories,
-    private readonly authenticatedSessionService: AuthenticatedSessionService
+    private readonly authenticatedSessionService: AuthenticatedSessionService,
+    private readonly approvalRuntimeService: ApprovalRuntimeService
   ) {}
 
   async listCounterparties(
@@ -122,6 +125,28 @@ export class CounterpartiesService {
       requestMetadata,
       "ADMIN"
     );
+    await this.approvalRuntimeService.assertMutationApproved({
+      actionKind: "COUNTERPARTY_CREATE",
+      costCenterId: null,
+      dealVersionId: null,
+      dealVersionMilestoneId: null,
+      draftDealId: null,
+      input: parsedInput.data as unknown as JsonObject,
+      organizationId,
+      settlementCurrency: null,
+      subjectId: this.approvalRuntimeService.buildSubjectId({
+        actionKind: "COUNTERPARTY_CREATE",
+        organizationId,
+        subjectType: "COUNTERPARTY",
+        value: parsedInput.data
+      }),
+      subjectLabel: parsedInput.data.name,
+      subjectMetadata: null,
+      subjectSnapshot: { organizationId },
+      subjectType: "COUNTERPARTY",
+      title: parsedInput.data.name,
+      totalAmountMinor: null
+    });
     const normalizedName = normalizeCounterpartyName(parsedInput.data.name);
     const existing =
       await this.repositories.counterparties.findByOrganizationIdAndNormalizedName(

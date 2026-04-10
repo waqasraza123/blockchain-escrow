@@ -6,6 +6,8 @@ import type {
   ApprovalRequestRecord,
   ApprovalRequestStepRecord,
   CostCenterRecord,
+  FinanceExportArtifactRecord,
+  FinanceExportJobRecord,
   StatementSnapshotRecord
 } from "./records";
 import type {
@@ -14,6 +16,8 @@ import type {
   ApprovalRequestRepository,
   ApprovalRequestStepRepository,
   CostCenterRepository,
+  FinanceExportArtifactRepository,
+  FinanceExportJobRepository,
   Release9Repositories,
   StatementSnapshotRepository
 } from "./repositories";
@@ -112,33 +116,45 @@ function mapApprovalRequestRecord(record: {
   approvalPolicyId: string;
   costCenterId: string | null;
   decidedAt: Date | null;
-  dealVersionId: string;
-  draftDealId: string;
+  dealVersionId: string | null;
+  dealVersionMilestoneId: string | null;
+  draftDealId: string | null;
   id: string;
   kind: ApprovalRequestRecord["kind"];
+  metadata: Prisma.JsonValue | null;
   note: string | null;
   organizationId: string;
   requestedAt: Date;
   requestedByUserId: string;
   settlementCurrency: ApprovalRequestRecord["settlementCurrency"];
   status: ApprovalRequestRecord["status"];
+  subjectFingerprint: string;
+  subjectId: string;
+  subjectLabel: string | null;
+  subjectType: ApprovalRequestRecord["subjectType"];
   title: string;
-  totalAmountMinor: string;
+  totalAmountMinor: string | null;
 }): ApprovalRequestRecord {
   return {
     approvalPolicyId: record.approvalPolicyId,
     costCenterId: record.costCenterId,
     decidedAt: toIsoTimestamp(record.decidedAt),
     dealVersionId: record.dealVersionId,
+    dealVersionMilestoneId: record.dealVersionMilestoneId,
     draftDealId: record.draftDealId,
     id: record.id,
     kind: record.kind,
+    metadata: (record.metadata ?? null) as ApprovalRequestRecord["metadata"],
     note: record.note,
     organizationId: record.organizationId,
     requestedAt: toRequiredIsoTimestamp(record.requestedAt),
     requestedByUserId: record.requestedByUserId,
     settlementCurrency: record.settlementCurrency,
     status: record.status,
+    subjectFingerprint: record.subjectFingerprint,
+    subjectId: record.subjectId,
+    subjectLabel: record.subjectLabel,
+    subjectType: record.subjectType,
     title: record.title,
     totalAmountMinor: record.totalAmountMinor
   };
@@ -195,6 +211,56 @@ function mapStatementSnapshotRecord(record: {
     note: record.note,
     organizationId: record.organizationId,
     payload: (record.payload ?? null) as StatementSnapshotRecord["payload"]
+  };
+}
+
+function mapFinanceExportJobRecord(record: {
+  createdAt: Date;
+  createdByUserId: string;
+  errorMessage: string | null;
+  failedAt: Date | null;
+  filters: Prisma.JsonValue;
+  finishedAt: Date | null;
+  id: string;
+  organizationId: string;
+  startedAt: Date | null;
+  status: FinanceExportJobRecord["status"];
+}): FinanceExportJobRecord {
+  return {
+    createdAt: toRequiredIsoTimestamp(record.createdAt),
+    createdByUserId: record.createdByUserId,
+    errorMessage: record.errorMessage,
+    failedAt: toIsoTimestamp(record.failedAt),
+    filters: (record.filters ?? null) as FinanceExportJobRecord["filters"],
+    finishedAt: toIsoTimestamp(record.finishedAt),
+    id: record.id,
+    organizationId: record.organizationId,
+    startedAt: toIsoTimestamp(record.startedAt),
+    status: record.status
+  };
+}
+
+function mapFinanceExportArtifactRecord(record: {
+  body: string;
+  createdAt: Date;
+  fileId: string | null;
+  filename: string;
+  financeExportJobId: string;
+  format: FinanceExportArtifactRecord["format"];
+  id: string;
+  mediaType: string;
+  sizeBytes: number;
+}): FinanceExportArtifactRecord {
+  return {
+    body: record.body,
+    createdAt: toRequiredIsoTimestamp(record.createdAt),
+    fileId: record.fileId,
+    filename: record.filename,
+    financeExportJobId: record.financeExportJobId,
+    format: record.format,
+    id: record.id,
+    mediaType: record.mediaType,
+    sizeBytes: record.sizeBytes
   };
 }
 
@@ -343,16 +409,22 @@ export class PrismaApprovalRequestRepository implements ApprovalRequestRepositor
         approvalPolicyId: record.approvalPolicyId,
         costCenterId: record.costCenterId,
         decidedAt: record.decidedAt ? toDate(record.decidedAt) : null,
+        dealVersionMilestoneId: record.dealVersionMilestoneId,
         dealVersionId: record.dealVersionId,
         draftDealId: record.draftDealId,
         id: record.id,
         kind: record.kind,
+        metadata: toPrismaJsonInput(record.metadata as Prisma.InputJsonValue),
         note: record.note,
         organizationId: record.organizationId,
         requestedAt: toDate(record.requestedAt),
         requestedByUserId: record.requestedByUserId,
         settlementCurrency: record.settlementCurrency,
         status: record.status,
+        subjectFingerprint: record.subjectFingerprint,
+        subjectId: record.subjectId,
+        subjectLabel: record.subjectLabel,
+        subjectType: record.subjectType,
         title: record.title,
         totalAmountMinor: record.totalAmountMinor
       }
@@ -361,16 +433,21 @@ export class PrismaApprovalRequestRepository implements ApprovalRequestRepositor
     return mapApprovalRequestRecord(created);
   }
 
-  async findByDealVersionIdAndKind(
-    dealVersionId: string,
-    kind: ApprovalRequestRecord["kind"]
-  ): Promise<ApprovalRequestRecord | null> {
-    const record = await this.database.approvalRequest.findUnique({
+  async findBySubjectFingerprint(input: {
+    kind: ApprovalRequestRecord["kind"];
+    organizationId: string;
+    subjectFingerprint: string;
+    subjectId: string;
+    subjectType: ApprovalRequestRecord["subjectType"];
+  }): Promise<ApprovalRequestRecord | null> {
+    const record = await this.database.approvalRequest.findFirst({
+      orderBy: [{ requestedAt: "desc" }, { id: "asc" }],
       where: {
-        dealVersionId_kind: {
-          dealVersionId,
-          kind
-        }
+        kind: input.kind,
+        organizationId: input.organizationId,
+        subjectFingerprint: input.subjectFingerprint,
+        subjectId: input.subjectId,
+        subjectType: input.subjectType
       }
     });
 
@@ -380,6 +457,17 @@ export class PrismaApprovalRequestRepository implements ApprovalRequestRepositor
   async findById(id: string): Promise<ApprovalRequestRecord | null> {
     const record = await this.database.approvalRequest.findUnique({ where: { id } });
     return record ? mapApprovalRequestRecord(record) : null;
+  }
+
+  async listByOrganizationId(
+    organizationId: string
+  ): Promise<ApprovalRequestRecord[]> {
+    const records = await this.database.approvalRequest.findMany({
+      orderBy: [{ requestedAt: "desc" }, { id: "asc" }],
+      where: { organizationId }
+    });
+
+    return records.map(mapApprovalRequestRecord);
   }
 
   async listByDealVersionId(dealVersionId: string): Promise<ApprovalRequestRecord[]> {
@@ -394,7 +482,7 @@ export class PrismaApprovalRequestRepository implements ApprovalRequestRepositor
   async update(
     id: string,
     updates: Partial<
-      Omit<ApprovalRequestRecord, "id" | "organizationId" | "draftDealId" | "dealVersionId">
+      Omit<ApprovalRequestRecord, "id" | "organizationId" | "subjectFingerprint">
     >
   ): Promise<ApprovalRequestRecord> {
     const data: Prisma.ApprovalRequestUncheckedUpdateInput = {};
@@ -408,8 +496,20 @@ export class PrismaApprovalRequestRepository implements ApprovalRequestRepositor
     if (updates.decidedAt !== undefined) {
       data.decidedAt = updates.decidedAt ? toDate(updates.decidedAt) : null;
     }
+    if (updates.dealVersionId !== undefined) {
+      data.dealVersionId = updates.dealVersionId;
+    }
+    if (updates.dealVersionMilestoneId !== undefined) {
+      data.dealVersionMilestoneId = updates.dealVersionMilestoneId;
+    }
+    if (updates.draftDealId !== undefined) {
+      data.draftDealId = updates.draftDealId;
+    }
     if (updates.kind !== undefined) {
       data.kind = updates.kind;
+    }
+    if (updates.metadata !== undefined) {
+      data.metadata = toPrismaJsonInput(updates.metadata as Prisma.InputJsonValue);
     }
     if (updates.note !== undefined) {
       data.note = updates.note;
@@ -425,6 +525,15 @@ export class PrismaApprovalRequestRepository implements ApprovalRequestRepositor
     }
     if (updates.status !== undefined) {
       data.status = updates.status;
+    }
+    if (updates.subjectId !== undefined) {
+      data.subjectId = updates.subjectId;
+    }
+    if (updates.subjectLabel !== undefined) {
+      data.subjectLabel = updates.subjectLabel;
+    }
+    if (updates.subjectType !== undefined) {
+      data.subjectType = updates.subjectType;
     }
     if (updates.title !== undefined) {
       data.title = updates.title;
@@ -552,6 +661,180 @@ export class PrismaStatementSnapshotRepository implements StatementSnapshotRepos
 
     return records.map(mapStatementSnapshotRecord);
   }
+
+  async listByOrganizationId(
+    organizationId: string
+  ): Promise<StatementSnapshotRecord[]> {
+    const records = await this.database.statementSnapshot.findMany({
+      orderBy: [{ createdAt: "desc" }, { id: "asc" }],
+      where: { organizationId }
+    });
+
+    return records.map(mapStatementSnapshotRecord);
+  }
+}
+
+export class PrismaFinanceExportJobRepository implements FinanceExportJobRepository {
+  constructor(private readonly database: DatabaseClient) {}
+
+  async create(record: FinanceExportJobRecord): Promise<FinanceExportJobRecord> {
+    const created = await this.database.financeExportJob.create({
+      data: {
+        createdAt: toDate(record.createdAt),
+        createdByUserId: record.createdByUserId,
+        errorMessage: record.errorMessage,
+        failedAt: record.failedAt ? toDate(record.failedAt) : null,
+        filters: toPrismaJsonInput(record.filters as Prisma.InputJsonValue),
+        finishedAt: record.finishedAt ? toDate(record.finishedAt) : null,
+        id: record.id,
+        organizationId: record.organizationId,
+        startedAt: record.startedAt ? toDate(record.startedAt) : null,
+        status: record.status
+      }
+    });
+
+    return mapFinanceExportJobRecord(created);
+  }
+
+  async findById(id: string): Promise<FinanceExportJobRecord | null> {
+    const record = await this.database.financeExportJob.findUnique({ where: { id } });
+    return record ? mapFinanceExportJobRecord(record) : null;
+  }
+
+  async claimNextPending(startedAt: string): Promise<FinanceExportJobRecord | null> {
+    if (!("$transaction" in this.database)) {
+      const record = await this.database.financeExportJob.findFirst({
+        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+        where: { status: "PENDING" }
+      });
+
+      if (!record) {
+        return null;
+      }
+
+      const claimed = await this.database.financeExportJob.update({
+        data: {
+          errorMessage: null,
+          failedAt: null,
+          finishedAt: null,
+          startedAt: toDate(startedAt),
+          status: "PROCESSING"
+        },
+        where: { id: record.id }
+      });
+
+      return mapFinanceExportJobRecord(claimed);
+    }
+
+    const database = this.database as PrismaClient;
+
+    return database.$transaction(async (transaction) => {
+      const record = await transaction.financeExportJob.findFirst({
+        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+        where: { status: "PENDING" }
+      });
+
+      if (!record) {
+        return null;
+      }
+
+      const claimed = await transaction.financeExportJob.update({
+        data: {
+          errorMessage: null,
+          failedAt: null,
+          finishedAt: null,
+          startedAt: toDate(startedAt),
+          status: "PROCESSING"
+        },
+        where: { id: record.id }
+      });
+
+      return mapFinanceExportJobRecord(claimed);
+    });
+  }
+
+  async listByOrganizationId(
+    organizationId: string
+  ): Promise<FinanceExportJobRecord[]> {
+    const records = await this.database.financeExportJob.findMany({
+      orderBy: [{ createdAt: "desc" }, { id: "asc" }],
+      where: { organizationId }
+    });
+
+    return records.map(mapFinanceExportJobRecord);
+  }
+
+  async update(
+    id: string,
+    updates: Partial<
+      Omit<
+        FinanceExportJobRecord,
+        "id" | "organizationId" | "createdAt" | "createdByUserId" | "filters"
+      >
+    >
+  ): Promise<FinanceExportJobRecord> {
+    const data: Prisma.FinanceExportJobUncheckedUpdateInput = {};
+
+    if (updates.errorMessage !== undefined) {
+      data.errorMessage = updates.errorMessage;
+    }
+    if (updates.failedAt !== undefined) {
+      data.failedAt = updates.failedAt ? toDate(updates.failedAt) : null;
+    }
+    if (updates.finishedAt !== undefined) {
+      data.finishedAt = updates.finishedAt ? toDate(updates.finishedAt) : null;
+    }
+    if (updates.startedAt !== undefined) {
+      data.startedAt = updates.startedAt ? toDate(updates.startedAt) : null;
+    }
+    if (updates.status !== undefined) {
+      data.status = updates.status;
+    }
+
+    const updated = await this.database.financeExportJob.update({
+      data,
+      where: { id }
+    });
+
+    return mapFinanceExportJobRecord(updated);
+  }
+}
+
+export class PrismaFinanceExportArtifactRepository
+  implements FinanceExportArtifactRepository
+{
+  constructor(private readonly database: DatabaseClient) {}
+
+  async create(
+    record: FinanceExportArtifactRecord
+  ): Promise<FinanceExportArtifactRecord> {
+    const created = await this.database.financeExportArtifact.create({
+      data: {
+        body: record.body,
+        createdAt: toDate(record.createdAt),
+        fileId: record.fileId,
+        filename: record.filename,
+        financeExportJobId: record.financeExportJobId,
+        format: record.format,
+        id: record.id,
+        mediaType: record.mediaType,
+        sizeBytes: record.sizeBytes
+      }
+    });
+
+    return mapFinanceExportArtifactRecord(created);
+  }
+
+  async listByFinanceExportJobId(
+    financeExportJobId: string
+  ): Promise<FinanceExportArtifactRecord[]> {
+    const records = await this.database.financeExportArtifact.findMany({
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      where: { financeExportJobId }
+    });
+
+    return records.map(mapFinanceExportArtifactRecord);
+  }
 }
 
 export class PrismaRelease9Repositories implements Release9Repositories {
@@ -560,6 +843,8 @@ export class PrismaRelease9Repositories implements Release9Repositories {
   readonly approvalRequests: ApprovalRequestRepository;
   readonly approvalRequestSteps: ApprovalRequestStepRepository;
   readonly costCenters: CostCenterRepository;
+  readonly financeExportArtifacts: FinanceExportArtifactRepository;
+  readonly financeExportJobs: FinanceExportJobRepository;
   readonly statementSnapshots: StatementSnapshotRepository;
 
   constructor(private readonly prisma: PrismaClient) {
@@ -568,6 +853,8 @@ export class PrismaRelease9Repositories implements Release9Repositories {
     this.approvalRequests = new PrismaApprovalRequestRepository(prisma);
     this.approvalRequestSteps = new PrismaApprovalRequestStepRepository(prisma);
     this.costCenters = new PrismaCostCenterRepository(prisma);
+    this.financeExportArtifacts = new PrismaFinanceExportArtifactRepository(prisma);
+    this.financeExportJobs = new PrismaFinanceExportJobRepository(prisma);
     this.statementSnapshots = new PrismaStatementSnapshotRepository(prisma);
   }
 

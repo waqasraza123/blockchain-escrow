@@ -6,6 +6,7 @@ import {
 } from "@blockchain-escrow/contracts-sdk";
 import { privateKeyToAccount } from "viem/accounts";
 
+import { ApprovalRuntimeService } from "../src/modules/approvals/approval-runtime.service";
 import type { ApprovalsService } from "../src/modules/approvals/approvals.service";
 import { AuthenticatedSessionService } from "../src/modules/auth/authenticated-session.service";
 import { buildCanonicalDealId } from "../src/modules/drafts/deal-identity";
@@ -22,6 +23,7 @@ import {
 } from "./helpers/auth-test-context";
 import { InMemoryRelease1Repositories } from "./helpers/in-memory-release1-repositories";
 import { InMemoryRelease4Repositories } from "./helpers/in-memory-release4-repositories";
+import { InMemoryRelease9Repositories } from "./helpers/in-memory-release9-repositories";
 
 const counterpartyAccount = privateKeyToAccount(
   "0x8b3a350cf5c34c9194ca7a545d6a76fc4d6f8d4894d3e9d2046df1d5c8d14d14"
@@ -133,17 +135,20 @@ function createServices(
     applicablePolicy: null,
     currentRequest: null,
     required: false,
-    status: "NOT_REQUIRED" as const
+    status: "NOT_REQUIRED" as const,
+    subject: null
   }
 ) {
   const release1Repositories = new InMemoryRelease1Repositories();
   const release4Repositories = new InMemoryRelease4Repositories();
+  const release9Repositories = new InMemoryRelease9Repositories();
   const sessionTokenService = new FakeSessionTokenService();
   const authenticatedSessionService = new AuthenticatedSessionService(
     release1Repositories,
     authConfiguration,
     sessionTokenService
   );
+  const approvalRuntimeService = new ApprovalRuntimeService(release9Repositories);
   const approvalsService = {
     buildApprovalRequirement: async () => approvalRequirement
   } as Pick<ApprovalsService, "buildApprovalRequirement"> as ApprovalsService;
@@ -153,6 +158,7 @@ function createServices(
       release1Repositories,
       release4Repositories,
       authenticatedSessionService,
+      approvalRuntimeService,
       fundingReconciliationConfiguration
     ),
     fundingService: new FundingService(
@@ -161,10 +167,12 @@ function createServices(
       authenticatedSessionService,
       fundingReconciliationConfiguration,
       fundingChainReader,
-      approvalsService
+      approvalsService,
+      approvalRuntimeService
     ),
     release1Repositories,
     release4Repositories,
+    release9Repositories,
     sessionTokenService
   };
 }
@@ -432,7 +440,8 @@ test("funding service blocks preparation when funding approval is required but m
     applicablePolicy: null,
     currentRequest: null,
     required: true,
-    status: "REQUIRED"
+    status: "REQUIRED",
+    subject: null
   });
 
   await createCounterpartyAcceptance(seeded);

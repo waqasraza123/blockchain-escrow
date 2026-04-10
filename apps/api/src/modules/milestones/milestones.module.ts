@@ -1,5 +1,6 @@
-import { Module } from "@nestjs/common";
+import { forwardRef, Module } from "@nestjs/common";
 
+import { ApprovalsModule } from "../approvals/approvals.module";
 import { AuthModule } from "../auth/auth.module";
 import { MilestonesController } from "./milestones.controller";
 import { MilestonesService } from "./milestones.service";
@@ -11,7 +12,7 @@ import {
 } from "./milestones.tokens";
 
 @Module({
-  imports: [AuthModule],
+  imports: [AuthModule, forwardRef(() => ApprovalsModule)],
   controllers: [MilestonesController],
   providers: [
     MilestonesService,

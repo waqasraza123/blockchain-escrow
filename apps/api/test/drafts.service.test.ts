@@ -6,6 +6,7 @@ import { UnauthorizedException } from "@nestjs/common";
 import { privateKeyToAccount } from "viem/accounts";
 
 import { AuthenticatedSessionService } from "../src/modules/auth/authenticated-session.service";
+import { ApprovalRuntimeService } from "../src/modules/approvals/approval-runtime.service";
 import { buildCanonicalDealId } from "../src/modules/drafts/deal-identity";
 import { DraftsService } from "../src/modules/drafts/drafts.service";
 import type { FundingReconciliationConfiguration } from "../src/modules/funding/funding.tokens";
@@ -16,6 +17,7 @@ import {
 } from "./helpers/auth-test-context";
 import { InMemoryRelease1Repositories } from "./helpers/in-memory-release1-repositories";
 import { InMemoryRelease4Repositories } from "./helpers/in-memory-release4-repositories";
+import { InMemoryRelease9Repositories } from "./helpers/in-memory-release9-repositories";
 
 const counterpartyAccount = privateKeyToAccount(
   "0x8b3a350cf5c34c9194ca7a545d6a76fc4d6f8d4894d3e9d2046df1d5c8d14d14"
@@ -114,6 +116,7 @@ async function seedOrganizationMembership(
 function createDraftsService() {
   const repositories = new InMemoryRelease1Repositories();
   const release4Repositories = new InMemoryRelease4Repositories();
+  const release9Repositories = new InMemoryRelease9Repositories();
   const sessionTokenService = new FakeSessionTokenService();
   const authenticatedSessionService = new AuthenticatedSessionService(
     repositories,
@@ -126,10 +129,12 @@ function createDraftsService() {
       repositories,
       release4Repositories,
       authenticatedSessionService,
+      new ApprovalRuntimeService(release9Repositories),
       fundingReconciliationConfiguration
     ),
     repositories,
     release4Repositories,
+    release9Repositories,
     sessionTokenService
   };
 }

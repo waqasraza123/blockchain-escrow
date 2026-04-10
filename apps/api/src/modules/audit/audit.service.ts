@@ -285,6 +285,8 @@ export class AuditService {
       case "COMPLIANCE_CASE_NOTE":
       case "COST_CENTER":
       case "PROTOCOL_PROPOSAL_DRAFT":
+      case "FINANCE_EXPORT_JOB":
+      case "FINANCE_EXPORT_ARTIFACT":
       case "STATEMENT_SNAPSHOT":
         throw new ForbiddenException(
           "audit logs for operator-only entities are not available on this surface"

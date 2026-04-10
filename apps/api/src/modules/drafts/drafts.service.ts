@@ -35,6 +35,7 @@ import {
   organizationDraftDealsParamsSchema,
   updateDraftCounterpartyWalletSchema,
   isCustodyTrackedDealState,
+  type JsonObject,
   type CreateDealVersionAcceptanceResponse,
   type CreateCounterpartyDealVersionAcceptanceResponse,
   type CreateDealVersionResponse,
@@ -83,6 +84,7 @@ import {
   AuthenticatedSessionService,
   type AuthenticatedSessionContext
 } from "../auth/authenticated-session.service";
+import { ApprovalRuntimeService } from "../approvals/approval-runtime.service";
 import {
   buildCanonicalDealId,
   buildCanonicalDealVersionHash,
@@ -192,6 +194,7 @@ export class DraftsService {
     @Inject(RELEASE4_REPOSITORIES)
     private readonly release4Repositories: Release4Repositories,
     private readonly authenticatedSessionService: AuthenticatedSessionService,
+    private readonly approvalRuntimeService: ApprovalRuntimeService,
     @Inject(FUNDING_RECONCILIATION_CONFIGURATION)
     private readonly fundingReconciliationConfiguration: FundingReconciliationConfiguration
   ) {}
@@ -254,6 +257,28 @@ export class DraftsService {
       requestMetadata,
       "ADMIN"
     );
+    await this.approvalRuntimeService.assertMutationApproved({
+      actionKind: "DRAFT_DEAL_CREATE",
+      costCenterId: null,
+      dealVersionId: null,
+      dealVersionMilestoneId: null,
+      draftDealId: null,
+      input: parsed.data as unknown as JsonObject,
+      organizationId,
+      settlementCurrency: parsed.data.settlementCurrency,
+      subjectId: this.approvalRuntimeService.buildSubjectId({
+        actionKind: "DRAFT_DEAL_CREATE",
+        organizationId,
+        subjectType: "DRAFT_DEAL",
+        value: parsed.data
+      }),
+      subjectLabel: parsed.data.title,
+      subjectMetadata: null,
+      subjectSnapshot: { organizationId },
+      subjectType: "DRAFT_DEAL",
+      title: parsed.data.title,
+      totalAmountMinor: null
+    });
     const counterparty = await this.requireCounterpartyInOrganization(
       organizationId,
       parsed.data.counterpartyId
@@ -351,6 +376,38 @@ export class DraftsService {
 
     const now = new Date().toISOString();
     await this.assertDraftIsMutable(draft);
+    await this.approvalRuntimeService.assertMutationApproved({
+      actionKind: "DEAL_VERSION_CREATE",
+      costCenterId: draft.costCenterId ?? null,
+      dealVersionId: null,
+      dealVersionMilestoneId: null,
+      draftDealId: draft.id,
+      input: parsedVersion.data as unknown as JsonObject,
+      organizationId: draft.organizationId,
+      settlementCurrency: draft.settlementCurrency,
+      subjectId: this.approvalRuntimeService.buildSubjectId({
+        actionKind: "DEAL_VERSION_CREATE",
+        organizationId: draft.organizationId,
+        subjectType: "DEAL_VERSION",
+        value: {
+          draftDealId: draft.id,
+          input: parsedVersion.data
+        }
+      }),
+      subjectLabel: parsedVersion.data.title ?? draft.title,
+      subjectMetadata: null,
+      subjectSnapshot: {
+        costCenterId: draft.costCenterId ?? null,
+        draftDealId: draft.id,
+        latestVersionId:
+          (await this.repositories.dealVersions.findLatestByDraftDealId(draft.id))?.id ?? null
+      },
+      subjectType: "DEAL_VERSION",
+      title: parsedVersion.data.title ?? draft.title,
+      totalAmountMinor: parsedVersion.data.milestoneSnapshots
+        .reduce((total, milestone) => total + BigInt(milestone.amountMinor), 0n)
+        .toString()
+    });
 
     const duplicateFiles = parsedVersion.data.attachmentFileIds
       ? new Set(parsedVersion.data.attachmentFileIds).size !==
@@ -505,6 +562,27 @@ export class DraftsService {
     if (existing) {
       throw new ConflictException("deal version acceptance already exists");
     }
+
+    await this.approvalRuntimeService.assertMutationApproved({
+      actionKind: "DEAL_VERSION_ACCEPT",
+      costCenterId: authorized.draft.costCenterId ?? null,
+      dealVersionId: authorized.version.id,
+      dealVersionMilestoneId: null,
+      draftDealId: authorized.draft.id,
+      input: parsedAcceptance.data as unknown as JsonObject,
+      organizationId: authorized.organization.id,
+      settlementCurrency: authorized.version.settlementCurrency,
+      subjectId: organizationParty.id,
+      subjectLabel: authorized.version.title,
+      subjectMetadata: null,
+      subjectSnapshot: {
+        dealVersionId: authorized.version.id,
+        partyId: organizationParty.id
+      },
+      subjectType: "DEAL_VERSION_PARTY",
+      title: authorized.version.title,
+      totalAmountMinor: null
+    });
 
     const now = new Date().toISOString();
     const acceptance = await this.repositories.dealVersionAcceptances.create({
@@ -696,6 +774,26 @@ export class DraftsService {
     }
 
     const counterpartyParty = counterpartyParties[0] as DraftDealPartyRecord;
+    await this.approvalRuntimeService.assertMutationApproved({
+      actionKind: "DRAFT_DEAL_COUNTERPARTY_WALLET_UPDATE",
+      costCenterId: draft.costCenterId ?? null,
+      dealVersionId: null,
+      dealVersionMilestoneId: null,
+      draftDealId: draft.id,
+      input: parsedWallet.data as unknown as JsonObject,
+      organizationId: draft.organizationId,
+      settlementCurrency: draft.settlementCurrency,
+      subjectId: counterpartyParty.id,
+      subjectLabel: draft.title,
+      subjectMetadata: null,
+      subjectSnapshot: {
+        draftDealId: draft.id,
+        previousWalletAddress: counterpartyParty.walletAddress
+      },
+      subjectType: "DRAFT_DEAL",
+      title: draft.title,
+      totalAmountMinor: null
+    });
     const now = new Date().toISOString();
     const updated = await this.repositories.draftDealParties.updateWalletAddress(
       counterpartyParty.id,

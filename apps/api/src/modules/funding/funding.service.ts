@@ -57,6 +57,7 @@ import {
   RELEASE1_REPOSITORIES,
   RELEASE4_REPOSITORIES
 } from "../../infrastructure/tokens";
+import { ApprovalRuntimeService } from "../approvals/approval-runtime.service";
 import { ApprovalsService } from "../approvals/approvals.service";
 import type { RequestMetadata } from "../auth/auth.http";
 import {
@@ -342,7 +343,8 @@ export class FundingService {
     private readonly fundingReconciliationConfiguration: FundingReconciliationConfiguration,
     @Inject(FUNDING_CHAIN_READER)
     private readonly fundingChainReader: FundingChainReader,
-    private readonly approvalsService: ApprovalsService
+    private readonly approvalsService: ApprovalsService,
+    private readonly approvalRuntimeService: ApprovalRuntimeService
   ) {}
 
   async getFundingPreparation(
@@ -394,6 +396,30 @@ export class FundingService {
     const now = new Date().toISOString();
     const context = await this.buildFundingContext(access, now);
     const preparation = await this.buildFundingPreparationSummary(context);
+    await this.approvalRuntimeService.assertMutationApproved({
+      actionKind: "FUNDING_TRANSACTION_CREATE",
+      costCenterId: access.draft.costCenterId ?? null,
+      dealVersionId: access.version.id,
+      dealVersionMilestoneId: null,
+      draftDealId: access.draft.id,
+      input: null,
+      organizationId: access.organization.id,
+      settlementCurrency: access.version.settlementCurrency,
+      subjectId: access.version.id,
+      subjectLabel: access.version.title,
+      subjectMetadata: {
+        versionNumber: access.version.versionNumber
+      },
+      subjectSnapshot: {
+        costCenterId: access.draft.costCenterId ?? null,
+        settlementCurrency: access.version.settlementCurrency,
+        versionId: access.version.id,
+        versionNumber: access.version.versionNumber
+      },
+      subjectType: "DEAL_VERSION",
+      title: access.version.title,
+      totalAmountMinor: sumMilestones(context.milestones)
+    });
 
     if (context.linkedAgreement) {
       throw new ConflictException("agreement already created for draft deal");

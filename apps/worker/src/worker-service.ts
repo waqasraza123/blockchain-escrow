@@ -2,12 +2,14 @@ import {
   createPrismaClient,
   createPrismaRelease4Repositories,
   createRelease1Repositories,
-  createRelease8Repositories
+  createRelease8Repositories,
+  createRelease9Repositories
 } from "@blockchain-escrow/db";
 
 import type { WorkerConfig } from "./config";
 import { DraftCustodyStateReconciler } from "./draft-custody-state-reconciler";
 import { DraftActivationReconciler } from "./draft-activation-reconciler";
+import { FinanceExportReconciler } from "./finance-export-reconciler";
 import { FundingReconciler } from "./funding-reconciler";
 import { HealthState } from "./health-state";
 import { MilestoneReviewDeadlineReconciler } from "./milestone-review-deadline-reconciler";
@@ -20,8 +22,10 @@ export class WorkerService {
   private readonly release1Repositories = createRelease1Repositories(this.prisma);
   private readonly release4Repositories = createPrismaRelease4Repositories(this.prisma);
   private readonly release8Repositories = createRelease8Repositories(this.prisma);
+  private readonly release9Repositories = createRelease9Repositories(this.prisma);
   private readonly draftCustodyStateReconciler: DraftCustodyStateReconciler;
   private readonly draftActivationReconciler: DraftActivationReconciler;
+  private readonly financeExportReconciler: FinanceExportReconciler;
   private readonly fundingReconciler: FundingReconciler;
   private readonly milestoneReviewDeadlineReconciler: MilestoneReviewDeadlineReconciler;
   private readonly milestoneSettlementExecutionReconciler: MilestoneSettlementExecutionReconciler;
@@ -49,6 +53,12 @@ export class WorkerService {
       this.release4Repositories,
       this.config.chainId,
       this.config.fundingReconciliation
+    );
+    this.financeExportReconciler = new FinanceExportReconciler(
+      this.release1Repositories,
+      this.release4Repositories,
+      this.release9Repositories,
+      this.config.chainId
     );
     this.milestoneReviewDeadlineReconciler =
       new MilestoneReviewDeadlineReconciler(this.release1Repositories);
@@ -108,6 +118,7 @@ export class WorkerService {
       const [
         draftCustodyStateSummary,
         draftActivationSummary,
+        financeExportSummary,
         fundingSummary,
         operatorAlertSummary,
         milestoneReviewDeadlineSummary,
@@ -116,6 +127,7 @@ export class WorkerService {
       ] = await Promise.all([
         this.draftCustodyStateReconciler.reconcileOnce(),
         this.draftActivationReconciler.reconcileOnce(),
+        this.financeExportReconciler.reconcileOnce(),
         this.fundingReconciler.reconcileOnce(),
         this.operatorAlertReconciler.reconcileOnce(),
         this.milestoneReviewDeadlineReconciler.reconcileOnce(),
@@ -125,6 +137,7 @@ export class WorkerService {
       const summary = {
         ...draftCustodyStateSummary,
         ...draftActivationSummary,
+        ...financeExportSummary,
         ...fundingSummary,
         ...operatorAlertSummary,
         ...milestoneReviewDeadlineSummary,

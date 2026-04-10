@@ -2,46 +2,42 @@ import type {
   ApprovalPolicyRecord,
   ApprovalPolicyStepRecord,
   ApprovalRequestRecord,
-  ApprovalRequestStepRecord,
-  DealVersionMilestoneRecord,
-  DealVersionRecord,
-  DraftDealRecord
+  ApprovalRequestStepRecord
 } from "@blockchain-escrow/db";
 import type {
   ApprovalPolicySummary,
   ApprovalRequestSummary,
-  ApprovalRequirementSummary
+  ApprovalRequirementSummary,
+  ApprovalSubjectSummary
 } from "@blockchain-escrow/shared";
 
 function compareIsoDescending(left: string, right: string): number {
   return new Date(right).getTime() - new Date(left).getTime();
 }
 
-function sumMilestoneAmounts(
-  milestones: readonly DealVersionMilestoneRecord[]
-): string {
-  return milestones
-    .reduce((total, milestone) => total + BigInt(milestone.amountMinor), 0n)
-    .toString();
-}
-
-export function selectApplicableApprovalPolicy(
-  policies: readonly ApprovalPolicyRecord[],
-  draft: DraftDealRecord,
-  version: DealVersionRecord
-): ApprovalPolicyRecord | null {
-  const matchingPolicies = policies.filter((policy) => {
-    if (!policy.active || policy.kind !== "DEAL_FUNDING") {
+export function selectApplicableApprovalPolicy(input: {
+  actionKind: ApprovalPolicyRecord["kind"];
+  costCenterId: string | null;
+  organizationId: string;
+  policies: readonly ApprovalPolicyRecord[];
+  settlementCurrency: ApprovalPolicyRecord["settlementCurrency"];
+}): ApprovalPolicyRecord | null {
+  const matchingPolicies = input.policies.filter((policy) => {
+    if (!policy.active || policy.organizationId !== input.organizationId) {
       return false;
     }
 
-    if (policy.costCenterId && policy.costCenterId !== (draft.costCenterId ?? null)) {
+    if (policy.kind !== input.actionKind) {
+      return false;
+    }
+
+    if (policy.costCenterId && policy.costCenterId !== input.costCenterId) {
       return false;
     }
 
     if (
       policy.settlementCurrency &&
-      policy.settlementCurrency !== version.settlementCurrency
+      policy.settlementCurrency !== input.settlementCurrency
     ) {
       return false;
     }
@@ -94,6 +90,35 @@ export function toApprovalPolicySummary(
   };
 }
 
+export function toApprovalSubjectSummary(
+  request: Pick<
+    ApprovalRequestRecord,
+    | "costCenterId"
+    | "dealVersionId"
+    | "dealVersionMilestoneId"
+    | "draftDealId"
+    | "metadata"
+    | "subjectId"
+    | "subjectLabel"
+    | "subjectType"
+  >
+): ApprovalSubjectSummary {
+  return {
+    costCenterId: request.costCenterId,
+    dealMilestoneDisputeId:
+      typeof request.metadata?.dealMilestoneDisputeId === "string"
+        ? request.metadata.dealMilestoneDisputeId
+        : null,
+    dealVersionId: request.dealVersionId,
+    dealVersionMilestoneId: request.dealVersionMilestoneId,
+    draftDealId: request.draftDealId,
+    id: request.subjectId,
+    label: request.subjectLabel,
+    metadata: request.metadata,
+    type: request.subjectType
+  };
+}
+
 export function toApprovalRequestSummary(
   request: ApprovalRequestRecord,
   steps: readonly ApprovalRequestStepRecord[]
@@ -124,6 +149,8 @@ export function toApprovalRequestSummary(
         requiredRole: step.requiredRole,
         status: step.status
       })),
+    subject: toApprovalSubjectSummary(request),
+    subjectFingerprint: request.subjectFingerprint,
     title: request.title,
     totalAmountMinor: request.totalAmountMinor
   };
@@ -134,13 +161,15 @@ export function buildApprovalRequirementSummary(input: {
   applicablePolicySteps: readonly ApprovalPolicyStepRecord[];
   currentRequest: ApprovalRequestRecord | null;
   currentRequestSteps: readonly ApprovalRequestStepRecord[];
+  subject: ApprovalSubjectSummary | null;
 }): ApprovalRequirementSummary {
   if (!input.applicablePolicy) {
     return {
       applicablePolicy: null,
       currentRequest: null,
       required: false,
-      status: "NOT_REQUIRED"
+      status: "NOT_REQUIRED",
+      subject: input.subject
     };
   }
 
@@ -165,35 +194,7 @@ export function buildApprovalRequirementSummary(input: {
     ),
     currentRequest,
     required: true,
-    status
-  };
-}
-
-export function buildApprovalRequestRecord(input: {
-  approvalPolicy: ApprovalPolicyRecord;
-  draft: DraftDealRecord;
-  milestones: readonly DealVersionMilestoneRecord[];
-  now: string;
-  note: string | null;
-  requestedByUserId: string;
-  requestId: string;
-  version: DealVersionRecord;
-}): ApprovalRequestRecord {
-  return {
-    approvalPolicyId: input.approvalPolicy.id,
-    costCenterId: input.draft.costCenterId ?? null,
-    decidedAt: null,
-    dealVersionId: input.version.id,
-    draftDealId: input.draft.id,
-    id: input.requestId,
-    kind: input.approvalPolicy.kind,
-    note: input.note,
-    organizationId: input.version.organizationId,
-    requestedAt: input.now,
-    requestedByUserId: input.requestedByUserId,
-    settlementCurrency: input.version.settlementCurrency,
-    status: "PENDING",
-    title: input.version.title,
-    totalAmountMinor: sumMilestoneAmounts(input.milestones)
+    status,
+    subject: input.subject
   };
 }

@@ -55,6 +55,7 @@ import {
   prepareCounterpartyMilestoneSubmissionSchema,
   resolveSettlementExecutionTransactionStalePendingState,
   resolveSettlementExecutionTransactionState,
+  type JsonObject,
   type CounterpartyDealMilestoneSubmissionChallenge,
   type CreateDealMilestoneDisputeDecisionResponse,
   type CreateDealMilestoneDisputeResponse,
@@ -113,6 +114,7 @@ import {
   RELEASE1_REPOSITORIES,
   RELEASE4_REPOSITORIES
 } from "../../infrastructure/tokens";
+import { ApprovalRuntimeService } from "../approvals/approval-runtime.service";
 import type { RequestMetadata } from "../auth/auth.http";
 import {
   AuthenticatedSessionService,
@@ -338,6 +340,7 @@ export class MilestonesService {
     @Inject(RELEASE4_REPOSITORIES)
     private readonly release4Repositories: Release4Repositories,
     private readonly authenticatedSessionService: AuthenticatedSessionService,
+    private readonly approvalRuntimeService: ApprovalRuntimeService,
     @Inject(MILESTONE_REVIEW_CONFIGURATION)
     private readonly milestoneReviewConfiguration: MilestoneReviewConfiguration,
     @Inject(MILESTONE_SETTLEMENT_EXECUTION_RECONCILIATION_CONFIGURATION)
@@ -624,12 +627,43 @@ export class MilestonesService {
       records,
       parsedParams.data.dealMilestoneSettlementRequestId
     );
+    const milestone = records.milestones.find(
+      (record) => record.id === settlementRequest.dealVersionMilestoneId
+    );
+
+    if (!milestone) {
+      throw new NotFoundException("deal version milestone not found");
+    }
     const plan = this.buildMilestoneSettlementExecutionPlan(
       records,
       linkedAgreement,
       settlementRequest,
       await this.loadIndexedMilestoneSettlementsByPosition(linkedAgreement)
     );
+    await this.approvalRuntimeService.assertMutationApproved({
+      actionKind: "DEAL_MILESTONE_SETTLEMENT_EXECUTION_TRANSACTION_CREATE",
+      costCenterId: access.draft.costCenterId ?? null,
+      dealVersionId: access.version.id,
+      dealVersionMilestoneId: milestone.id,
+      draftDealId: access.draft.id,
+      input: null,
+      organizationId: access.organization.id,
+      settlementCurrency: access.version.settlementCurrency,
+      subjectId: settlementRequest.id,
+      subjectLabel: milestone.title,
+      subjectMetadata: {
+        dealMilestoneDisputeId: settlementRequest.dealMilestoneDisputeId,
+        settlementRequestId: settlementRequest.id
+      },
+      subjectSnapshot: {
+        dealMilestoneReviewId: settlementRequest.dealMilestoneReviewId,
+        dealMilestoneSubmissionId: settlementRequest.dealMilestoneSubmissionId,
+        milestonePosition: milestone.position
+      },
+      subjectType: "DEAL_MILESTONE_SETTLEMENT_REQUEST",
+      title: milestone.title,
+      totalAmountMinor: milestone.amountMinor
+    });
 
     if (plan.blockers.length > 0) {
       throw new ConflictException("settlement execution is not ready for tracking");
@@ -788,6 +822,26 @@ export class MilestonesService {
       await this.repositories.dealMilestoneSubmissions.listByDealVersionMilestoneId(
         access.milestone.id
       );
+    await this.approvalRuntimeService.assertMutationApproved({
+      actionKind: "DEAL_MILESTONE_SUBMISSION_CREATE",
+      costCenterId: access.draft.costCenterId ?? null,
+      dealVersionId: access.version.id,
+      dealVersionMilestoneId: access.milestone.id,
+      draftDealId: access.draft.id,
+      input: parsedBody.data as unknown as JsonObject,
+      organizationId: access.organization.id,
+      settlementCurrency: access.version.settlementCurrency,
+      subjectId: access.milestone.id,
+      subjectLabel: access.milestone.title,
+      subjectMetadata: null,
+      subjectSnapshot: {
+        latestSubmissionId: existingSubmissions[existingSubmissions.length - 1]?.id ?? null,
+        milestonePosition: access.milestone.position
+      },
+      subjectType: "DEAL_VERSION_MILESTONE",
+      title: access.milestone.title,
+      totalAmountMinor: access.milestone.amountMinor
+    });
     const now = new Date().toISOString();
     const submission = await this.repositories.dealMilestoneSubmissions.create({
       dealVersionId: access.version.id,
@@ -1055,6 +1109,27 @@ export class MilestonesService {
     if (!this.doesSubmissionMatchSellerParty(access.submission, access.sellerParty)) {
       throw new ConflictException("milestone submission origin does not match seller party");
     }
+    await this.approvalRuntimeService.assertMutationApproved({
+      actionKind: "DEAL_MILESTONE_REVIEW_CREATE",
+      costCenterId: access.draft.costCenterId ?? null,
+      dealVersionId: access.version.id,
+      dealVersionMilestoneId: access.milestone.id,
+      draftDealId: access.draft.id,
+      input: parsedBody.data as unknown as JsonObject,
+      organizationId: access.organization.id,
+      settlementCurrency: access.version.settlementCurrency,
+      subjectId: access.submission.id,
+      subjectLabel: access.milestone.title,
+      subjectMetadata: null,
+      subjectSnapshot: {
+        latestSubmissionId: access.latestSubmission.id,
+        milestonePosition: access.milestone.position,
+        reviewId: null
+      },
+      subjectType: "DEAL_MILESTONE_SUBMISSION",
+      title: access.milestone.title,
+      totalAmountMinor: access.milestone.amountMinor
+    });
 
     const now = new Date().toISOString();
     const review = await this.repositories.dealMilestoneReviews.create({
@@ -1181,6 +1256,27 @@ export class MilestonesService {
       parsedBody.data.kind,
       access.review.decision
     );
+    await this.approvalRuntimeService.assertMutationApproved({
+      actionKind: "DEAL_MILESTONE_SETTLEMENT_REQUEST_CREATE",
+      costCenterId: access.draft.costCenterId ?? null,
+      dealVersionId: access.version.id,
+      dealVersionMilestoneId: access.milestone.id,
+      draftDealId: access.draft.id,
+      input: parsedBody.data as unknown as JsonObject,
+      organizationId: access.organization.id,
+      settlementCurrency: access.version.settlementCurrency,
+      subjectId: access.review.id,
+      subjectLabel: access.milestone.title,
+      subjectMetadata: null,
+      subjectSnapshot: {
+        latestSubmissionId: access.latestSubmission.id,
+        milestonePosition: access.milestone.position,
+        settlementRequestId: null
+      },
+      subjectType: "DEAL_MILESTONE_REVIEW",
+      title: access.milestone.title,
+      totalAmountMinor: access.milestone.amountMinor
+    });
 
     const now = new Date().toISOString();
     const settlementRequest =
@@ -1309,6 +1405,27 @@ export class MilestonesService {
       access.organization.id,
       parsedBody.data.attachmentFileIds ?? []
     );
+    await this.approvalRuntimeService.assertMutationApproved({
+      actionKind: "DEAL_MILESTONE_DISPUTE_CREATE",
+      costCenterId: access.draft.costCenterId ?? null,
+      dealVersionId: access.version.id,
+      dealVersionMilestoneId: access.milestone.id,
+      draftDealId: access.draft.id,
+      input: parsedBody.data as unknown as JsonObject,
+      organizationId: access.organization.id,
+      settlementCurrency: access.version.settlementCurrency,
+      subjectId: access.review.id,
+      subjectLabel: access.milestone.title,
+      subjectMetadata: null,
+      subjectSnapshot: {
+        latestSubmissionId: access.latestSubmission.id,
+        milestonePosition: access.milestone.position,
+        reviewId: access.review.id
+      },
+      subjectType: "DEAL_MILESTONE_REVIEW",
+      title: access.milestone.title,
+      totalAmountMinor: access.milestone.amountMinor
+    });
     const now = new Date().toISOString();
     const dispute = await this.repositories.dealMilestoneDisputes.create({
       dealMilestoneReviewId: access.review.id,
@@ -1407,6 +1524,36 @@ export class MilestonesService {
       access.linkedAgreement,
       parsedBody.data.arbitratorAddress
     );
+    await this.approvalRuntimeService.assertMutationApproved({
+      actionKind: "DEAL_MILESTONE_DISPUTE_ASSIGN_ARBITRATOR",
+      costCenterId: access.draft.costCenterId ?? null,
+      dealVersionId: access.version.id,
+      dealVersionMilestoneId: access.milestone.id,
+      draftDealId: access.draft.id,
+      input: parsedBody.data as unknown as JsonObject,
+      organizationId: access.organization.id,
+      settlementCurrency: access.version.settlementCurrency,
+      subjectId: access.dispute.id,
+      subjectLabel: access.milestone.title,
+      subjectMetadata: {
+        dealMilestoneDisputeId: access.dispute.id
+      },
+      subjectSnapshot: {
+        assignmentId:
+          (
+            await this.repositories.dealMilestoneDisputeAssignments.listByDealMilestoneDisputeId(
+              access.dispute.id
+            )
+          )
+            .sort((left, right) => right.assignedAt.localeCompare(left.assignedAt))[0]
+            ?.id ?? null,
+        disputeId: access.dispute.id,
+        milestonePosition: access.milestone.position
+      },
+      subjectType: "DEAL_MILESTONE_DISPUTE",
+      title: access.milestone.title,
+      totalAmountMinor: access.milestone.amountMinor
+    });
     const now = new Date().toISOString();
     const assignment =
       await this.repositories.dealMilestoneDisputeAssignments.create({
