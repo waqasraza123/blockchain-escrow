@@ -16,6 +16,12 @@ export default async function CaseDetailPage({ params }: CaseDetailPageProps) {
   const { caseId } = await params;
   const { messages } = await getI18n();
   const detail = await getCase(caseId);
+  const statusOptions = [
+    { label: messages.cases.open, value: "OPEN" },
+    { label: messages.cases.inReview, value: "IN_REVIEW" },
+    { label: messages.cases.escalated, value: "ESCALATED" },
+    { label: messages.cases.resolved, value: "RESOLVED" }
+  ] as const;
 
   return (
     <>
@@ -54,7 +60,7 @@ export default async function CaseDetailPage({ params }: CaseDetailPageProps) {
         <Card title={messages.cases.notes}>
           <div className="stack">
             {detail.notes.length === 0 ? (
-              <p className="empty-state">No case notes recorded yet.</p>
+              <p className="empty-state">{messages.cases.noNotes}</p>
             ) : (
               detail.notes.map((note) => (
                 <div className="detail-item" key={note.id}>
@@ -104,10 +110,11 @@ export default async function CaseDetailPage({ params }: CaseDetailPageProps) {
               <div className="field">
                 <label htmlFor="status">{messages.cases.status}</label>
                 <select defaultValue={detail.case.status} id="status" name="status">
-                  <option value="OPEN">Open</option>
-                  <option value="IN_REVIEW">In Review</option>
-                  <option value="ESCALATED">Escalated</option>
-                  <option value="RESOLVED">Resolved</option>
+                  {statusOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
                 </select>
               </div>
               <div className="actions-row">

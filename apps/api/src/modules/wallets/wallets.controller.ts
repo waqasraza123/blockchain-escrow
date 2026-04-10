@@ -1,6 +1,7 @@
-import { Controller, Get, Param, Req } from "@nestjs/common";
+import { Body, Controller, Get, Param, Put, Req } from "@nestjs/common";
 import type {
   ListWalletsResponse,
+  UpsertWalletProfileResponse,
   WalletDetailResponse
 } from "@blockchain-escrow/shared";
 
@@ -24,5 +25,18 @@ export class WalletsController {
     @Req() request: HttpRequestLike
   ): Promise<WalletDetailResponse> {
     return this.walletsService.getWallet(walletId, readRequestMetadata(request));
+  }
+
+  @Put(":walletId/profile")
+  async upsertWalletProfile(
+    @Param("walletId") walletId: string,
+    @Body() body: unknown,
+    @Req() request: HttpRequestLike
+  ): Promise<UpsertWalletProfileResponse> {
+    return this.walletsService.upsertWalletProfile(
+      walletId,
+      body,
+      readRequestMetadata(request)
+    );
   }
 }

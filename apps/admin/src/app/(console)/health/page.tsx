@@ -6,6 +6,11 @@ import { Card, ConsoleHeader, Pill, toneForStatus } from "../ui";
 export default async function HealthPage() {
   const { messages } = await getI18n();
   const health = await getHealth();
+  const serviceTitles = {
+    api: messages.dashboard.api,
+    indexer: messages.dashboard.indexer,
+    worker: messages.dashboard.worker
+  };
 
   return (
     <>
@@ -16,7 +21,10 @@ export default async function HealthPage() {
       />
       <div className="split-grid">
         {[health.api, health.worker, health.indexer].map((service) => (
-          <Card key={service.service} title={service.service.toUpperCase()}>
+          <Card
+            key={service.service}
+            title={serviceTitles[service.service as keyof typeof serviceTitles] ?? service.service}
+          >
             <div className="detail-grid">
               <div className="detail-item">
                 <span>{messages.health.status}</span>

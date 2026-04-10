@@ -44,7 +44,7 @@ export default async function DraftDetailPage(props: DraftDetailPageProps) {
               <strong>{draft.draft.settlementCurrency}</strong>
             </div>
             <div className="detail-item">
-              <span className="muted">Cost center</span>
+              <span className="muted">{messages.drafts.costCenter}</span>
               <strong>{draft.draft.costCenterId ?? messages.common.unassigned}</strong>
             </div>
           </div>
@@ -60,11 +60,11 @@ export default async function DraftDetailPage(props: DraftDetailPageProps) {
       </div>
       <Card title={messages.drafts.versions}>
         {draft.versions.length === 0 ? (
-          <EmptyState body="No version snapshots have been created for this draft yet." />
+          <EmptyState body={messages.drafts.noVersions} />
         ) : (
           <DataTable
             headers={[
-              "Version",
+              messages.finance.version,
               messages.drafts.approval,
               messages.drafts.milestones,
               messages.drafts.actions

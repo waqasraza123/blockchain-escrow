@@ -20,6 +20,7 @@ import type {
   OrganizationMemberRecord,
   OrganizationRecord,
   Release1Repositories,
+  Release12Repositories,
   Release4Repositories
 } from "@blockchain-escrow/db";
 import { hasMinimumOrganizationRole } from "@blockchain-escrow/security";
@@ -55,6 +56,7 @@ import {
 
 import {
   RELEASE1_REPOSITORIES,
+  RELEASE12_REPOSITORIES,
   RELEASE4_REPOSITORIES
 } from "../../infrastructure/tokens";
 import { ApprovalRuntimeService } from "../approvals/approval-runtime.service";
@@ -341,6 +343,8 @@ export class FundingService {
   constructor(
     @Inject(RELEASE1_REPOSITORIES)
     private readonly release1Repositories: Release1Repositories,
+    @Inject(RELEASE12_REPOSITORIES)
+    private readonly release12Repositories: Release12Repositories,
     @Inject(RELEASE4_REPOSITORIES)
     private readonly release4Repositories: Release4Repositories,
     private readonly authenticatedSessionService: AuthenticatedSessionService,
@@ -562,6 +566,11 @@ export class FundingService {
       supersededByFundingTransactionId: null,
       transactionHash
     });
+    await this.markSponsoredFundingRequestSubmitted({
+      dealVersionId: access.version.id,
+      transactionHash,
+      walletId: access.actor.wallet.id
+    });
     const supersededTransactions = await this.supersedePendingFundingTransactions(
       context,
       fundingTransaction,
@@ -597,6 +606,32 @@ export class FundingService {
         ])
       })
     };
+  }
+
+  private async markSponsoredFundingRequestSubmitted(input: {
+    dealVersionId: string;
+    transactionHash: `0x${string}`;
+    walletId: string;
+  }): Promise<void> {
+    const sponsoredRequest =
+      await this.release12Repositories.sponsoredTransactionRequests.findLatestApprovedBySubjectAndWallet(
+        {
+          kind: "FUNDING_TRANSACTION_CREATE",
+          subjectId: input.dealVersionId,
+          walletId: input.walletId
+        }
+      );
+
+    if (!sponsoredRequest) {
+      return;
+    }
+
+    await this.release12Repositories.sponsoredTransactionRequests.update(sponsoredRequest.id, {
+      status: "SUBMITTED",
+      submittedAt: new Date().toISOString(),
+      submittedTransactionHash: input.transactionHash,
+      updatedAt: new Date().toISOString()
+    });
   }
 
   async listFundingTransactions(

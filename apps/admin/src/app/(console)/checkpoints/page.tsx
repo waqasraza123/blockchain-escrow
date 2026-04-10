@@ -16,11 +16,18 @@ import {
 export default async function CheckpointsPage() {
   const { messages } = await getI18n();
   const checkpoints = await listCheckpoints();
+  const subjectTypeOptions = [
+    "DRAFT_DEAL",
+    "ESCROW_AGREEMENT",
+    "DEAL_MILESTONE_DISPUTE",
+    "FUNDING_TRANSACTION",
+    "DEAL_MILESTONE_SETTLEMENT_EXECUTION_TRANSACTION"
+  ] as const;
 
   return (
     <>
       <ConsoleHeader
-        eyebrow="Sanctions"
+        eyebrow={messages.checkpoints.sanctionsEyebrow}
         subtitle={messages.checkpoints.subtitle}
         title={messages.checkpoints.title}
       />
@@ -30,18 +37,20 @@ export default async function CheckpointsPage() {
             <div className="field">
               <label htmlFor="subjectType">{messages.checkpoints.subjectType}</label>
               <select defaultValue="DRAFT_DEAL" id="subjectType" name="subjectType">
-                <option value="DRAFT_DEAL">Draft Deal</option>
-                <option value="ESCROW_AGREEMENT">Escrow Agreement</option>
-                <option value="DEAL_MILESTONE_DISPUTE">Dispute</option>
-                <option value="FUNDING_TRANSACTION">Funding Transaction</option>
-                <option value="DEAL_MILESTONE_SETTLEMENT_EXECUTION_TRANSACTION">
-                  Settlement Execution Transaction
-                </option>
+                {subjectTypeOptions.map((value) => (
+                  <option key={value} value={value}>
+                    {formatCode(value, messages.codes.subjectTypes, messages.common.none)}
+                  </option>
+                ))}
               </select>
             </div>
             <div className="field">
               <label htmlFor="subjectId">{messages.checkpoints.subjectId}</label>
-              <input id="subjectId" name="subjectId" placeholder="entity id or address" />
+              <input
+                id="subjectId"
+                name="subjectId"
+                placeholder={messages.checkpoints.subjectPlaceholder}
+              />
             </div>
             <div className="field">
               <label htmlFor="note">{messages.checkpoints.note}</label>
@@ -56,9 +65,16 @@ export default async function CheckpointsPage() {
         </Card>
         <Card title={messages.checkpoints.currentQueue}>
           {checkpoints.checkpoints.length === 0 ? (
-            <EmptyState body="No sanctions checkpoints have been created." />
+            <EmptyState body={messages.checkpoints.empty} />
           ) : (
-            <DataTable headers={[messages.checkpoints.status, messages.checkpoints.subject, "Created", messages.checkpoints.open]}>
+            <DataTable
+              headers={[
+                messages.checkpoints.status,
+                messages.checkpoints.subject,
+                messages.checkpoints.created,
+                messages.checkpoints.open
+              ]}
+            >
               {checkpoints.checkpoints.slice(0, 12).map((checkpoint) => (
                 <tr key={checkpoint.id}>
                   <td>
@@ -71,7 +87,7 @@ export default async function CheckpointsPage() {
                   <td className="mono">{checkpoint.createdAt}</td>
                   <td>
                     <Link className="link-text" href={`/checkpoints/${checkpoint.id}`}>
-                      {messages.cases.detail}
+                      {messages.checkpoints.detail}
                     </Link>
                   </td>
                 </tr>

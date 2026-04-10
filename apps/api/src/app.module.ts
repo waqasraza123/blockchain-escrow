@@ -12,6 +12,7 @@ import { MilestonesModule } from "./modules/milestones/milestones.module";
 import { OperatorModule } from "./modules/operator/operator.module";
 import { PartnerModule } from "./modules/partner/partner.module";
 import { OrganizationsModule } from "./modules/organizations/organizations.module";
+import { SponsorshipModule } from "./modules/sponsorship/sponsorship.module";
 import { TenantModule } from "./modules/tenant/tenant.module";
 import { TemplatesModule } from "./modules/templates/templates.module";
 import { UsersModule } from "./modules/users/users.module";
@@ -31,6 +32,7 @@ import { WalletsModule } from "./modules/wallets/wallets.module";
     PartnerModule,
     FilesModule,
     OrganizationsModule,
+    SponsorshipModule,
     TenantModule,
     TemplatesModule,
     AuditModule

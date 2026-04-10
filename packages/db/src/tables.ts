@@ -98,6 +98,15 @@ export const release11TableNames = {
 export type Release11TableName =
   (typeof release11TableNames)[keyof typeof release11TableNames];
 
+export const release12TableNames = {
+  gasPolicies: "gas_policies",
+  sponsoredTransactionRequests: "sponsored_transaction_requests",
+  walletProfiles: "wallet_profiles"
+} as const;
+
+export type Release12TableName =
+  (typeof release12TableNames)[keyof typeof release12TableNames];
+
 export const release4TableNames = {
   arbitratorRegistryEntryProjections: "arbitrator_registry_entry_projections",
   chainCursors: "chain_cursors",

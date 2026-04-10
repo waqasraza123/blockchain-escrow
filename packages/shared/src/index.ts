@@ -14,6 +14,7 @@ export * from "./organizations";
 export * from "./operator";
 export * from "./partner";
 export * from "./primitives";
+export * from "./sponsorship";
 export * from "./settlement-execution-reconciliation";
 export * from "./tenant";
 export * from "./templates";

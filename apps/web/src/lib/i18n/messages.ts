@@ -41,7 +41,8 @@ export const enMessages = {
     dashboard: "Dashboard",
     drafts: "Drafts",
     finance: "Finance",
-    integrations: "Integrations"
+    integrations: "Integrations",
+    wallets: "Wallets"
   },
   publicTopbar: {
     platform: "Blockchain Escrow",
@@ -70,6 +71,7 @@ export const enMessages = {
     DISABLED: "Disabled",
     DISPUTED: "Disputed",
     DRAFT: "Draft",
+    EXPIRED: "Expired",
     FAILED: "Failed",
     FINALIZED: "Finalized",
     FRESH: "Fresh",
@@ -96,6 +98,8 @@ export const enMessages = {
   codes: {
     actionKinds: {
       FUNDING_TRANSACTION_CREATE: "Funding transaction",
+      DEAL_MILESTONE_SETTLEMENT_EXECUTION_TRANSACTION_CREATE:
+        "Settlement execution transaction",
       STATEMENT_SNAPSHOT_CREATE: "Statement snapshot"
     },
     approvalKinds: {
@@ -121,6 +125,11 @@ export const enMessages = {
       MEMBER: "Member",
       OWNER: "Owner",
       VIEWER: "Viewer"
+    },
+    sponsoredTransactionKinds: {
+      DEAL_MILESTONE_SETTLEMENT_EXECUTION_TRANSACTION_CREATE:
+        "Settlement execution sponsor",
+      FUNDING_TRANSACTION_CREATE: "Funding sponsor"
     },
     surfaces: {
       ENTRYPOINT: "Entrypoint",
@@ -207,10 +216,14 @@ export const enMessages = {
     storageKey: "Storage key"
   },
   dashboard: {
+    approvedApprovals: "Approved approvals",
     blockedApprovals: "Blocked approvals",
     completedExports: "Completed exports",
     eyebrow: "Release 9",
     fundingTxs: "Funding txs",
+    job: "Job",
+    noRecentApprovals: "No approval requests are currently open or recently updated.",
+    noRecentFinanceExports: "No finance export jobs have been requested yet.",
     openQueue: "Open queue",
     pendingApprovals: "Pending approvals",
     pendingExports: "Pending exports",
@@ -315,9 +328,57 @@ export const enMessages = {
     type: "Type",
     webhookSubscriptions: "Webhook subscriptions"
   },
+  wallets: {
+    actions: "Actions",
+    allowedApprovalPolicyKinds: "Allowed approval kinds",
+    amount: "Amount",
+    approvalNoteTemplate: "Approval note template",
+    createPolicy: "Create gas policy",
+    defaultGasPolicy: "Default gas policy",
+    defaultGasPolicyId: "Default gas policy id",
+    displayName: "Display name",
+    eyebrow: "Release 12",
+    expires: "Expires",
+    gasPolicies: "Gas policies",
+    kind: "Kind",
+    maxAmountMinor: "Max amount minor",
+    maxRequestsPerDay: "Max requests per day",
+    noGasPolicies: "No gas policies are active for this organization.",
+    noSponsoredRequests: "No sponsored transaction requests have been created.",
+    noWallets: "No wallets are linked to this account.",
+    policyActive: "Policy active",
+    policyDescription: "Description",
+    policyKinds: "Allowed kinds",
+    policyLimits: "Limits",
+    policyName: "Policy name",
+    primaryWallet: "Primary wallet",
+    quickApprove: "Quick approve",
+    quickReject: "Quick reject",
+    reason: "Reason",
+    requestRefund: "Request refund",
+    requestRelease: "Request release",
+    requestSponsoredFunding: "Request sponsored funding",
+    requestSponsoredSettlement: "Request sponsored settlement",
+    reviewNoteTemplate: "Review note template",
+    reviewPending: "Review pending",
+    saveProfile: "Save wallet profile",
+    secondaryWallet: "Wallet",
+    sponsorByDefault: "Prefer sponsorship by default",
+    sponsoredRequests: "Sponsored requests",
+    sponsorWindowMinutes: "Sponsor window minutes",
+    status: "Status",
+    subtitle:
+      "Manage wallet defaults, sponsorship budgets, and the request queue for funding and settlement actions.",
+    title: "Wallet convenience",
+    updatePolicy: "Update policy",
+    wallet: "Wallet",
+    walletAddress: "Wallet address",
+    walletProfiles: "Wallet profiles"
+  },
   drafts: {
     actions: "Actions",
     approval: "Approval",
+    costCenter: "Cost center",
     currency: "Currency",
     detailEyebrow: "Draft detail",
     detailSubtitle:
@@ -331,6 +392,7 @@ export const enMessages = {
     milestoneStatement: "Milestone statement",
     milestones: "Milestones",
     milestonesCount: "Milestones",
+    noVersions: "No version snapshots have been created for this draft yet.",
     openVersion: "Open version",
     parties: "Parties",
     pending: "Pending",
@@ -347,13 +409,17 @@ export const enMessages = {
     versionDetailEyebrow: "Version detail",
     versionDetailSubtitle:
       "Funding, approval, and milestone custody state for the selected deal version.",
-    versionMetadata: "Version metadata"
+    versionMetadata: "Version metadata",
+    reviewConsole: "Review console",
+    noMilestones: "This version does not define any milestones."
   },
   draftForms: {
     approvalNote: "Approval note",
+    blockers: "Blockers",
     captureSnapshot: "Capture statement snapshot",
     files: "Files",
     fundingApproval: "Funding approval",
+    fundingReady: "Funding can proceed without opening a new request.",
     fundingPreparation: "Funding preparation",
     predictedAgreement: "Predicted agreement",
     requestFundingApproval: "Request funding approval",
@@ -423,7 +489,8 @@ export const arMessages = {
     dashboard: "لوحة المعلومات",
     drafts: "المسودات",
     finance: "المالية",
-    integrations: "التكاملات"
+    integrations: "التكاملات",
+    wallets: "المحافظ"
   },
   publicTopbar: {
     platform: "Blockchain Escrow",
@@ -453,6 +520,7 @@ export const arMessages = {
     DISABLED: "معطل",
     DISPUTED: "متنازع عليه",
     DRAFT: "مسودة",
+    EXPIRED: "منتهي",
     FAILED: "فشل",
     FINALIZED: "نهائي",
     FRESH: "حديث",
@@ -479,6 +547,8 @@ export const arMessages = {
   codes: {
     actionKinds: {
       FUNDING_TRANSACTION_CREATE: "معاملة التمويل",
+      DEAL_MILESTONE_SETTLEMENT_EXECUTION_TRANSACTION_CREATE:
+        "معاملة تنفيذ التسوية",
       STATEMENT_SNAPSHOT_CREATE: "لقطة كشف"
     },
     approvalKinds: {
@@ -504,6 +574,11 @@ export const arMessages = {
       MEMBER: "عضو",
       OWNER: "مالك",
       VIEWER: "مشاهد"
+    },
+    sponsoredTransactionKinds: {
+      DEAL_MILESTONE_SETTLEMENT_EXECUTION_TRANSACTION_CREATE:
+        "رعاية تنفيذ التسوية",
+      FUNDING_TRANSACTION_CREATE: "رعاية التمويل"
     },
     surfaces: {
       ENTRYPOINT: "نقطة الدخول",
@@ -589,10 +664,14 @@ export const arMessages = {
     storageKey: "مفتاح التخزين"
   },
   dashboard: {
+    approvedApprovals: "الموافقات المعتمدة",
     blockedApprovals: "الموافقات المحجوبة",
     completedExports: "عمليات التصدير المكتملة",
     eyebrow: "الإصدار 9",
     fundingTxs: "معاملات التمويل",
+    job: "المهمة",
+    noRecentApprovals: "لا توجد طلبات موافقة مفتوحة أو محدثة مؤخرًا.",
+    noRecentFinanceExports: "لم يتم طلب أي وظائف تصدير مالي بعد.",
     openQueue: "فتح القائمة",
     pendingApprovals: "الموافقات المعلقة",
     pendingExports: "عمليات التصدير المعلقة",
@@ -697,9 +776,57 @@ export const arMessages = {
     type: "النوع",
     webhookSubscriptions: "اشتراكات Webhook"
   },
+  wallets: {
+    actions: "الإجراءات",
+    allowedApprovalPolicyKinds: "أنواع الموافقات المسموح بها",
+    amount: "المبلغ",
+    approvalNoteTemplate: "قالب ملاحظة الموافقة",
+    createPolicy: "إنشاء سياسة غاز",
+    defaultGasPolicy: "سياسة الغاز الافتراضية",
+    defaultGasPolicyId: "معرف سياسة الغاز الافتراضية",
+    displayName: "الاسم المعروض",
+    eyebrow: "الإصدار 12",
+    expires: "ينتهي",
+    gasPolicies: "سياسات الغاز",
+    kind: "النوع",
+    maxAmountMinor: "الحد الأقصى للمبلغ",
+    maxRequestsPerDay: "الحد الأقصى للطلبات يوميًا",
+    noGasPolicies: "لا توجد سياسات غاز نشطة لهذه المؤسسة.",
+    noSponsoredRequests: "لم يتم إنشاء أي طلبات معاملات مدعومة.",
+    noWallets: "لا توجد محافظ مرتبطة بهذا الحساب.",
+    policyActive: "السياسة نشطة",
+    policyDescription: "الوصف",
+    policyKinds: "الأنواع المسموحة",
+    policyLimits: "الحدود",
+    policyName: "اسم السياسة",
+    primaryWallet: "المحفظة الأساسية",
+    quickApprove: "اعتماد سريع",
+    quickReject: "رفض سريع",
+    reason: "السبب",
+    requestRefund: "طلب استرداد",
+    requestRelease: "طلب إفراج",
+    requestSponsoredFunding: "طلب تمويل مدعوم",
+    requestSponsoredSettlement: "طلب تسوية مدعومة",
+    reviewNoteTemplate: "قالب ملاحظة المراجعة",
+    reviewPending: "المراجعة معلقة",
+    saveProfile: "حفظ ملف المحفظة",
+    secondaryWallet: "محفظة",
+    sponsorByDefault: "تفضيل الرعاية افتراضيًا",
+    sponsoredRequests: "الطلبات المدعومة",
+    sponsorWindowMinutes: "دقائق نافذة الرعاية",
+    status: "الحالة",
+    subtitle:
+      "إدارة افتراضيات المحافظ وميزانيات الرعاية وقائمة طلبات التمويل والتسوية.",
+    title: "راحة المحفظة",
+    updatePolicy: "تحديث السياسة",
+    wallet: "المحفظة",
+    walletAddress: "عنوان المحفظة",
+    walletProfiles: "ملفات المحافظ"
+  },
   drafts: {
     actions: "الإجراءات",
     approval: "الموافقة",
+    costCenter: "مركز التكلفة",
     currency: "العملة",
     detailEyebrow: "تفصيل المسودة",
     detailSubtitle:
@@ -713,6 +840,7 @@ export const arMessages = {
     milestoneStatement: "كشف المرحلة",
     milestones: "المراحل",
     milestonesCount: "عدد المراحل",
+    noVersions: "لم يتم إنشاء أي لقطات نسخ لهذه المسودة بعد.",
     openVersion: "فتح النسخة",
     parties: "الأطراف",
     pending: "معلق",
@@ -729,13 +857,17 @@ export const arMessages = {
     versionDetailEyebrow: "تفصيل النسخة",
     versionDetailSubtitle:
       "التمويل والموافقة وحالة حفظ المراحل للنسخة المحددة من الصفقة.",
-    versionMetadata: "بيانات النسخة"
+    versionMetadata: "بيانات النسخة",
+    reviewConsole: "وحدة المراجعة",
+    noMilestones: "لا تحدد هذه النسخة أي مراحل."
   },
   draftForms: {
     approvalNote: "ملاحظة الموافقة",
+    blockers: "العوائق",
     captureSnapshot: "التقاط لقطة الكشف",
     files: "الملفات",
     fundingApproval: "موافقة التمويل",
+    fundingReady: "يمكن متابعة التمويل دون فتح طلب جديد.",
     fundingPreparation: "تهيئة التمويل",
     predictedAgreement: "الاتفاقية المتوقعة",
     requestFundingApproval: "طلب موافقة التمويل",

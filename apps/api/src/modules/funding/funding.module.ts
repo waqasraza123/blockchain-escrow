@@ -27,6 +27,6 @@ import {
       useFactory: loadFundingChainReader
     }
   ],
-  exports: [FUNDING_RECONCILIATION_CONFIGURATION]
+  exports: [FUNDING_RECONCILIATION_CONFIGURATION, FundingService]
 })
 export class FundingModule {}

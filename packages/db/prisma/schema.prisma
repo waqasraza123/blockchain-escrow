@@ -287,6 +287,18 @@ enum InvoiceStatus {
   VOID
 }
 
+enum SponsoredTransactionKind {
+  FUNDING_TRANSACTION_CREATE
+  DEAL_MILESTONE_SETTLEMENT_EXECUTION_TRANSACTION_CREATE
+}
+
+enum SponsoredTransactionStatus {
+  APPROVED
+  REJECTED
+  SUBMITTED
+  EXPIRED
+}
+
 enum CostCenterStatus {
   ACTIVE
   ARCHIVED
@@ -520,9 +532,11 @@ model User {
   fundingTransactionsSubmitted FundingTransaction[] @relation("FundingTransactionSubmittedByUser")
   templatesCreated           Template[]             @relation("TemplateCreatedByUser")
   financeExportJobsCreated   FinanceExportJob[]     @relation("FinanceExportJobCreatedByUser")
+  gasPoliciesCreated         GasPolicy[]            @relation("GasPolicyCreatedByUser")
   organizationRoles          OrganizationMember[]
   invitesSent                OrganizationInvite[]   @relation("OrganizationInviteInvitedByUser")
   auditLogs                  AuditLog[]             @relation("AuditActorUser")
+  sponsoredTransactionRequests SponsoredTransactionRequest[] @relation("SponsoredTransactionRequestRequestedByUser")
 
   @@map("users")
 }
@@ -541,9 +555,26 @@ model Wallet {
   dealVersionAcceptances DealVersionAcceptance[] @relation("DealVersionAcceptanceSignerWallet")
   dealMilestoneSettlementExecutionTransactionsSubmitted DealMilestoneSettlementExecutionTransaction[] @relation("DealMilestoneSettlementExecutionTransactionSubmittedWallet")
   fundingTransactionsSubmitted FundingTransaction[] @relation("FundingTransactionSubmittedWallet")
+  profile               WalletProfile?
+  sponsoredTransactionRequests SponsoredTransactionRequest[]
 
   @@index([userId], map: "wallets_user_id_idx")
   @@map("wallets")
+}
+
+model WalletProfile {
+  walletId                      String    @id @db.Text
+  displayName                   String    @db.Text
+  defaultOrganizationId         String?   @db.Text
+  defaultGasPolicyId            String?   @db.Text
+  sponsorTransactionsByDefault  Boolean
+  approvalNoteTemplate          String?   @db.Text
+  reviewNoteTemplate            String?   @db.Text
+  createdAt                     DateTime  @db.Timestamptz(3)
+  updatedAt                     DateTime  @db.Timestamptz(3)
+  wallet                        Wallet    @relation(fields: [walletId], references: [id], onDelete: Cascade)
+
+  @@map("wallet_profiles")
 }
 
 model WalletNonce {
@@ -643,10 +674,79 @@ model Organization {
   members                OrganizationMember[]
   invites                OrganizationInvite[]
   auditLogs              AuditLog[]
+  gasPolicies            GasPolicy[]
+  sponsoredTransactionRequests SponsoredTransactionRequest[]
   usageMeterEvents       BillingUsageMeterEvent[]
 
   @@index([createdByUserId], map: "organizations_created_by_user_id_idx")
   @@map("organizations")
+}
+
+model GasPolicy {
+  id                          String                     @id @db.Text
+  organizationId              String                     @db.Text
+  createdByUserId             String                     @db.Text
+  name                        String                     @db.Text
+  description                 String?                    @db.Text
+  active                      Boolean
+  allowedTransactionKinds     SponsoredTransactionKind[]
+  allowedApprovalPolicyKinds  ApprovalPolicyKind[]
+  allowedChainIds             Int[]
+  maxAmountMinor              String?                    @db.Text
+  maxRequestsPerDay           Int
+  sponsorWindowMinutes        Int
+  createdAt                   DateTime                   @db.Timestamptz(3)
+  updatedAt                   DateTime                   @db.Timestamptz(3)
+  organization                Organization               @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdByUser               User                       @relation("GasPolicyCreatedByUser", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  sponsoredTransactionRequests SponsoredTransactionRequest[]
+
+  @@index([organizationId], map: "gas_policies_organization_id_idx")
+  @@index([createdByUserId], map: "gas_policies_created_by_user_id_idx")
+  @@index([active], map: "gas_policies_active_idx")
+  @@map("gas_policies")
+}
+
+model SponsoredTransactionRequest {
+  id                              String                     @id @db.Text
+  organizationId                  String                     @db.Text
+  gasPolicyId                     String?                    @db.Text
+  requestedByUserId               String                     @db.Text
+  walletId                        String                     @db.Text
+  walletAddress                   String                     @db.Text
+  kind                            SponsoredTransactionKind
+  status                          SponsoredTransactionStatus
+  reason                          String?                    @db.Text
+  subjectType                     String                     @db.Text
+  subjectId                       String                     @db.Text
+  draftDealId                     String?                    @db.Text
+  dealVersionId                   String?                    @db.Text
+  dealMilestoneSettlementRequestId String?                  @db.Text
+  chainId                         Int
+  toAddress                       String                     @db.Text
+  data                            String                     @db.Text
+  value                           String                     @db.Text
+  amountMinor                     String                     @db.Text
+  expiresAt                       DateTime                   @db.Timestamptz(3)
+  approvedAt                      DateTime?                  @db.Timestamptz(3)
+  rejectedAt                      DateTime?                  @db.Timestamptz(3)
+  submittedAt                     DateTime?                  @db.Timestamptz(3)
+  submittedTransactionHash        String?                    @db.Text
+  createdAt                       DateTime                   @db.Timestamptz(3)
+  updatedAt                       DateTime                   @db.Timestamptz(3)
+  organization                    Organization               @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  gasPolicy                       GasPolicy?                 @relation(fields: [gasPolicyId], references: [id], onDelete: SetNull)
+  requestedByUser                 User                       @relation("SponsoredTransactionRequestRequestedByUser", fields: [requestedByUserId], references: [id], onDelete: Restrict)
+  wallet                          Wallet                     @relation(fields: [walletId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId], map: "sponsored_transaction_requests_organization_id_idx")
+  @@index([gasPolicyId], map: "sponsored_transaction_requests_gas_policy_id_idx")
+  @@index([requestedByUserId], map: "sponsored_transaction_requests_requested_by_user_id_idx")
+  @@index([walletId], map: "sponsored_transaction_requests_wallet_id_idx")
+  @@index([status], map: "sponsored_transaction_requests_status_idx")
+  @@index([subjectType, subjectId], map: "sponsored_transaction_requests_subject_idx")
+  @@index([createdAt], map: "sponsored_transaction_requests_created_at_idx")
+  @@map("sponsored_transaction_requests")
 }
 
 model CostCenter {

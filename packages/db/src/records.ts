@@ -38,6 +38,8 @@ import type {
   PartnerWebhookEventType,
   PartnerWebhookSubscriptionStatus,
   InvoiceStatus,
+  SponsoredTransactionKind,
+  SponsoredTransactionStatus,
   MilestoneSettlementRequestKind,
   MilestoneSettlementRequestSource,
   ApprovalSubjectType,
@@ -72,6 +74,18 @@ export interface WalletRecord {
   isPrimary: boolean;
   updatedAt: IsoTimestamp;
   userId: EntityId;
+}
+
+export interface WalletProfileRecord {
+  approvalNoteTemplate: string | null;
+  createdAt: IsoTimestamp;
+  defaultGasPolicyId: EntityId | null;
+  defaultOrganizationId: EntityId | null;
+  displayName: string;
+  reviewNoteTemplate: string | null;
+  sponsorTransactionsByDefault: boolean;
+  updatedAt: IsoTimestamp;
+  walletId: EntityId;
 }
 
 export interface WalletNonceRecord {
@@ -498,6 +512,52 @@ export interface TenantInvoiceLineItemRecord {
   metric: BillingUsageMetric | null;
   quantity: string;
   unitPriceMinor: string;
+}
+
+export interface GasPolicyRecord {
+  active: boolean;
+  allowedApprovalPolicyKinds: ApprovalPolicyKind[];
+  allowedChainIds: ChainId[];
+  allowedTransactionKinds: SponsoredTransactionKind[];
+  createdAt: IsoTimestamp;
+  createdByUserId: EntityId;
+  description: string | null;
+  id: EntityId;
+  maxAmountMinor: string | null;
+  maxRequestsPerDay: number;
+  name: string;
+  organizationId: EntityId;
+  sponsorWindowMinutes: number;
+  updatedAt: IsoTimestamp;
+}
+
+export interface SponsoredTransactionRequestRecord {
+  amountMinor: string;
+  approvedAt: IsoTimestamp | null;
+  chainId: ChainId;
+  createdAt: IsoTimestamp;
+  data: HexString;
+  dealMilestoneSettlementRequestId: EntityId | null;
+  dealVersionId: EntityId | null;
+  draftDealId: EntityId | null;
+  expiresAt: IsoTimestamp;
+  gasPolicyId: EntityId | null;
+  id: EntityId;
+  kind: SponsoredTransactionKind;
+  organizationId: EntityId;
+  reason: string | null;
+  requestedByUserId: EntityId;
+  rejectedAt: IsoTimestamp | null;
+  status: SponsoredTransactionStatus;
+  subjectId: EntityId;
+  subjectType: "DEAL_VERSION" | "DEAL_MILESTONE_SETTLEMENT_REQUEST";
+  submittedAt: IsoTimestamp | null;
+  submittedTransactionHash: HexString | null;
+  toAddress: WalletAddress;
+  updatedAt: IsoTimestamp;
+  value: string;
+  walletAddress: WalletAddress;
+  walletId: EntityId;
 }
 
 export interface CounterpartyRecord {

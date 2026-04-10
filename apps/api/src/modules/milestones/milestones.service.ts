@@ -29,6 +29,7 @@ import type {
   OrganizationMemberRecord,
   OrganizationRecord,
   Release1Repositories,
+  Release12Repositories,
   Release4Repositories
 } from "@blockchain-escrow/db";
 import { hasMinimumOrganizationRole } from "@blockchain-escrow/security";
@@ -112,6 +113,7 @@ import { getAddress, verifyTypedData } from "viem";
 
 import {
   RELEASE1_REPOSITORIES,
+  RELEASE12_REPOSITORIES,
   RELEASE4_REPOSITORIES
 } from "../../infrastructure/tokens";
 import { ApprovalRuntimeService } from "../approvals/approval-runtime.service";
@@ -342,6 +344,8 @@ export class MilestonesService {
   constructor(
     @Inject(RELEASE1_REPOSITORIES)
     private readonly repositories: Release1Repositories,
+    @Inject(RELEASE12_REPOSITORIES)
+    private readonly release12Repositories: Release12Repositories,
     @Inject(RELEASE4_REPOSITORIES)
     private readonly release4Repositories: Release4Repositories,
     private readonly authenticatedSessionService: AuthenticatedSessionService,
@@ -727,6 +731,11 @@ export class MilestonesService {
         supersededByDealMilestoneSettlementExecutionTransactionId: null,
         transactionHash
       });
+    await this.markSponsoredSettlementRequestSubmitted({
+      dealMilestoneSettlementRequestId: settlementRequest.id,
+      transactionHash,
+      walletId: access.actor.wallet.id
+    });
     const existingTransactions =
       await this.repositories.dealMilestoneSettlementExecutionTransactions.listByDealMilestoneSettlementRequestId(
         settlementRequest.id
@@ -797,6 +806,32 @@ export class MilestonesService {
         now
       )
     };
+  }
+
+  private async markSponsoredSettlementRequestSubmitted(input: {
+    dealMilestoneSettlementRequestId: string;
+    transactionHash: `0x${string}`;
+    walletId: string;
+  }): Promise<void> {
+    const sponsoredRequest =
+      await this.release12Repositories.sponsoredTransactionRequests.findLatestApprovedBySubjectAndWallet(
+        {
+          kind: "DEAL_MILESTONE_SETTLEMENT_EXECUTION_TRANSACTION_CREATE",
+          subjectId: input.dealMilestoneSettlementRequestId,
+          walletId: input.walletId
+        }
+      );
+
+    if (!sponsoredRequest) {
+      return;
+    }
+
+    await this.release12Repositories.sponsoredTransactionRequests.update(sponsoredRequest.id, {
+      status: "SUBMITTED",
+      submittedAt: new Date().toISOString(),
+      submittedTransactionHash: input.transactionHash,
+      updatedAt: new Date().toISOString()
+    });
   }
 
   async createMilestoneSubmission(

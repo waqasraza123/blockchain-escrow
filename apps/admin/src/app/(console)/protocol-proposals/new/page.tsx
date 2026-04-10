@@ -79,7 +79,7 @@ async function NewProtocolProposalPageContent(props: { examplePlaceholder: strin
             />
           </div>
           <p className="muted">
-            Example payloads: {Object.entries(exampleInputByAction)
+            {messages.protocol.examplePayloads}: {Object.entries(exampleInputByAction)
               .map(([key, value]) => `${key} ${value}`)
               .join(" | ")}
           </p>

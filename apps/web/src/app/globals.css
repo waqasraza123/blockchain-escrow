@@ -322,6 +322,15 @@ textarea {
   justify-content: flex-start;
 }
 
+.stack {
+  display: grid;
+  gap: 14px;
+}
+
+.stack.compact {
+  gap: 4px;
+}
+
 .inline-list {
   display: flex;
   flex-wrap: wrap;
@@ -335,6 +344,19 @@ textarea {
 .form-stack {
   display: grid;
   gap: 10px;
+}
+
+.form-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.form-grid.columns-2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.form-grid.columns-3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .field {
@@ -360,6 +382,23 @@ textarea {
   color: var(--muted);
   margin: 0;
   text-align: start;
+}
+
+.checkbox-row {
+  align-items: center;
+  display: inline-flex;
+  gap: 10px;
+}
+
+.checkbox-row input {
+  accent-color: var(--accent);
+}
+
+.inset-card {
+  background: rgba(255, 255, 255, 0.38);
+  border-color: rgba(23, 23, 23, 0.05);
+  box-shadow: none;
+  padding: 18px;
 }
 
 .code-block {
@@ -486,7 +525,9 @@ textarea {
   }
 
   .split-grid,
-  .triptych-grid {
+  .triptych-grid,
+  .form-grid.columns-2,
+  .form-grid.columns-3 {
     grid-template-columns: 1fr;
   }
 

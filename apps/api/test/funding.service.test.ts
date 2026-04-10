@@ -21,6 +21,7 @@ import {
   FakeSessionTokenService,
   seedAuthenticatedActor
 } from "./helpers/auth-test-context";
+import { createRelease12RepositoriesStub } from "./helpers/release12-test-stub";
 import { InMemoryRelease1Repositories } from "./helpers/in-memory-release1-repositories";
 import { InMemoryRelease4Repositories } from "./helpers/in-memory-release4-repositories";
 import { InMemoryRelease9Repositories } from "./helpers/in-memory-release9-repositories";
@@ -142,6 +143,7 @@ function createServices(
   const release1Repositories = new InMemoryRelease1Repositories();
   const release4Repositories = new InMemoryRelease4Repositories();
   const release9Repositories = new InMemoryRelease9Repositories();
+  const { release12Repositories, sponsoredRequestStore } = createRelease12RepositoriesStub();
   const sessionTokenService = new FakeSessionTokenService();
   const authenticatedSessionService = new AuthenticatedSessionService(
     release1Repositories,
@@ -163,6 +165,7 @@ function createServices(
     ),
     fundingService: new FundingService(
       release1Repositories,
+      release12Repositories,
       release4Repositories,
       authenticatedSessionService,
       fundingReconciliationConfiguration,
@@ -171,8 +174,10 @@ function createServices(
       approvalRuntimeService
     ),
     release1Repositories,
+    release12Repositories,
     release4Repositories,
     release9Repositories,
+    sponsoredRequestStore,
     sessionTokenService
   };
 }
@@ -1345,4 +1350,68 @@ test("funding service marks indexed successful tracked transactions without matc
   assert.equal(listed.fundingTransactions[0]?.stalePending, false);
   assert.equal(listed.fundingTransactions[0]?.stalePendingAt, null);
   assert.equal(listed.fundingTransactions[0]?.stalePendingEvaluation, null);
+});
+
+test("funding service marks approved sponsored funding requests as submitted", async () => {
+  const seeded = await seedFundingScenario();
+
+  await createCounterpartyAcceptance(seeded);
+
+  await seeded.services.release12Repositories.sponsoredTransactionRequests.create({
+    amountMinor: "3500000",
+    approvedAt: "2026-04-07T00:00:00.000Z",
+    chainId: 84532,
+    createdAt: "2026-04-07T00:00:00.000Z",
+    data: "0x1234",
+    dealMilestoneSettlementRequestId: null,
+    dealVersionId: seeded.version.version.id,
+    draftDealId: seeded.draft.draft.id,
+    expiresAt: "2026-04-07T01:00:00.000Z",
+    gasPolicyId: "gas-policy-1",
+    id: "sponsored-funding-request-1",
+    kind: "FUNDING_TRANSACTION_CREATE",
+    organizationId: "org-1",
+    reason: null,
+    requestedByUserId: seeded.actor.userId,
+    rejectedAt: null,
+    status: "APPROVED",
+    subjectId: seeded.version.version.id,
+    subjectType: "DEAL_VERSION",
+    submittedAt: null,
+    submittedTransactionHash: null,
+    toAddress: seeded.manifest.contracts.EscrowFactory!.toLowerCase() as `0x${string}`,
+    updatedAt: "2026-04-07T00:00:00.000Z",
+    value: "0",
+    walletAddress: seeded.actor.walletAddress,
+    walletId: seeded.actor.walletId
+  });
+
+  const created = await seeded.services.fundingService.createFundingTransaction(
+    {
+      dealVersionId: seeded.version.version.id,
+      draftDealId: seeded.draft.draft.id,
+      organizationId: "org-1"
+    },
+    {
+      transactionHash:
+        "0x6666666666666666666666666666666666666666666666666666666666666666"
+    },
+    {
+      cookieHeader: seeded.actor.cookieHeader,
+      ipAddress: "127.0.0.1",
+      userAgent: "test-agent"
+    }
+  );
+
+  const sponsoredRequest =
+    await seeded.services.release12Repositories.sponsoredTransactionRequests.findById(
+      "sponsored-funding-request-1"
+    );
+
+  assert.equal(sponsoredRequest?.status, "SUBMITTED");
+  assert.equal(
+    sponsoredRequest?.submittedTransactionHash,
+    created.fundingTransaction.transactionHash
+  );
+  assert.notEqual(sponsoredRequest?.submittedAt, null);
 });

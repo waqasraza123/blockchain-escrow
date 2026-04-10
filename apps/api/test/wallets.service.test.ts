@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
+import type { Release12Repositories, WalletProfileRecord } from "@blockchain-escrow/db";
 import { AuthenticatedSessionService } from "../src/modules/auth/authenticated-session.service";
 import { WalletsService } from "../src/modules/wallets/wallets.service";
 import {
@@ -13,16 +14,42 @@ import { InMemoryRelease1Repositories } from "./helpers/in-memory-release1-repos
 function createWalletsService() {
   const repositories = new InMemoryRelease1Repositories();
   const sessionTokenService = new FakeSessionTokenService();
+  const walletProfiles: WalletProfileRecord[] = [];
   const authenticatedSessionService = new AuthenticatedSessionService(
     repositories,
     authConfiguration,
     sessionTokenService
   );
+  const release12Repositories = {
+    walletProfiles: {
+      findByWalletId: async (walletId: string) =>
+        walletProfiles.find((profile) => profile.walletId === walletId) ?? null,
+      listByWalletIds: async (walletIds: string[]) =>
+        walletProfiles.filter((profile) => walletIds.includes(profile.walletId)),
+      upsert: async (record: WalletProfileRecord) => {
+        const existingIndex = walletProfiles.findIndex(
+          (profile) => profile.walletId === record.walletId
+        );
+
+        if (existingIndex >= 0) {
+          walletProfiles[existingIndex] = record;
+        } else {
+          walletProfiles.push(record);
+        }
+
+        return record;
+      }
+    }
+  } as Pick<Release12Repositories, "walletProfiles"> as Release12Repositories;
 
   return {
     repositories,
     sessionTokenService,
-    walletsService: new WalletsService(repositories, authenticatedSessionService)
+    walletsService: new WalletsService(
+      repositories,
+      release12Repositories,
+      authenticatedSessionService
+    )
   };
 }
 

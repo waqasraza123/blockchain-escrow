@@ -6,11 +6,18 @@ import {
   getDraft,
   getFundingPreparation,
   getSettlementStatement,
+  listGasPolicies,
+  listMilestoneWorkflows,
+  listWallets,
   previewApprovalRequirement
 } from "../../../../../../../../lib/api";
 import { formatCode } from "../../../../../../../../lib/i18n/format";
 import { getI18n } from "../../../../../../../../lib/i18n/server";
 import {
+  createMilestoneReviewAction,
+  createMilestoneSettlementRequestAction,
+  createSponsoredFundingRequestAction,
+  createSponsoredSettlementExecutionRequestAction,
   createStatementSnapshotAction,
   requestFundingApprovalAction,
   requestStatementSnapshotApprovalAction
@@ -46,25 +53,41 @@ export default async function VersionDetailPage(props: VersionDetailPageProps) {
     .reduce((total, milestone) => total + BigInt(milestone.amountMinor), 0n)
     .toString();
 
-  const [fundingPreparation, settlementStatement, currentApproval, snapshotApproval] =
-    await Promise.all([
-      getFundingPreparation({ dealVersionId, draftDealId, organizationId }),
-      getSettlementStatement({ dealVersionId, draftDealId, organizationId }),
-      getCurrentApproval({ dealVersionId, draftDealId, organizationId }),
-      previewApprovalRequirement(organizationId, {
-        actionKind: "STATEMENT_SNAPSHOT_CREATE",
-        costCenterId: draft.draft.costCenterId ?? undefined,
-        dealVersionId,
-        draftDealId,
-        settlementCurrency: version.settlementCurrency,
-        subjectId: dealVersionId,
-        subjectLabel: version.title,
-        subjectType: "DEAL_VERSION",
-        title: version.title,
-        totalAmountMinor
-      })
-    ]);
+  const [
+    fundingPreparation,
+    settlementStatement,
+    currentApproval,
+    milestoneWorkflows,
+    wallets,
+    gasPolicies,
+    snapshotApproval
+  ] = await Promise.all([
+    getFundingPreparation({ dealVersionId, draftDealId, organizationId }),
+    getSettlementStatement({ dealVersionId, draftDealId, organizationId }),
+    getCurrentApproval({ dealVersionId, draftDealId, organizationId }),
+    listMilestoneWorkflows({ dealVersionId, draftDealId, organizationId }),
+    listWallets(),
+    listGasPolicies(organizationId),
+    previewApprovalRequirement(organizationId, {
+      actionKind: "STATEMENT_SNAPSHOT_CREATE",
+      costCenterId: draft.draft.costCenterId ?? undefined,
+      dealVersionId,
+      draftDealId,
+      settlementCurrency: version.settlementCurrency,
+      subjectId: dealVersionId,
+      subjectLabel: version.title,
+      subjectType: "DEAL_VERSION",
+      title: version.title,
+      totalAmountMinor
+    })
+  ]);
   const returnPath = `/orgs/${organizationId}/drafts/${draftDealId}/versions/${dealVersionId}`;
+  const primaryWallet =
+    wallets.wallets.find((wallet) => wallet.isPrimary) ?? wallets.wallets[0] ?? null;
+  const defaultGasPolicyId =
+    primaryWallet?.profile?.defaultGasPolicyId ??
+    gasPolicies.gasPolicies.find((gasPolicy) => gasPolicy.active)?.id ??
+    "";
 
   return (
     <>
@@ -95,14 +118,18 @@ export default async function VersionDetailPage(props: VersionDetailPageProps) {
               <input name="returnPath" type="hidden" value={returnPath} />
               <div className="field">
                 <label htmlFor="funding-approval-note">{messages.draftForms.approvalNote}</label>
-                <textarea id="funding-approval-note" name="note" />
+                <textarea
+                  defaultValue={primaryWallet?.profile?.approvalNoteTemplate ?? ""}
+                  id="funding-approval-note"
+                  name="note"
+                />
               </div>
               <button className="button" type="submit">
                 {messages.draftForms.requestFundingApproval}
               </button>
             </form>
           ) : (
-            <p className="empty-state">Funding can proceed without opening a new request.</p>
+            <p className="empty-state">{messages.draftForms.fundingReady}</p>
           )}
         </Card>
         <Card title={messages.draftForms.fundingPreparation}>
@@ -126,10 +153,22 @@ export default async function VersionDetailPage(props: VersionDetailPageProps) {
               </strong>
             </div>
             <div className="detail-item">
-              <span className="muted">Blockers</span>
+              <span className="muted">{messages.draftForms.blockers}</span>
               <strong>{fundingPreparation.preparation.blockers.length}</strong>
             </div>
           </div>
+          {fundingPreparation.preparation.ready && defaultGasPolicyId ? (
+            <form action={createSponsoredFundingRequestAction} className="actions-row">
+              <input name="organizationId" type="hidden" value={organizationId} />
+              <input name="draftDealId" type="hidden" value={draftDealId} />
+              <input name="dealVersionId" type="hidden" value={dealVersionId} />
+              <input name="gasPolicyId" type="hidden" value={defaultGasPolicyId} />
+              <input name="returnPath" type="hidden" value={returnPath} />
+              <button className="button-ghost" type="submit">
+                {messages.wallets.requestSponsoredFunding}
+              </button>
+            </form>
+          ) : null}
         </Card>
         <Card title={messages.drafts.statementSnapshot}>
           <div className="status-callout">
@@ -156,17 +195,17 @@ export default async function VersionDetailPage(props: VersionDetailPageProps) {
                 type="hidden"
                 value={settlementStatement.statement.totalAmountMinor}
               />
-              <input
-                name="costCenterId"
-                type="hidden"
-                value={draft.draft.costCenterId ?? ""}
-              />
+              <input name="costCenterId" type="hidden" value={draft.draft.costCenterId ?? ""} />
               <input name="returnPath" type="hidden" value={returnPath} />
               <div className="field">
                 <label htmlFor="snapshot-approval-note">
                   {messages.draftForms.snapshotApprovalNote}
                 </label>
-                <textarea id="snapshot-approval-note" name="note" />
+                <textarea
+                  defaultValue={primaryWallet?.profile?.approvalNoteTemplate ?? ""}
+                  id="snapshot-approval-note"
+                  name="note"
+                />
               </div>
               <button className="button" type="submit">
                 {messages.draftForms.requestSnapshotApproval}
@@ -216,23 +255,170 @@ export default async function VersionDetailPage(props: VersionDetailPageProps) {
         >
           <div className="detail-grid">
             <div className="detail-item">
-              <span className="muted">Version</span>
+              <span className="muted">{messages.finance.version}</span>
               <strong>v{version.versionNumber}</strong>
             </div>
             <div className="detail-item">
-              <span className="muted">Files</span>
+              <span className="muted">{messages.draftForms.files}</span>
               <strong>{version.files.length}</strong>
             </div>
             <div className="detail-item">
-              <span className="muted">Milestones</span>
+              <span className="muted">{messages.drafts.milestones}</span>
               <strong>{version.milestones.length}</strong>
             </div>
           </div>
         </Card>
       </div>
+      <Card title={messages.drafts.reviewConsole}>
+        {milestoneWorkflows.milestones.length === 0 ? (
+          <EmptyState body={messages.drafts.noMilestones} />
+        ) : (
+          <div className="stack">
+            {milestoneWorkflows.milestones.map((workflow) => {
+              const latestSubmission = workflow.submissions[0] ?? null;
+              const latestReview = latestSubmission?.review ?? null;
+              const latestSettlementRequest = latestReview?.settlementRequest ?? null;
+
+              return (
+                <div className="workspace-card inset-card" key={workflow.milestone.id}>
+                  <div className="card-header">
+                    <h2>{workflow.milestone.title}</h2>
+                    <Pill
+                      tone={toneForStatus(workflow.state)}
+                      value={formatCode(workflow.state, messages.statuses, messages.common.none)}
+                    />
+                  </div>
+                  <div className="detail-grid">
+                    <div className="detail-item">
+                      <span className="muted">{messages.hosted.reviewAmount}</span>
+                      <strong>{workflow.milestone.amountMinor}</strong>
+                    </div>
+                    <div className="detail-item">
+                      <span className="muted">{messages.drafts.latestSubmission}</span>
+                      <strong>{latestSubmission?.submittedAt ?? messages.common.notSubmitted}</strong>
+                    </div>
+                    <div className="detail-item">
+                      <span className="muted">{messages.approvals.status}</span>
+                      <strong>
+                        {latestReview
+                          ? formatCode(latestReview.decision, messages.statuses, messages.common.none)
+                          : messages.wallets.reviewPending}
+                      </strong>
+                    </div>
+                  </div>
+                  {latestSubmission && !latestReview ? (
+                    <form action={createMilestoneReviewAction} className="form-stack">
+                      <input name="organizationId" type="hidden" value={organizationId} />
+                      <input name="draftDealId" type="hidden" value={draftDealId} />
+                      <input name="dealVersionId" type="hidden" value={dealVersionId} />
+                      <input
+                        name="dealVersionMilestoneId"
+                        type="hidden"
+                        value={workflow.milestone.id}
+                      />
+                      <input
+                        name="dealMilestoneSubmissionId"
+                        type="hidden"
+                        value={latestSubmission.id}
+                      />
+                      <input name="returnPath" type="hidden" value={returnPath} />
+                      <div className="field">
+                        <label htmlFor={`review-note-${workflow.milestone.id}`}>
+                          {messages.wallets.reviewNoteTemplate}
+                        </label>
+                        <textarea
+                          defaultValue={primaryWallet?.profile?.reviewNoteTemplate ?? ""}
+                          id={`review-note-${workflow.milestone.id}`}
+                          name="statementMarkdown"
+                        />
+                      </div>
+                      <div className="inline-actions">
+                        <button className="button" name="decision" type="submit" value="APPROVED">
+                          {messages.wallets.quickApprove}
+                        </button>
+                        <button
+                          className="button-ghost"
+                          name="decision"
+                          type="submit"
+                          value="REJECTED"
+                        >
+                          {messages.wallets.quickReject}
+                        </button>
+                      </div>
+                    </form>
+                  ) : null}
+                  {latestReview && !latestSettlementRequest ? (
+                    <form action={createMilestoneSettlementRequestAction} className="form-stack">
+                      <input name="organizationId" type="hidden" value={organizationId} />
+                      <input name="draftDealId" type="hidden" value={draftDealId} />
+                      <input name="dealVersionId" type="hidden" value={dealVersionId} />
+                      <input
+                        name="dealVersionMilestoneId"
+                        type="hidden"
+                        value={workflow.milestone.id}
+                      />
+                      <input
+                        name="dealMilestoneSubmissionId"
+                        type="hidden"
+                        value={latestSubmission?.id ?? ""}
+                      />
+                      <input
+                        name="dealMilestoneReviewId"
+                        type="hidden"
+                        value={latestReview.id}
+                      />
+                      <input name="returnPath" type="hidden" value={returnPath} />
+                      <div className="field">
+                        <label htmlFor={`settlement-note-${workflow.milestone.id}`}>
+                          {messages.wallets.reviewNoteTemplate}
+                        </label>
+                        <textarea
+                          defaultValue={primaryWallet?.profile?.reviewNoteTemplate ?? ""}
+                          id={`settlement-note-${workflow.milestone.id}`}
+                          name="statementMarkdown"
+                        />
+                      </div>
+                      <button
+                        className="button"
+                        name="kind"
+                        type="submit"
+                        value={latestReview.decision === "APPROVED" ? "RELEASE" : "REFUND"}
+                      >
+                        {latestReview.decision === "APPROVED"
+                          ? messages.wallets.requestRelease
+                          : messages.wallets.requestRefund}
+                      </button>
+                    </form>
+                  ) : null}
+                  {latestSettlementRequest && defaultGasPolicyId ? (
+                    <form
+                      action={createSponsoredSettlementExecutionRequestAction}
+                      className="actions-row"
+                    >
+                      <input name="organizationId" type="hidden" value={organizationId} />
+                      <input name="draftDealId" type="hidden" value={draftDealId} />
+                      <input name="dealVersionId" type="hidden" value={dealVersionId} />
+                      <input
+                        name="dealMilestoneSettlementRequestId"
+                        type="hidden"
+                        value={latestSettlementRequest.id}
+                      />
+                      <input name="gasPolicyId" type="hidden" value={defaultGasPolicyId} />
+                      <input name="returnPath" type="hidden" value={returnPath} />
+                      <button className="button-ghost" type="submit">
+                        {messages.wallets.requestSponsoredSettlement}
+                      </button>
+                    </form>
+                  ) : null}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </Card>
       <Card title={messages.drafts.milestones}>
         {settlementStatement.milestones.length === 0 ? (
-          <EmptyState body="This version does not define any milestones." />
+          <EmptyState body={messages.drafts.noMilestones} />
         ) : (
           <DataTable
             headers={[

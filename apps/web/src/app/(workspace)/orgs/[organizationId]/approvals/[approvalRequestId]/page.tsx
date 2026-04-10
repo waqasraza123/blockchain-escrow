@@ -1,5 +1,5 @@
 import { decideApprovalStepAction } from "../../../../actions";
-import { getApprovalRequest } from "../../../../../../lib/api";
+import { getApprovalRequest, listWallets } from "../../../../../../lib/api";
 import { formatCode } from "../../../../../../lib/i18n/format";
 import { getI18n } from "../../../../../../lib/i18n/server";
 import {
@@ -18,9 +18,14 @@ type ApprovalDetailPageProps = {
 export default async function ApprovalDetailPage(props: ApprovalDetailPageProps) {
   const { approvalRequestId, organizationId } = await props.params;
   const { messages } = await getI18n();
-  const detail = await getApprovalRequest(organizationId, approvalRequestId);
+  const [detail, wallets] = await Promise.all([
+    getApprovalRequest(organizationId, approvalRequestId),
+    listWallets()
+  ]);
   const request = detail.approvalRequest;
   const pendingStep = request.steps.find((step) => step.status === "PENDING") ?? null;
+  const primaryWallet =
+    wallets.wallets.find((wallet) => wallet.isPrimary) ?? wallets.wallets[0] ?? null;
   const returnPath = `/orgs/${organizationId}/approvals/${approvalRequestId}`;
 
   return (
@@ -35,7 +40,9 @@ export default async function ApprovalDetailPage(props: ApprovalDetailPageProps)
           <div className="detail-grid">
             <div className="detail-item">
               <span className="muted">{messages.approvals.summaryAction}</span>
-              <strong>{formatCode(request.kind, messages.codes.actionKinds, messages.common.none)}</strong>
+              <strong>
+                {formatCode(request.kind, messages.codes.actionKinds, messages.common.none)}
+              </strong>
             </div>
             <div className="detail-item">
               <span className="muted">{messages.approvals.summaryStatus}</span>
@@ -59,7 +66,11 @@ export default async function ApprovalDetailPage(props: ApprovalDetailPageProps)
               <input name="returnPath" type="hidden" value={returnPath} />
               <div className="field">
                 <label htmlFor="decision-note">{messages.approvals.decisionNote}</label>
-                <textarea id="decision-note" name="note" />
+                <textarea
+                  defaultValue={primaryWallet?.profile?.approvalNoteTemplate ?? ""}
+                  id="decision-note"
+                  name="note"
+                />
               </div>
               <div className="inline-actions">
                 <button className="button" name="decision" type="submit" value="APPROVED">
@@ -89,7 +100,7 @@ export default async function ApprovalDetailPage(props: ApprovalDetailPageProps)
             <tr key={step.id}>
               <td>{step.position}</td>
               <td>{step.label}</td>
-              <td>{step.requiredRole}</td>
+              <td>{formatCode(step.requiredRole, messages.codes.roles, messages.common.none)}</td>
               <td>
                 <Pill
                   tone={toneForStatus(step.status)}

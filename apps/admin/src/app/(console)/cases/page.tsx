@@ -16,6 +16,14 @@ import {
 export default async function CasesPage() {
   const { messages } = await getI18n();
   const cases = await listCases();
+  const subjectTypeOptions = [
+    "DRAFT_DEAL",
+    "ESCROW_AGREEMENT",
+    "DEAL_MILESTONE_DISPUTE",
+    "FUNDING_TRANSACTION",
+    "DEAL_MILESTONE_SETTLEMENT_EXECUTION_TRANSACTION"
+  ] as const;
+  const severityOptions = ["LOW", "MEDIUM", "HIGH", "CRITICAL"] as const;
 
   return (
     <>
@@ -31,45 +39,60 @@ export default async function CasesPage() {
               <div className="field">
                 <label htmlFor="subjectType">{messages.cases.subjectType}</label>
                 <select defaultValue="DRAFT_DEAL" id="subjectType" name="subjectType">
-                  <option value="DRAFT_DEAL">Draft Deal</option>
-                  <option value="ESCROW_AGREEMENT">Escrow Agreement</option>
-                  <option value="DEAL_MILESTONE_DISPUTE">Dispute</option>
-                  <option value="FUNDING_TRANSACTION">Funding Transaction</option>
-                  <option value="DEAL_MILESTONE_SETTLEMENT_EXECUTION_TRANSACTION">
-                    Settlement Execution Transaction
-                  </option>
+                  {subjectTypeOptions.map((value) => (
+                    <option key={value} value={value}>
+                      {formatCode(value, messages.codes.subjectTypes, messages.common.none)}
+                    </option>
+                  ))}
                 </select>
               </div>
               <div className="field">
                 <label htmlFor="severity">{messages.cases.severity}</label>
                 <select defaultValue="HIGH" id="severity" name="severity">
-                  <option value="LOW">Low</option>
-                  <option value="MEDIUM">Medium</option>
-                  <option value="HIGH">High</option>
-                  <option value="CRITICAL">Critical</option>
+                  {severityOptions.map((value) => (
+                    <option key={value} value={value}>
+                      {formatCode(value, messages.statuses, messages.common.none)}
+                    </option>
+                  ))}
                 </select>
               </div>
             </div>
             <div className="field">
               <label htmlFor="subjectId">{messages.cases.subjectId}</label>
-              <input id="subjectId" name="subjectId" placeholder="entity id or address" />
+              <input
+                id="subjectId"
+                name="subjectId"
+                placeholder={messages.cases.entityPlaceholder}
+              />
             </div>
             <div className="field">
               <label htmlFor="title">{messages.cases.titleLabel}</label>
-              <input id="title" name="title" placeholder="Short case title" />
+              <input
+                id="title"
+                name="title"
+                placeholder={messages.cases.shortTitlePlaceholder}
+              />
             </div>
             <div className="field">
               <label htmlFor="summary">{messages.cases.summary}</label>
-              <textarea id="summary" name="summary" placeholder="Describe the issue" />
+              <textarea
+                id="summary"
+                name="summary"
+                placeholder={messages.cases.summaryPlaceholder}
+              />
             </div>
             <div className="form-grid columns-2">
               <div className="field">
-                <label htmlFor="alertId">Linked alert id</label>
-                <input id="alertId" name="alertId" placeholder="optional" />
+                <label htmlFor="alertId">{messages.cases.alertId}</label>
+                <input id="alertId" name="alertId" placeholder={messages.cases.optional} />
               </div>
               <div className="field">
                 <label htmlFor="checkpointId">{messages.cases.checkpointId}</label>
-                <input id="checkpointId" name="checkpointId" placeholder="optional" />
+                <input
+                  id="checkpointId"
+                  name="checkpointId"
+                  placeholder={messages.cases.optional}
+                />
               </div>
             </div>
             <div className="actions-row">
@@ -81,9 +104,17 @@ export default async function CasesPage() {
         </Card>
         <Card title={messages.cases.currentCases}>
           {cases.cases.length === 0 ? (
-            <EmptyState body="No compliance cases exist yet." />
+            <EmptyState body={messages.cases.empty} />
           ) : (
-            <DataTable headers={[messages.cases.titleLabel, messages.cases.status, messages.cases.severity, "Updated", messages.cases.open]}>
+            <DataTable
+              headers={[
+                messages.cases.titleLabel,
+                messages.cases.status,
+                messages.cases.severity,
+                messages.cases.updated,
+                messages.cases.open
+              ]}
+            >
               {cases.cases.map((entry) => (
                 <tr key={entry.id}>
                   <td>{entry.title}</td>

@@ -51,6 +51,7 @@ import type {
   FinanceExportJobRecord,
   FileRecord,
   FundingTransactionRecord,
+  GasPolicyRecord,
   IndexedBlockRecord,
   IndexedContractEventRecord,
   IndexedTransactionRecord,
@@ -74,6 +75,7 @@ import type {
   ProtocolConfigStateRecord,
   ProtocolProposalDraftRecord,
   SessionRecord,
+  SponsoredTransactionRequestRecord,
   StatementSnapshotRecord,
   TenantBillingPlanAssignmentRecord,
   TenantDomainRecord,
@@ -83,6 +85,7 @@ import type {
   TokenAllowlistEntryRecord,
   UserRecord,
   WalletNonceRecord,
+  WalletProfileRecord,
   WalletRecord
 } from "./records";
 
@@ -96,6 +99,12 @@ export interface WalletRepository {
   findById(id: EntityId): Promise<WalletRecord | null>;
   findByAddress(address: WalletAddress): Promise<WalletRecord | null>;
   listByUserId(userId: EntityId): Promise<WalletRecord[]>;
+}
+
+export interface WalletProfileRepository {
+  findByWalletId(walletId: EntityId): Promise<WalletProfileRecord | null>;
+  listByWalletIds(walletIds: EntityId[]): Promise<WalletProfileRecord[]>;
+  upsert(record: WalletProfileRecord): Promise<WalletProfileRecord>;
 }
 
 export interface WalletNonceRepository {
@@ -498,6 +507,48 @@ export interface TenantInvoiceRepository {
 export interface TenantInvoiceLineItemRepository {
   create(record: TenantInvoiceLineItemRecord): Promise<TenantInvoiceLineItemRecord>;
   listByInvoiceId(invoiceId: EntityId): Promise<TenantInvoiceLineItemRecord[]>;
+}
+
+export interface GasPolicyRepository {
+  create(record: GasPolicyRecord): Promise<GasPolicyRecord>;
+  findById(id: EntityId): Promise<GasPolicyRecord | null>;
+  listByOrganizationId(organizationId: EntityId): Promise<GasPolicyRecord[]>;
+  listActiveByOrganizationId(organizationId: EntityId): Promise<GasPolicyRecord[]>;
+  update(
+    id: EntityId,
+    updates: Partial<
+      Omit<GasPolicyRecord, "id" | "organizationId" | "createdAt" | "createdByUserId">
+    >
+  ): Promise<GasPolicyRecord>;
+}
+
+export interface SponsoredTransactionRequestRepository {
+  countApprovedCreatedSince(input: {
+    gasPolicyId: EntityId;
+    organizationId: EntityId;
+    since: IsoTimestamp;
+  }): Promise<number>;
+  create(
+    record: SponsoredTransactionRequestRecord
+  ): Promise<SponsoredTransactionRequestRecord>;
+  findById(id: EntityId): Promise<SponsoredTransactionRequestRecord | null>;
+  findLatestApprovedBySubjectAndWallet(input: {
+    kind: SponsoredTransactionRequestRecord["kind"];
+    subjectId: EntityId;
+    walletId: EntityId;
+  }): Promise<SponsoredTransactionRequestRecord | null>;
+  listByOrganizationId(
+    organizationId: EntityId
+  ): Promise<SponsoredTransactionRequestRecord[]>;
+  update(
+    id: EntityId,
+    updates: Partial<
+      Omit<
+        SponsoredTransactionRequestRecord,
+        "id" | "organizationId" | "createdAt" | "requestedByUserId" | "walletId"
+      >
+    >
+  ): Promise<SponsoredTransactionRequestRecord>;
 }
 
 export interface StatementSnapshotRepository {
@@ -1017,4 +1068,10 @@ export interface Release11Repositories extends Release10Repositories {
   tenantDomains: TenantDomainRepository;
   tenantSettings: PartnerTenantSettingsRepository;
   usageMeterEvents: BillingUsageMeterEventRepository;
+}
+
+export interface Release12Repositories extends Release11Repositories {
+  gasPolicies: GasPolicyRepository;
+  sponsoredTransactionRequests: SponsoredTransactionRequestRepository;
+  walletProfiles: WalletProfileRepository;
 }

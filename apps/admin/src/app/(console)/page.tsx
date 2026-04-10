@@ -16,6 +16,12 @@ import {
 export default async function DashboardPage() {
   const { messages } = await getI18n();
   const dashboard = await getDashboard();
+  const serviceLabels = {
+    api: messages.dashboard.api,
+    cursor: messages.dashboard.cursor,
+    indexer: messages.dashboard.indexer,
+    worker: messages.dashboard.worker
+  };
 
   return (
     <>
@@ -35,7 +41,14 @@ export default async function DashboardPage() {
           {dashboard.recentAlerts.length === 0 ? (
             <EmptyState body={messages.dashboard.noAlerts} />
           ) : (
-            <DataTable headers={["Kind", "Status", "Subject", "Detected"]}>
+            <DataTable
+              headers={[
+                messages.dashboard.kind,
+                messages.dashboard.status,
+                messages.dashboard.subject,
+                messages.dashboard.detected
+              ]}
+            >
               {dashboard.recentAlerts.map((alert) => (
                 <tr key={alert.id}>
                   <td>{alert.kind}</td>
@@ -60,14 +73,14 @@ export default async function DashboardPage() {
         <Card title={messages.dashboard.serviceHealth}>
           <div className="detail-grid">
             <div className="detail-item">
-              <span>API</span>
+              <span>{serviceLabels.api}</span>
               <Pill
                 tone={toneForStatus(dashboard.health.api.status)}
                 value={formatCode(dashboard.health.api.status, messages.statuses, messages.common.none)}
               />
             </div>
             <div className="detail-item">
-              <span>Worker</span>
+              <span>{serviceLabels.worker}</span>
               <Pill
                 tone={toneForStatus(dashboard.health.worker.status)}
                 value={formatCode(
@@ -78,7 +91,7 @@ export default async function DashboardPage() {
               />
             </div>
             <div className="detail-item">
-              <span>Indexer</span>
+              <span>{serviceLabels.indexer}</span>
               <Pill
                 tone={toneForStatus(dashboard.health.indexer.status)}
                 value={formatCode(
@@ -89,7 +102,7 @@ export default async function DashboardPage() {
               />
             </div>
             <div className="detail-item">
-              <span>Cursor</span>
+              <span>{serviceLabels.cursor}</span>
               <Pill
                 tone={dashboard.health.cursorFresh ? "success" : "danger"}
                 value={
@@ -118,7 +131,14 @@ export default async function DashboardPage() {
         {dashboard.reconciliation.queue.length === 0 ? (
           <EmptyState body={messages.dashboard.noReconciliation} />
         ) : (
-          <DataTable headers={["Kind", "Status", "Subject", "Updated"]}>
+          <DataTable
+            headers={[
+              messages.dashboard.kind,
+              messages.dashboard.status,
+              messages.dashboard.subject,
+              messages.dashboard.updated
+            ]}
+          >
             {dashboard.reconciliation.queue.slice(0, 12).map((item) => (
               <tr key={`${item.kind}:${item.entityId}`}>
                 <td>{item.kind}</td>

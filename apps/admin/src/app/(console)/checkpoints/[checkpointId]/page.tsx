@@ -28,6 +28,11 @@ export default async function CheckpointDetailPage({
     );
   }
 
+  const decisionOptions = [
+    { label: messages.checkpoints.cleared, value: "CLEARED" },
+    { label: messages.checkpoints.blocked, value: "BLOCKED" }
+  ] as const;
+
   return (
     <>
       <ConsoleHeader
@@ -49,7 +54,7 @@ export default async function CheckpointDetailPage({
             <strong>{checkpoint.kind}</strong>
           </div>
           <div className="detail-item">
-            <span>Created</span>
+            <span>{messages.checkpoints.created}</span>
             <strong className="mono">{checkpoint.createdAt}</strong>
           </div>
           <div className="detail-item">
@@ -65,8 +70,11 @@ export default async function CheckpointDetailPage({
           <div className="field">
             <label htmlFor="status">{messages.checkpoints.status}</label>
             <select defaultValue="CLEARED" id="status" name="status">
-              <option value="CLEARED">Cleared</option>
-              <option value="BLOCKED">Blocked</option>
+              {decisionOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
             </select>
           </div>
           <div className="field">

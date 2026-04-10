@@ -16,6 +16,7 @@ import {
   FakeSessionTokenService,
   seedAuthenticatedActor
 } from "./helpers/auth-test-context";
+import { createRelease12RepositoriesStub } from "./helpers/release12-test-stub";
 import { InMemoryRelease1Repositories } from "./helpers/in-memory-release1-repositories";
 import { InMemoryRelease4Repositories } from "./helpers/in-memory-release4-repositories";
 import { InMemoryRelease9Repositories } from "./helpers/in-memory-release9-repositories";
@@ -86,6 +87,7 @@ function createServices() {
   const release1Repositories = new InMemoryRelease1Repositories();
   const release4Repositories = new InMemoryRelease4Repositories();
   const release9Repositories = new InMemoryRelease9Repositories();
+  const { release12Repositories } = createRelease12RepositoriesStub();
   const sessionTokenService = new FakeSessionTokenService();
   const authenticatedSessionService = new AuthenticatedSessionService(
     release1Repositories,
@@ -94,6 +96,7 @@ function createServices() {
   );
   const milestonesService = new MilestonesService(
     release1Repositories,
+    release12Repositories,
     release4Repositories,
     authenticatedSessionService,
     new ApprovalRuntimeService(release9Repositories),

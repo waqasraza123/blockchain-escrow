@@ -32,7 +32,10 @@ export default async function DashboardPage(props: DashboardPageProps) {
       <MetricGrid
         items={[
           { label: messages.dashboard.pendingApprovals, value: dashboard.dashboard.pendingApprovalRequestCount },
-          { label: "Approved approvals", value: dashboard.dashboard.approvedApprovalRequestCount },
+          {
+            label: messages.dashboard.approvedApprovals,
+            value: dashboard.dashboard.approvedApprovalRequestCount
+          },
           { label: messages.dashboard.blockedApprovals, value: dashboard.dashboard.blockedApprovalRequestCount },
           { label: messages.dashboard.fundingTxs, value: dashboard.dashboard.fundingTransactionCount },
           {
@@ -54,7 +57,7 @@ export default async function DashboardPage(props: DashboardPageProps) {
           title={messages.dashboard.recentApprovalRequests}
         >
           {dashboard.recentApprovalRequests.length === 0 ? (
-            <EmptyState body="No approval requests are currently open or recently updated." />
+            <EmptyState body={messages.dashboard.noRecentApprovals} />
           ) : (
             <DataTable
               headers={[
@@ -89,11 +92,11 @@ export default async function DashboardPage(props: DashboardPageProps) {
           title={messages.dashboard.recentFinanceExports}
         >
           {dashboard.recentFinanceExports.length === 0 ? (
-            <EmptyState body="No finance export jobs have been requested yet." />
+            <EmptyState body={messages.dashboard.noRecentFinanceExports} />
           ) : (
             <DataTable
               headers={[
-                "Job",
+                messages.dashboard.job,
                 messages.finance.status,
                 messages.finance.artifacts,
                 messages.exports.created

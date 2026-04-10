@@ -38,7 +38,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
           </div>
         </form>
       </Card>
-      <Card title="Results">
+      <Card title={messages.search.lookup}>
         {!query ? (
           <EmptyState body={messages.search.empty} />
         ) : results && results.hits.length > 0 ? (

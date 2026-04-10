@@ -35,7 +35,8 @@ export default async function WorkspaceLayout(props: WorkspaceLayoutProps) {
     { href: "/drafts", label: messages.navigation.drafts },
     { href: "/approvals", label: messages.navigation.approvals },
     { href: "/finance", label: messages.navigation.finance },
-    { href: "/integrations", label: messages.navigation.integrations }
+    { href: "/integrations", label: messages.navigation.integrations },
+    { href: "/wallets", label: messages.navigation.wallets }
   ];
 
   return (

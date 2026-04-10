@@ -54,6 +54,13 @@ export default async function PartnerAccountPage(props: PartnerAccountPageProps)
     detail.billing?.activeAssignment ?
       await listBillingFeeSchedules(detail.billing.activeAssignment.billingPlanId)
     : null;
+  const invoiceHeaders = [
+    messages.partners.invoiceId,
+    messages.billing.period,
+    messages.billing.status,
+    messages.billing.total,
+    messages.partners.invoiceActions
+  ];
 
   return (
     <>
@@ -135,7 +142,7 @@ export default async function PartnerAccountPage(props: PartnerAccountPageProps)
                   <input defaultValue={detail.settings?.primaryColorHex ?? "#0b1020"} id="primaryColorHex" name="primaryColorHex" />
                 </div>
                 <div className="field">
-                  <label htmlFor="accentColorHex">Accent</label>
+                  <label htmlFor="accentColorHex">{messages.partners.accent}</label>
                   <input defaultValue={detail.settings?.accentColorHex ?? "#d0ff5f"} id="accentColorHex" name="accentColorHex" />
                 </div>
               </div>
@@ -145,7 +152,7 @@ export default async function PartnerAccountPage(props: PartnerAccountPageProps)
                   <input defaultValue={detail.settings?.backgroundColorHex ?? "#f5f1e8"} id="backgroundColorHex" name="backgroundColorHex" />
                 </div>
                 <div className="field">
-                  <label htmlFor="textColorHex">Text</label>
+                  <label htmlFor="textColorHex">{messages.partners.text}</label>
                   <input defaultValue={detail.settings?.textColorHex ?? "#141414"} id="textColorHex" name="textColorHex" />
                 </div>
               </div>
@@ -160,7 +167,7 @@ export default async function PartnerAccountPage(props: PartnerAccountPageProps)
               <input name="partnerAccountId" type="hidden" value={detail.partner.id} />
               <div className="field">
                 <label htmlFor="role">{messages.partners.role}</label>
-                <input id="role" name="role" placeholder="LOGO or FAVICON" />
+                <input id="role" name="role" placeholder="LOGO / FAVICON" />
               </div>
               <div className="field">
                 <label htmlFor="originalFilename">{messages.partners.originalFilename}</label>
@@ -212,7 +219,7 @@ export default async function PartnerAccountPage(props: PartnerAccountPageProps)
               </div>
               <div className="field">
                 <label htmlFor="surface">{messages.partners.surface}</label>
-                <input id="surface" name="surface" placeholder="ENTRYPOINT or HOSTED" />
+                <input id="surface" name="surface" placeholder="ENTRYPOINT / HOSTED" />
               </div>
               <div className="actions-row">
                 <button className="button" type="submit">{messages.partners.createDomain}</button>
@@ -226,7 +233,7 @@ export default async function PartnerAccountPage(props: PartnerAccountPageProps)
                   messages.partners.hostname,
                   messages.partners.surface,
                   messages.partners.status,
-                  "Actions"
+                  messages.partners.actions
                 ]}
               >
                 {detail.domains.map((domain) => (
@@ -244,7 +251,9 @@ export default async function PartnerAccountPage(props: PartnerAccountPageProps)
                         <form action={verifyTenantDomainAction}>
                           <input name="partnerAccountId" type="hidden" value={detail.partner.id} />
                           <input name="domainId" type="hidden" value={domain.id} />
-                          <button className="button button-secondary" type="submit">Verify</button>
+                          <button className="button button-secondary" type="submit">
+                            {messages.partners.verify}
+                          </button>
                         </form>
                         <form action={activateTenantDomainAction}>
                           <input name="partnerAccountId" type="hidden" value={detail.partner.id} />
@@ -334,7 +343,7 @@ export default async function PartnerAccountPage(props: PartnerAccountPageProps)
             {billingSchedules?.billingFeeSchedules.length ? (
               <DataTable
                 headers={[
-                  "Schedule Id",
+                  messages.partners.scheduleId,
                   messages.billing.effectiveFrom,
                   messages.billing.metric,
                   messages.billing.included,
@@ -384,7 +393,7 @@ export default async function PartnerAccountPage(props: PartnerAccountPageProps)
               ) : null}
             </div>
             <div>
-              <h3>Previous Period Usage</h3>
+              <h3>{messages.partners.previousPeriodUsage}</h3>
               {detail.billing?.previousUsage?.metrics.length ? (
                 <DataTable headers={[messages.partners.metric, messages.billing.count]}>
                   {detail.billing.previousUsage.metrics.map((metric) => (
@@ -395,7 +404,7 @@ export default async function PartnerAccountPage(props: PartnerAccountPageProps)
                   ))}
                 </DataTable>
               ) : (
-                <EmptyState body="No previous-period usage has been metered." />
+                <EmptyState body={messages.partners.noPreviousUsage} />
               )}
               {detail.billing?.previousUsage ? (
                 <p className="muted mono">
@@ -405,7 +414,7 @@ export default async function PartnerAccountPage(props: PartnerAccountPageProps)
             </div>
           </div>
           {detail.billing?.recentInvoices.length ? (
-            <DataTable headers={["Invoice", messages.billing.period, messages.billing.status, messages.billing.total, messages.partners.invoiceActions]}>
+            <DataTable headers={invoiceHeaders}>
               {detail.billing.recentInvoices.map((invoice) => (
                 <tr key={invoice.id}>
                   <td className="mono">{invoice.id}</td>
@@ -437,48 +446,58 @@ export default async function PartnerAccountPage(props: PartnerAccountPageProps)
               ))}
             </DataTable>
           ) : (
-            <EmptyState body="No invoices have been generated for this tenant yet." />
+            <EmptyState body={messages.partners.noInvoices} />
           )}
         </Card>
 
         <div className="split-grid">
-          <Card title="Create Organization Link">
+          <Card title={messages.partners.createOrganizationLink}>
             <form action={createPartnerOrganizationLinkAction} className="form-grid">
               <input name="partnerAccountId" type="hidden" value={detail.partner.id} />
               <div className="field">
-                <label htmlFor="organizationId">Organization Id</label>
+                <label htmlFor="organizationId">{messages.partners.organizationId}</label>
                 <input id="organizationId" name="organizationId" />
               </div>
               <div className="field">
-                <label htmlFor="actingUserId">Acting User Id</label>
+                <label htmlFor="actingUserId">{messages.partners.actingUserId}</label>
                 <input id="actingUserId" name="actingUserId" />
               </div>
               <div className="field">
-                <label htmlFor="actingWalletId">Acting Wallet Id</label>
+                <label htmlFor="actingWalletId">{messages.partners.actingWalletId}</label>
                 <input id="actingWalletId" name="actingWalletId" />
               </div>
               <div className="field">
-                <label htmlFor="externalReference">External Reference</label>
+                <label htmlFor="externalReference">{messages.partners.externalReference}</label>
                 <input id="externalReference" name="externalReference" />
               </div>
               <div className="actions-row">
                 <button className="button" type="submit">
-                  Create Link
+                  {messages.partners.createLink}
                 </button>
               </div>
             </form>
           </Card>
-          <Card title="Links">
+          <Card title={messages.partners.links}>
             {detail.links.length === 0 ? (
-              <EmptyState body="No organization links exist yet." />
+              <EmptyState body={messages.partners.noLinks} />
             ) : (
-              <DataTable headers={["Organization", "Wallet", "Status", "Link Id"]}>
+              <DataTable
+                headers={[
+                  messages.partners.organization,
+                  messages.partners.wallet,
+                  messages.partners.status,
+                  messages.partners.linkId
+                ]}
+              >
                 {detail.links.map((link) => (
                   <tr key={link.id}>
                     <td className="mono">{link.organizationId}</td>
                     <td className="mono">{link.actingWalletId}</td>
                     <td>
-                      <Pill tone={toneForStatus(link.status)} value={link.status} />
+                      <Pill
+                        tone={toneForStatus(link.status)}
+                        value={formatCode(link.status, messages.statuses, messages.common.none)}
+                      />
                     </td>
                     <td className="mono">{link.id}</td>
                   </tr>
@@ -489,33 +508,40 @@ export default async function PartnerAccountPage(props: PartnerAccountPageProps)
         </div>
 
         <div className="split-grid">
-          <Card title="Create API Key">
+          <Card title={messages.partners.createApiKey}>
             <form action={createPartnerApiKeyAction} className="form-grid">
               <input name="partnerAccountId" type="hidden" value={detail.partner.id} />
               <div className="field">
-                <label htmlFor="partnerOrganizationLinkId">Partner Link Id</label>
+                <label htmlFor="partnerOrganizationLinkId">{messages.partners.partnerLinkId}</label>
                 <input id="partnerOrganizationLinkId" name="partnerOrganizationLinkId" />
               </div>
               <div className="field">
-                <label htmlFor="displayName">Display Name</label>
+                <label htmlFor="displayName">{messages.partners.displayName}</label>
                 <input id="displayName" name="displayName" />
               </div>
               <div className="field">
-                <label htmlFor="expiresAt">Expires At</label>
+                <label htmlFor="expiresAt">{messages.partners.expiresAt}</label>
                 <input id="expiresAt" name="expiresAt" placeholder="2026-05-01T00:00:00.000Z" />
               </div>
               <div className="actions-row">
                 <button className="button" type="submit">
-                  Issue Key
+                  {messages.partners.issueKey}
                 </button>
               </div>
             </form>
           </Card>
-          <Card title="API Keys">
+          <Card title={messages.partners.apiKeys}>
             {detail.apiKeys.length === 0 ? (
-              <EmptyState body="No API keys have been issued." />
+              <EmptyState body={messages.partners.noApiKeys} />
             ) : (
-              <DataTable headers={["Name", "Status", "Scopes", "Revoke"]}>
+              <DataTable
+                headers={[
+                  messages.partners.name,
+                  messages.partners.status,
+                  messages.partners.scopes,
+                  messages.partners.revoke
+                ]}
+              >
                 {detail.apiKeys.map((apiKey) => (
                   <tr key={apiKey.id}>
                     <td>
@@ -523,7 +549,10 @@ export default async function PartnerAccountPage(props: PartnerAccountPageProps)
                       <div className="mono">{apiKey.keyPrefix}</div>
                     </td>
                     <td>
-                      <Pill tone={toneForStatus(apiKey.status)} value={apiKey.status} />
+                      <Pill
+                        tone={toneForStatus(apiKey.status)}
+                        value={formatCode(apiKey.status, messages.statuses, messages.common.none)}
+                      />
                     </td>
                     <td>{apiKey.scopes.join(", ")}</td>
                     <td>
@@ -531,7 +560,7 @@ export default async function PartnerAccountPage(props: PartnerAccountPageProps)
                         <input name="partnerAccountId" type="hidden" value={detail.partner.id} />
                         <input name="partnerApiKeyId" type="hidden" value={apiKey.id} />
                         <button className="button button-secondary" type="submit">
-                          Revoke
+                          {messages.partners.revoke}
                         </button>
                       </form>
                     </td>
@@ -543,23 +572,23 @@ export default async function PartnerAccountPage(props: PartnerAccountPageProps)
         </div>
 
         <div className="split-grid">
-          <Card title="Create Webhook Subscription">
+          <Card title={messages.partners.createWebhookSubscription}>
             <form action={createPartnerWebhookSubscriptionAction} className="form-grid">
               <input name="partnerAccountId" type="hidden" value={detail.partner.id} />
               <div className="field">
-                <label htmlFor="subscriptionLinkId">Partner Link Id</label>
+                <label htmlFor="subscriptionLinkId">{messages.partners.partnerLinkId}</label>
                 <input id="subscriptionLinkId" name="partnerOrganizationLinkId" />
               </div>
               <div className="field">
-                <label htmlFor="subscriptionName">Display Name</label>
+                <label htmlFor="subscriptionName">{messages.partners.displayName}</label>
                 <input id="subscriptionName" name="displayName" />
               </div>
               <div className="field">
-                <label htmlFor="endpointUrl">Endpoint URL</label>
+                <label htmlFor="endpointUrl">{messages.partners.endpointUrl}</label>
                 <input id="endpointUrl" name="endpointUrl" />
               </div>
               <div className="field">
-                <label htmlFor="eventTypes">Event Types</label>
+                <label htmlFor="eventTypes">{messages.partners.eventTypes}</label>
                 <textarea
                   id="eventTypes"
                   name="eventTypes"
@@ -568,16 +597,23 @@ export default async function PartnerAccountPage(props: PartnerAccountPageProps)
               </div>
               <div className="actions-row">
                 <button className="button" type="submit">
-                  Create Subscription
+                  {messages.partners.createSubscription}
                 </button>
               </div>
             </form>
           </Card>
-          <Card title="Subscriptions">
+          <Card title={messages.partners.subscriptions}>
             {detail.subscriptions.length === 0 ? (
-              <EmptyState body="No webhook subscriptions exist." />
+              <EmptyState body={messages.partners.noSubscriptions} />
             ) : (
-              <DataTable headers={["Subscription", "Status", "Rotate Secret", "Pause/Resume"]}>
+              <DataTable
+                headers={[
+                  messages.partners.subscription,
+                  messages.partners.status,
+                  messages.partners.rotateSecret,
+                  messages.partners.pauseResume
+                ]}
+              >
                 {detail.subscriptions.map((subscription) => (
                   <tr key={subscription.id}>
                     <td>
@@ -585,7 +621,14 @@ export default async function PartnerAccountPage(props: PartnerAccountPageProps)
                       <div className="mono">{subscription.endpointUrl}</div>
                     </td>
                     <td>
-                      <Pill tone={toneForStatus(subscription.status)} value={subscription.status} />
+                      <Pill
+                        tone={toneForStatus(subscription.status)}
+                        value={formatCode(
+                          subscription.status,
+                          messages.statuses,
+                          messages.common.none
+                        )}
+                      />
                     </td>
                     <td>
                       <form action={rotatePartnerWebhookSubscriptionSecretAction}>
@@ -596,7 +639,7 @@ export default async function PartnerAccountPage(props: PartnerAccountPageProps)
                           value={subscription.id}
                         />
                         <button className="button button-secondary" type="submit">
-                          Rotate
+                          {messages.partners.rotate}
                         </button>
                       </form>
                     </td>
@@ -614,7 +657,9 @@ export default async function PartnerAccountPage(props: PartnerAccountPageProps)
                           value={subscription.status === "ACTIVE" ? "PAUSED" : "ACTIVE"}
                         />
                         <button className="button button-secondary" type="submit">
-                          {subscription.status === "ACTIVE" ? "Pause" : "Activate"}
+                          {subscription.status === "ACTIVE"
+                            ? messages.partners.pause
+                            : messages.partners.activate}
                         </button>
                       </form>
                     </td>
@@ -625,19 +670,28 @@ export default async function PartnerAccountPage(props: PartnerAccountPageProps)
           </Card>
         </div>
 
-        <Card title="Hosted Sessions and Deliveries">
+        <Card title={messages.partners.hostedAndDeliveries}>
           <div className="split-grid">
             <div>
-              <h3>Hosted Sessions</h3>
+              <h3>{messages.partners.hostedSessionsTitle}</h3>
               {detail.hostedSessions.length === 0 ? (
-                <EmptyState body="No hosted sessions have been created." />
+                <EmptyState body={messages.partners.noHostedSessions} />
               ) : (
-                <DataTable headers={["Type", "Status", "Expires"]}>
+                <DataTable
+                  headers={[
+                    messages.partners.type,
+                    messages.partners.status,
+                    messages.partners.expiresAt
+                  ]}
+                >
                   {detail.hostedSessions.map((session) => (
                     <tr key={session.id}>
                       <td>{session.type}</td>
                       <td>
-                        <Pill tone={toneForStatus(session.status)} value={session.status} />
+                        <Pill
+                          tone={toneForStatus(session.status)}
+                          value={formatCode(session.status, messages.statuses, messages.common.none)}
+                        />
                       </td>
                       <td className="mono">{session.expiresAt}</td>
                     </tr>
@@ -646,16 +700,25 @@ export default async function PartnerAccountPage(props: PartnerAccountPageProps)
               )}
             </div>
             <div>
-              <h3>Recent Deliveries</h3>
+              <h3>{messages.partners.recentDeliveries}</h3>
               {detail.recentDeliveries.length === 0 ? (
-                <EmptyState body="No webhook deliveries have been recorded." />
+                <EmptyState body={messages.partners.noDeliveries} />
               ) : (
-                <DataTable headers={["Event", "Status", "Last Attempt"]}>
+                <DataTable
+                  headers={[
+                    messages.partners.eventTypes,
+                    messages.partners.status,
+                    messages.partners.lastAttempt
+                  ]}
+                >
                   {detail.recentDeliveries.map((delivery) => (
                     <tr key={delivery.id}>
                       <td>{delivery.eventType}</td>
                       <td>
-                        <Pill tone={toneForStatus(delivery.status)} value={delivery.status} />
+                        <Pill
+                          tone={toneForStatus(delivery.status)}
+                          value={formatCode(delivery.status, messages.statuses, messages.common.none)}
+                        />
                       </td>
                       <td className="mono">{delivery.lastAttemptAt ?? delivery.createdAt}</td>
                     </tr>

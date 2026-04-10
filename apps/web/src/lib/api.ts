@@ -5,10 +5,16 @@ import type {
   CreateCounterpartyDealVersionAcceptanceResponse,
   CreateCounterpartyDealMilestoneSubmissionResponse,
   CreateFileResponse,
+  CreateGasPolicyResponse,
+  CreateDealMilestoneReviewResponse,
+  CreateDealMilestoneSettlementRequestResponse,
+  CreateSponsoredTransactionRequestResponse,
   CreateStatementSnapshotResponse,
   DealVersionApprovalRequestParams,
   DraftDealDetailResponse,
   FinanceExportJobDetailResponse,
+  ListDealVersionMilestoneWorkflowsResponse,
+  ListGasPoliciesResponse,
   HostedDisputeEvidenceLinkResponse,
   HostedSessionContextResponse,
   HostedSessionExchangeResponse,
@@ -22,14 +28,18 @@ import type {
   ListDraftDealsResponse,
   ListFinanceExportsResponse,
   ListOrganizationMembershipsResponse,
+  ListSponsoredTransactionRequestsResponse,
   ListStatementSnapshotsResponse,
   MeResponse,
   OrganizationDetailResponse,
   OrganizationPartnerOverviewResponse,
   TenantPublicContextResponse,
+  UpsertWalletProfileResponse,
+  ListWalletsResponse,
   PrepareCounterpartyDealMilestoneSubmissionResponse,
   ReportingDashboardResponse,
-  PreviewApprovalRequirementResponse
+  PreviewApprovalRequirementResponse,
+  UpdateGasPolicyResponse
 } from "@blockchain-escrow/shared";
 import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
@@ -222,6 +232,20 @@ export function listStatementSnapshots(
   return apiRequest(`/organizations/${organizationId}/statement-snapshots`);
 }
 
+export function listWallets(): Promise<ListWalletsResponse> {
+  return apiRequest("/wallets");
+}
+
+export function upsertWalletProfile(
+  walletId: string,
+  body: Record<string, unknown>
+): Promise<UpsertWalletProfileResponse> {
+  return apiRequest(`/wallets/${walletId}/profile`, {
+    body: JSON.stringify(body),
+    method: "PUT"
+  });
+}
+
 export function createStatementSnapshot(
   params: DealVersionApprovalRequestParams,
   note?: string
@@ -242,6 +266,117 @@ export function getReportingDashboard(
   organizationId: string
 ): Promise<ReportingDashboardResponse> {
   return apiRequest(`/organizations/${organizationId}/reports/dashboard`);
+}
+
+export function listMilestoneWorkflows(
+  params: DealVersionApprovalRequestParams
+): Promise<ListDealVersionMilestoneWorkflowsResponse> {
+  return apiRequest(
+    `/organizations/${params.organizationId}/drafts/${params.draftDealId}/versions/${params.dealVersionId}/milestones`
+  );
+}
+
+export function createMilestoneReview(
+  params: {
+    dealMilestoneSubmissionId: string;
+    dealVersionId: string;
+    dealVersionMilestoneId: string;
+    draftDealId: string;
+    organizationId: string;
+  },
+  body: Record<string, unknown>
+): Promise<CreateDealMilestoneReviewResponse> {
+  return apiRequest(
+    `/organizations/${params.organizationId}/drafts/${params.draftDealId}/versions/${params.dealVersionId}/milestones/${params.dealVersionMilestoneId}/submissions/${params.dealMilestoneSubmissionId}/reviews`,
+    {
+      body: JSON.stringify(body),
+      method: "POST"
+    }
+  );
+}
+
+export function createMilestoneSettlementRequest(
+  params: {
+    dealMilestoneReviewId: string;
+    dealMilestoneSubmissionId: string;
+    dealVersionId: string;
+    dealVersionMilestoneId: string;
+    draftDealId: string;
+    organizationId: string;
+  },
+  body: Record<string, unknown>
+): Promise<CreateDealMilestoneSettlementRequestResponse> {
+  return apiRequest(
+    `/organizations/${params.organizationId}/drafts/${params.draftDealId}/versions/${params.dealVersionId}/milestones/${params.dealVersionMilestoneId}/submissions/${params.dealMilestoneSubmissionId}/reviews/${params.dealMilestoneReviewId}/settlement-requests`,
+    {
+      body: JSON.stringify(body),
+      method: "POST"
+    }
+  );
+}
+
+export function listGasPolicies(
+  organizationId: string
+): Promise<ListGasPoliciesResponse> {
+  return apiRequest(`/organizations/${organizationId}/gas-policies`);
+}
+
+export function createGasPolicy(
+  organizationId: string,
+  body: Record<string, unknown>
+): Promise<CreateGasPolicyResponse> {
+  return apiRequest(`/organizations/${organizationId}/gas-policies`, {
+    body: JSON.stringify(body),
+    method: "POST"
+  });
+}
+
+export function updateGasPolicy(
+  organizationId: string,
+  gasPolicyId: string,
+  body: Record<string, unknown>
+): Promise<UpdateGasPolicyResponse> {
+  return apiRequest(`/organizations/${organizationId}/gas-policies/${gasPolicyId}`, {
+    body: JSON.stringify(body),
+    method: "PATCH"
+  });
+}
+
+export function listSponsoredTransactionRequests(
+  organizationId: string
+): Promise<ListSponsoredTransactionRequestsResponse> {
+  return apiRequest(`/organizations/${organizationId}/sponsored-transaction-requests`);
+}
+
+export function createSponsoredFundingRequest(
+  params: DealVersionApprovalRequestParams,
+  body: Record<string, unknown>
+): Promise<CreateSponsoredTransactionRequestResponse> {
+  return apiRequest(
+    `/organizations/${params.organizationId}/drafts/${params.draftDealId}/versions/${params.dealVersionId}/funding-sponsorship-requests`,
+    {
+      body: JSON.stringify(body),
+      method: "POST"
+    }
+  );
+}
+
+export function createSponsoredSettlementExecutionRequest(
+  params: {
+    dealMilestoneSettlementRequestId: string;
+    dealVersionId: string;
+    draftDealId: string;
+    organizationId: string;
+  },
+  body: Record<string, unknown>
+): Promise<CreateSponsoredTransactionRequestResponse> {
+  return apiRequest(
+    `/organizations/${params.organizationId}/drafts/${params.draftDealId}/versions/${params.dealVersionId}/milestones/settlements/${params.dealMilestoneSettlementRequestId}/execution-sponsorship-requests`,
+    {
+      body: JSON.stringify(body),
+      method: "POST"
+    }
+  );
 }
 
 export function listFinanceExports(
