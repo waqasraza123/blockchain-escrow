@@ -8,7 +8,8 @@ const navigation = [
   { href: "", label: "Dashboard" },
   { href: "/drafts", label: "Drafts" },
   { href: "/approvals", label: "Approvals" },
-  { href: "/finance", label: "Finance" }
+  { href: "/finance", label: "Finance" },
+  { href: "/integrations", label: "Integrations" }
 ];
 
 type WorkspaceLayoutProps = {

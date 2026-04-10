@@ -17,6 +17,10 @@ import type {
   ComplianceCheckpointSummary,
   CreateComplianceCaseInput,
   CreateComplianceCheckpointInput,
+  CreatePartnerAccountInput,
+  CreatePartnerApiKeyInput,
+  CreatePartnerOrganizationLinkInput,
+  CreatePartnerWebhookSubscriptionInput,
   CreateProtocolProposalDraftInput,
   DecideComplianceCheckpointInput,
   ListComplianceCasesParams,
@@ -24,6 +28,7 @@ import type {
   ListComplianceCheckpointsResponse,
   ListOperatorAlertsParams,
   ListOperatorAlertsResponse,
+  ListPartnerAccountsResponse,
   ListProtocolProposalDraftsResponse,
   OperatorAlertActionParams,
   OperatorDashboardResponse,
@@ -32,9 +37,25 @@ import type {
   OperatorSearchParams,
   OperatorSearchResponse,
   OperatorSessionResponse,
+  PartnerAccountDetailResponse,
+  PartnerAccountParams,
+  PartnerApiKeyParams,
+  PartnerOrganizationLinkParams,
+  PartnerWebhookSubscriptionParams,
   ProtocolProposalDraftDetailResponse,
   ProtocolProposalDraftParams,
   ResolveOperatorAlertInput,
+  RevokePartnerApiKeyInput,
+  RevokePartnerApiKeyResponse,
+  RotatePartnerApiKeyInput,
+  RotatePartnerApiKeyResponse,
+  RotatePartnerWebhookSubscriptionSecretResponse,
+  CreatePartnerAccountResponse,
+  CreatePartnerApiKeyResponse,
+  CreatePartnerOrganizationLinkResponse,
+  CreatePartnerWebhookSubscriptionResponse,
+  UpdatePartnerWebhookSubscriptionInput,
+  UpdatePartnerWebhookSubscriptionResponse,
   UpdateComplianceCaseStatusInput
 } from "@blockchain-escrow/shared";
 
@@ -48,6 +69,116 @@ export class OperatorController {
   @Get("session")
   async getSession(@Req() request: HttpRequestLike): Promise<OperatorSessionResponse> {
     return this.operatorService.getSession(readRequestMetadata(request));
+  }
+
+  @Get("partners")
+  async listPartners(@Req() request: HttpRequestLike): Promise<ListPartnerAccountsResponse> {
+    return this.operatorService.listPartners(readRequestMetadata(request));
+  }
+
+  @Post("partners")
+  async createPartner(
+    @Body() body: CreatePartnerAccountInput,
+    @Req() request: HttpRequestLike
+  ): Promise<CreatePartnerAccountResponse> {
+    return this.operatorService.createPartnerAccount(body, readRequestMetadata(request));
+  }
+
+  @Get("partners/:partnerAccountId")
+  async getPartner(
+    @Param() params: PartnerAccountParams,
+    @Req() request: HttpRequestLike
+  ): Promise<PartnerAccountDetailResponse> {
+    return this.operatorService.getPartnerAccount(params, readRequestMetadata(request));
+  }
+
+  @Post("partners/:partnerAccountId/links")
+  async createPartnerLink(
+    @Param() params: PartnerAccountParams,
+    @Body() body: CreatePartnerOrganizationLinkInput,
+    @Req() request: HttpRequestLike
+  ): Promise<CreatePartnerOrganizationLinkResponse> {
+    return this.operatorService.createPartnerOrganizationLink(
+      params.partnerAccountId,
+      body,
+      readRequestMetadata(request)
+    );
+  }
+
+  @Post("partners/links/:partnerOrganizationLinkId/api-keys")
+  async createPartnerApiKey(
+    @Param() params: PartnerOrganizationLinkParams,
+    @Body() body: CreatePartnerApiKeyInput,
+    @Req() request: HttpRequestLike
+  ): Promise<CreatePartnerApiKeyResponse> {
+    return this.operatorService.createPartnerApiKey(
+      params.partnerOrganizationLinkId,
+      body,
+      readRequestMetadata(request)
+    );
+  }
+
+  @Post("partners/api-keys/:partnerApiKeyId/revoke")
+  async revokePartnerApiKey(
+    @Param() params: PartnerApiKeyParams,
+    @Body() body: RevokePartnerApiKeyInput,
+    @Req() request: HttpRequestLike
+  ): Promise<RevokePartnerApiKeyResponse> {
+    return this.operatorService.revokePartnerApiKey(
+      params,
+      body,
+      readRequestMetadata(request)
+    );
+  }
+
+  @Post("partners/api-keys/:partnerApiKeyId/rotate")
+  async rotatePartnerApiKey(
+    @Param() params: PartnerApiKeyParams,
+    @Body() body: RotatePartnerApiKeyInput,
+    @Req() request: HttpRequestLike
+  ): Promise<RotatePartnerApiKeyResponse> {
+    return this.operatorService.rotatePartnerApiKey(
+      params,
+      body,
+      readRequestMetadata(request)
+    );
+  }
+
+  @Post("partners/links/:partnerOrganizationLinkId/webhook-subscriptions")
+  async createPartnerWebhookSubscription(
+    @Param() params: PartnerOrganizationLinkParams,
+    @Body() body: CreatePartnerWebhookSubscriptionInput,
+    @Req() request: HttpRequestLike
+  ): Promise<CreatePartnerWebhookSubscriptionResponse> {
+    return this.operatorService.createPartnerWebhookSubscription(
+      params.partnerOrganizationLinkId,
+      body,
+      readRequestMetadata(request)
+    );
+  }
+
+  @Post("partners/webhook-subscriptions/:partnerWebhookSubscriptionId")
+  async updatePartnerWebhookSubscription(
+    @Param() params: PartnerWebhookSubscriptionParams,
+    @Body() body: UpdatePartnerWebhookSubscriptionInput,
+    @Req() request: HttpRequestLike
+  ): Promise<UpdatePartnerWebhookSubscriptionResponse> {
+    return this.operatorService.updatePartnerWebhookSubscription(
+      params,
+      body,
+      readRequestMetadata(request)
+    );
+  }
+
+  @Post("partners/webhook-subscriptions/:partnerWebhookSubscriptionId/rotate-secret")
+  async rotatePartnerWebhookSubscriptionSecret(
+    @Param() params: PartnerWebhookSubscriptionParams,
+    @Req() request: HttpRequestLike
+  ): Promise<RotatePartnerWebhookSubscriptionSecretResponse> {
+    return this.operatorService.rotatePartnerWebhookSubscriptionSecret(
+      params,
+      readRequestMetadata(request)
+    );
   }
 
   @Get("search")

@@ -90,4 +90,49 @@ export class AuthenticatedSessionService {
       wallet
     };
   }
+
+  async loadSyntheticContext(input: {
+    authenticatedAt?: string;
+    sessionId?: string;
+    userId: string;
+    walletId: string;
+  }): Promise<AuthenticatedSessionContext> {
+    const [user, wallet] = await Promise.all([
+      this.repositories.users.findById(input.userId),
+      this.repositories.wallets.findById(input.walletId)
+    ]);
+
+    if (!user) {
+      throw new InternalServerErrorException("synthetic session user could not be loaded");
+    }
+
+    if (!wallet) {
+      throw new InternalServerErrorException("synthetic session wallet could not be loaded");
+    }
+
+    const authenticatedAt = input.authenticatedAt ?? new Date().toISOString();
+
+    return {
+      actor: {
+        authenticatedAt,
+        sessionId: input.sessionId ?? `synthetic:${user.id}:${wallet.id}`,
+        userId: user.id,
+        walletAddress: wallet.address,
+        walletId: wallet.id
+      },
+      session: {
+        createdAt: authenticatedAt,
+        expiresAt: authenticatedAt,
+        id: input.sessionId ?? `synthetic:${user.id}:${wallet.id}`,
+        lastSeenAt: authenticatedAt,
+        revokedAt: null,
+        status: "ACTIVE",
+        tokenHash: "synthetic",
+        userId: user.id,
+        walletId: wallet.id
+      },
+      user,
+      wallet
+    };
+  }
 }

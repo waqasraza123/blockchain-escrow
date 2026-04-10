@@ -75,6 +75,17 @@ enum AuditAction {
   FUNDING_TRANSACTION_STALE_PENDING
   FUNDING_TRANSACTION_SUPERSEDED
   FUNDING_TRANSACTION_SUBMITTED
+  PARTNER_ACCOUNT_CREATED
+  PARTNER_API_KEY_CREATED
+  PARTNER_API_KEY_REVOKED
+  PARTNER_HOSTED_SESSION_COMPLETED
+  PARTNER_HOSTED_SESSION_CREATED
+  PARTNER_HOSTED_SESSION_EXPIRED
+  PARTNER_ORGANIZATION_LINK_CREATED
+  PARTNER_WEBHOOK_DELIVERY_FAILED
+  PARTNER_WEBHOOK_DELIVERY_SUCCEEDED
+  PARTNER_WEBHOOK_SUBSCRIPTION_CREATED
+  PARTNER_WEBHOOK_SUBSCRIPTION_UPDATED
   ORGANIZATION_CREATED
   ORGANIZATION_INVITE_REVOKED
   ORGANIZATION_INVITE_ACCEPTED
@@ -184,6 +195,57 @@ enum ProtocolProposalAction {
   UNPAUSE_CREATE_ESCROW
   PAUSE_FUNDING
   UNPAUSE_FUNDING
+}
+
+enum PartnerAccountStatus {
+  ACTIVE
+  DISABLED
+}
+
+enum PartnerOrganizationLinkStatus {
+  ACTIVE
+  DISABLED
+}
+
+enum PartnerApiKeyStatus {
+  ACTIVE
+  REVOKED
+  EXPIRED
+}
+
+enum PartnerHostedSessionType {
+  COUNTERPARTY_VERSION_ACCEPTANCE
+  COUNTERPARTY_MILESTONE_SUBMISSION
+  DISPUTE_EVIDENCE_UPLOAD
+  DEAL_STATUS_REVIEW
+}
+
+enum PartnerHostedSessionStatus {
+  PENDING
+  ACTIVE
+  COMPLETED
+  EXPIRED
+  CANCELLED
+}
+
+enum PartnerWebhookSubscriptionStatus {
+  ACTIVE
+  PAUSED
+  DISABLED
+}
+
+enum PartnerWebhookDeliveryStatus {
+  PENDING
+  DELIVERING
+  SUCCEEDED
+  FAILED
+}
+
+enum PartnerResourceType {
+  DRAFT_DEAL
+  DEAL_VERSION
+  APPROVAL_REQUEST
+  PARTNER_HOSTED_SESSION
 }
 
 enum CostCenterStatus {
@@ -298,6 +360,16 @@ enum AuditEntityType {
   ORGANIZATION_INVITE
   ORGANIZATION_MEMBER
   OPERATOR_ALERT
+  PARTNER_ACCOUNT
+  PARTNER_API_KEY
+  PARTNER_HOSTED_SESSION
+  PARTNER_IDEMPOTENCY_KEY
+  PARTNER_ORGANIZATION_LINK
+  PARTNER_RESOURCE_REFERENCE
+  PARTNER_WEBHOOK_DELIVERY
+  PARTNER_WEBHOOK_DELIVERY_ATTEMPT
+  PARTNER_WEBHOOK_EVENT
+  PARTNER_WEBHOOK_SUBSCRIPTION
   PROTOCOL_PROPOSAL_DRAFT
   SESSION
   FINANCE_EXPORT_JOB
@@ -904,6 +976,205 @@ model FinanceExportArtifact {
 
   @@index([financeExportJobId], map: "finance_export_artifacts_job_id_idx")
   @@map("finance_export_artifacts")
+}
+
+model PartnerAccount {
+  id        String               @id @db.Text
+  name      String               @db.Text
+  slug      String               @unique @db.Text
+  status    PartnerAccountStatus
+  metadata  Json?
+  createdAt DateTime             @db.Timestamptz(3)
+  updatedAt DateTime             @db.Timestamptz(3)
+  links     PartnerOrganizationLink[]
+
+  @@index([status], map: "partner_accounts_status_idx")
+  @@index([createdAt], map: "partner_accounts_created_at_idx")
+  @@map("partner_accounts")
+}
+
+model PartnerOrganizationLink {
+  id                String                        @id @db.Text
+  partnerAccountId  String                        @db.Text
+  organizationId    String                        @db.Text
+  actingUserId      String                        @db.Text
+  actingWalletId    String                        @db.Text
+  externalReference String?                       @db.Text
+  status            PartnerOrganizationLinkStatus
+  createdAt         DateTime                      @db.Timestamptz(3)
+  updatedAt         DateTime                      @db.Timestamptz(3)
+  partnerAccount    PartnerAccount                @relation(fields: [partnerAccountId], references: [id], onDelete: Cascade)
+  apiKeys           PartnerApiKey[]
+  hostedSessions    PartnerHostedSession[]
+  resourceReferences PartnerResourceReference[]
+  webhookDeliveries PartnerWebhookDelivery[]
+  webhookEvents     PartnerWebhookEvent[]
+  webhookSubscriptions PartnerWebhookSubscription[]
+
+  @@unique([partnerAccountId, organizationId], map: "partner_org_links_partner_org_key")
+  @@index([organizationId], map: "partner_org_links_organization_id_idx")
+  @@index([partnerAccountId], map: "partner_org_links_partner_account_id_idx")
+  @@index([status], map: "partner_org_links_status_idx")
+  @@map("partner_organization_links")
+}
+
+model PartnerApiKey {
+  id                        String              @id @db.Text
+  partnerOrganizationLinkId String              @db.Text
+  displayName               String              @db.Text
+  keyPrefix                 String              @unique @db.Text
+  secretHash                String              @db.Text
+  scopes                    String[]
+  expiresAt                 DateTime?           @db.Timestamptz(3)
+  lastUsedAt                DateTime?           @db.Timestamptz(3)
+  revokedAt                 DateTime?           @db.Timestamptz(3)
+  status                    PartnerApiKeyStatus
+  createdAt                 DateTime            @db.Timestamptz(3)
+  updatedAt                 DateTime            @db.Timestamptz(3)
+  partnerOrganizationLink   PartnerOrganizationLink @relation(fields: [partnerOrganizationLinkId], references: [id], onDelete: Cascade)
+  hostedSessions            PartnerHostedSession[]
+  idempotencyKeys           PartnerIdempotencyKey[]
+
+  @@index([partnerOrganizationLinkId], map: "partner_api_keys_link_id_idx")
+  @@index([status], map: "partner_api_keys_status_idx")
+  @@index([lastUsedAt], map: "partner_api_keys_last_used_at_idx")
+  @@map("partner_api_keys")
+}
+
+model PartnerIdempotencyKey {
+  id                String       @id @db.Text
+  partnerApiKeyId   String       @db.Text
+  requestMethod     String       @db.Text
+  requestPath       String       @db.Text
+  requestKey        String       @db.Text
+  requestHash       String       @db.Text
+  responseStatusCode Int
+  responseBody      Json
+  createdAt         DateTime     @db.Timestamptz(3)
+  partnerApiKey     PartnerApiKey @relation(fields: [partnerApiKeyId], references: [id], onDelete: Cascade)
+
+  @@unique([partnerApiKeyId, requestMethod, requestPath, requestKey], map: "partner_idempotency_scope_key")
+  @@index([createdAt], map: "partner_idempotency_created_at_idx")
+  @@map("partner_idempotency_keys")
+}
+
+model PartnerResourceReference {
+  id                        String              @id @db.Text
+  partnerOrganizationLinkId String              @db.Text
+  resourceType              PartnerResourceType
+  resourceId                String              @db.Text
+  partnerReferenceId        String              @db.Text
+  createdAt                 DateTime            @db.Timestamptz(3)
+  partnerOrganizationLink   PartnerOrganizationLink @relation(fields: [partnerOrganizationLinkId], references: [id], onDelete: Cascade)
+
+  @@unique([partnerOrganizationLinkId, partnerReferenceId], map: "partner_resource_refs_link_ref_key")
+  @@unique([partnerOrganizationLinkId, resourceType, resourceId], map: "partner_resource_refs_link_resource_key")
+  @@index([resourceType, resourceId], map: "partner_resource_refs_resource_idx")
+  @@map("partner_resource_references")
+}
+
+model PartnerHostedSession {
+  id                        String                     @id @db.Text
+  partnerOrganizationLinkId String                     @db.Text
+  partnerApiKeyId           String?                    @db.Text
+  type                      PartnerHostedSessionType
+  status                    PartnerHostedSessionStatus
+  draftDealId               String?                    @db.Text
+  dealVersionId             String?                    @db.Text
+  dealVersionMilestoneId    String?                    @db.Text
+  dealMilestoneDisputeId    String?                    @db.Text
+  partnerReferenceId        String?                    @db.Text
+  launchTokenHash           String                     @unique @db.Text
+  expiresAt                 DateTime                   @db.Timestamptz(3)
+  activatedAt               DateTime?                  @db.Timestamptz(3)
+  completedAt               DateTime?                  @db.Timestamptz(3)
+  createdAt                 DateTime                   @db.Timestamptz(3)
+  updatedAt                 DateTime                   @db.Timestamptz(3)
+  partnerOrganizationLink   PartnerOrganizationLink    @relation(fields: [partnerOrganizationLinkId], references: [id], onDelete: Cascade)
+  partnerApiKey             PartnerApiKey?             @relation(fields: [partnerApiKeyId], references: [id], onDelete: SetNull)
+  webhookEvents             PartnerWebhookEvent[]
+
+  @@index([partnerOrganizationLinkId], map: "partner_hosted_sessions_link_id_idx")
+  @@index([status], map: "partner_hosted_sessions_status_idx")
+  @@index([expiresAt], map: "partner_hosted_sessions_expires_at_idx")
+  @@map("partner_hosted_sessions")
+}
+
+model PartnerWebhookSubscription {
+  id                        String                           @id @db.Text
+  partnerOrganizationLinkId String                           @db.Text
+  displayName               String                           @db.Text
+  endpointUrl               String                           @db.Text
+  eventTypes                String[]
+  secretHash                String                           @db.Text
+  status                    PartnerWebhookSubscriptionStatus
+  lastDeliveryAt            DateTime?                        @db.Timestamptz(3)
+  createdAt                 DateTime                         @db.Timestamptz(3)
+  updatedAt                 DateTime                         @db.Timestamptz(3)
+  partnerOrganizationLink   PartnerOrganizationLink          @relation(fields: [partnerOrganizationLinkId], references: [id], onDelete: Cascade)
+  deliveries                PartnerWebhookDelivery[]
+
+  @@index([partnerOrganizationLinkId], map: "partner_webhook_subs_link_id_idx")
+  @@index([status], map: "partner_webhook_subs_status_idx")
+  @@map("partner_webhook_subscriptions")
+}
+
+model PartnerWebhookEvent {
+  id                        String                     @id @db.Text
+  partnerOrganizationLinkId String                     @db.Text
+  organizationId            String                     @db.Text
+  draftDealId               String?                    @db.Text
+  hostedSessionId           String?                    @db.Text
+  eventType                 String                     @db.Text
+  payload                   Json
+  createdAt                 DateTime                   @db.Timestamptz(3)
+  partnerOrganizationLink   PartnerOrganizationLink    @relation(fields: [partnerOrganizationLinkId], references: [id], onDelete: Cascade)
+  hostedSession             PartnerHostedSession?      @relation(fields: [hostedSessionId], references: [id], onDelete: SetNull)
+  deliveries                PartnerWebhookDelivery[]
+
+  @@index([partnerOrganizationLinkId], map: "partner_webhook_events_link_id_idx")
+  @@index([organizationId], map: "partner_webhook_events_organization_id_idx")
+  @@index([eventType], map: "partner_webhook_events_event_type_idx")
+  @@map("partner_webhook_events")
+}
+
+model PartnerWebhookDelivery {
+  id                        String                       @id @db.Text
+  partnerWebhookEventId     String                       @db.Text
+  partnerWebhookSubscriptionId String                    @db.Text
+  partnerOrganizationLinkId String                       @db.Text
+  status                    PartnerWebhookDeliveryStatus
+  errorMessage              String?                      @db.Text
+  nextAttemptAt             DateTime?                    @db.Timestamptz(3)
+  lastAttemptAt             DateTime?                    @db.Timestamptz(3)
+  deliveredAt               DateTime?                    @db.Timestamptz(3)
+  createdAt                 DateTime                     @db.Timestamptz(3)
+  partnerWebhookEvent       PartnerWebhookEvent          @relation(fields: [partnerWebhookEventId], references: [id], onDelete: Cascade)
+  partnerWebhookSubscription PartnerWebhookSubscription  @relation(fields: [partnerWebhookSubscriptionId], references: [id], onDelete: Cascade)
+  partnerOrganizationLink   PartnerOrganizationLink      @relation(fields: [partnerOrganizationLinkId], references: [id], onDelete: Cascade)
+  attempts                  PartnerWebhookDeliveryAttempt[]
+
+  @@index([partnerWebhookEventId], map: "partner_webhook_deliveries_event_id_idx")
+  @@index([partnerWebhookSubscriptionId], map: "partner_webhook_deliveries_sub_id_idx")
+  @@index([partnerOrganizationLinkId], map: "partner_webhook_deliveries_link_id_idx")
+  @@index([status, nextAttemptAt], map: "partner_webhook_deliveries_status_attempt_idx")
+  @@map("partner_webhook_deliveries")
+}
+
+model PartnerWebhookDeliveryAttempt {
+  id                        String                  @id @db.Text
+  partnerWebhookDeliveryId  String                  @db.Text
+  attemptedAt               DateTime                @db.Timestamptz(3)
+  finishedAt                DateTime?               @db.Timestamptz(3)
+  durationMs                Int?
+  responseStatusCode        Int?
+  errorMessage              String?                 @db.Text
+  nextRetryAt               DateTime?               @db.Timestamptz(3)
+  partnerWebhookDelivery    PartnerWebhookDelivery  @relation(fields: [partnerWebhookDeliveryId], references: [id], onDelete: Cascade)
+
+  @@index([partnerWebhookDeliveryId], map: "partner_webhook_attempts_delivery_id_idx")
+  @@index([attemptedAt], map: "partner_webhook_attempts_attempted_at_idx")
+  @@map("partner_webhook_delivery_attempts")
 }
 
 model DealVersionParty {

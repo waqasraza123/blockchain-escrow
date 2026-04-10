@@ -250,6 +250,11 @@ interface FundingAccessContext {
   version: DealVersionRecord;
 }
 
+type FundingOrganizationAccess = Pick<
+  FundingAccessContext,
+  "actor" | "membership" | "organization"
+>;
+
 interface FundingComputationContext extends FundingAccessContext {
   acceptances: Awaited<
     ReturnType<Release1Repositories["dealVersionAcceptances"]["listByDealVersionId"]>
@@ -357,11 +362,29 @@ export class FundingService {
       throw new BadRequestException(parsed.error.flatten());
     }
 
-    const access = await this.requireDealVersionAccess(
-      parsed.data.organizationId,
-      parsed.data.draftDealId,
-      parsed.data.dealVersionId,
-      requestMetadata
+    const actor = await this.authenticatedSessionService.requireContext(
+      requestMetadata.cookieHeader
+    );
+    const authorized = await this.authorizeOrganizationActor(
+      actor,
+      parsed.data.organizationId
+    );
+    return this.getFundingPreparationWithActor(authorized, parsed.data);
+  }
+
+  async getFundingPreparationWithActor(
+    authorized: FundingOrganizationAccess,
+    input: {
+      dealVersionId: string;
+      draftDealId: string;
+      organizationId: string;
+    }
+  ): Promise<GetFundingPreparationResponse> {
+    const access = await this.requireDealVersionAccessForActor(
+      authorized,
+      input.organizationId,
+      input.draftDealId,
+      input.dealVersionId
     );
     const context = await this.buildFundingContext(access, new Date().toISOString());
 
@@ -370,8 +393,87 @@ export class FundingService {
     };
   }
 
+  async getFundingPreparationForActor(input: {
+    dealVersionId: string;
+    draftDealId: string;
+    organizationId: string;
+  }): Promise<GetFundingPreparationResponse> {
+    const organization =
+      await this.release1Repositories.organizations.findById(input.organizationId);
+
+    if (!organization) {
+      throw new NotFoundException("organization not found");
+    }
+
+    const wallets = await this.release1Repositories.wallets.listByUserId(
+      organization.createdByUserId
+    );
+    const wallet = wallets[0];
+
+    if (!wallet) {
+      throw new ConflictException("organization synthetic actor wallet is missing");
+    }
+
+    const membership =
+      await this.release1Repositories.organizationMembers.findMembership(
+        organization.id,
+        organization.createdByUserId
+      );
+
+    if (!membership) {
+      throw new ConflictException("organization synthetic actor membership is missing");
+    }
+
+    const actor = await this.authenticatedSessionService.loadSyntheticContext({
+      userId: organization.createdByUserId,
+      walletId: wallet.id
+    });
+
+    return this.getFundingPreparationWithActor(
+      {
+        actor,
+        membership,
+        organization
+      },
+      input
+    );
+  }
+
   async createFundingTransaction(
     fundingInput: unknown,
+    transactionInput: unknown,
+    requestMetadata: RequestMetadata
+  ): Promise<CreateFundingTransactionResponse> {
+    const parsedFunding = fundingPreparationParamsSchema.safeParse(fundingInput);
+
+    if (!parsedFunding.success) {
+      throw new BadRequestException(parsedFunding.error.flatten());
+    }
+
+    const actor = await this.authenticatedSessionService.requireContext(
+      requestMetadata.cookieHeader
+    );
+    const authorized = await this.authorizeOrganizationActor(
+      actor,
+      parsedFunding.data.organizationId,
+      "ADMIN"
+    );
+
+    return this.createFundingTransactionWithActor(
+      authorized,
+      parsedFunding.data,
+      transactionInput,
+      requestMetadata
+    );
+  }
+
+  async createFundingTransactionWithActor(
+    authorized: FundingOrganizationAccess,
+    fundingInput: {
+      dealVersionId: string;
+      draftDealId: string;
+      organizationId: string;
+    },
     transactionInput: unknown,
     requestMetadata: RequestMetadata
   ): Promise<CreateFundingTransactionResponse> {
@@ -386,12 +488,11 @@ export class FundingService {
       throw new BadRequestException(parsedTransaction.error.flatten());
     }
 
-    const access = await this.requireDealVersionAccess(
+    const access = await this.requireDealVersionAccessForActor(
+      authorized,
       parsedFunding.data.organizationId,
       parsedFunding.data.draftDealId,
-      parsedFunding.data.dealVersionId,
-      requestMetadata,
-      "ADMIN"
+      parsedFunding.data.dealVersionId
     );
     const now = new Date().toISOString();
     const context = await this.buildFundingContext(access, now);
@@ -1059,11 +1160,28 @@ export class FundingService {
     requestMetadata: RequestMetadata,
     minimumRole?: "OWNER" | "ADMIN" | "MEMBER"
   ): Promise<FundingAccessContext> {
-    const authorized = await this.requireOrganizationAccess(
+    const actor = await this.authenticatedSessionService.requireContext(
+      requestMetadata.cookieHeader
+    );
+    const authorized = await this.authorizeOrganizationActor(
+      actor,
       organizationId,
-      requestMetadata,
       minimumRole
     );
+    return this.requireDealVersionAccessForActor(
+      authorized,
+      organizationId,
+      draftDealId,
+      dealVersionId
+    );
+  }
+
+  async requireDealVersionAccessForActor(
+    authorized: FundingOrganizationAccess,
+    organizationId: string,
+    draftDealId: string,
+    dealVersionId: string
+  ): Promise<FundingAccessContext> {
     const [draft, version] = await Promise.all([
       this.release1Repositories.draftDeals.findById(draftDealId),
       this.release1Repositories.dealVersions.findById(dealVersionId)
@@ -1102,6 +1220,18 @@ export class FundingService {
     const actor = await this.authenticatedSessionService.requireContext(
       requestMetadata.cookieHeader
     );
+    return this.authorizeOrganizationActor(actor, organizationId, minimumRole);
+  }
+
+  async authorizeOrganizationActor(
+    actor: AuthenticatedSessionContext,
+    organizationId: string,
+    minimumRole?: "OWNER" | "ADMIN" | "MEMBER"
+  ): Promise<{
+    actor: AuthenticatedSessionContext;
+    membership: OrganizationMemberRecord;
+    organization: OrganizationRecord;
+  }> {
     const [organization, membership] = await Promise.all([
       this.release1Repositories.organizations.findById(organizationId),
       this.release1Repositories.organizationMembers.findMembership(

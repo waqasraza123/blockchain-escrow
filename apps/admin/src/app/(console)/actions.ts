@@ -2,16 +2,24 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import type { CreatePartnerWebhookSubscriptionInput } from "@blockchain-escrow/shared";
 
 import {
   acknowledgeAlert,
   addCaseNote,
   assignCase,
+  createPartnerAccount,
+  createPartnerApiKey,
+  createPartnerOrganizationLink,
+  createPartnerWebhookSubscription,
   createCase,
   createCheckpoint,
   createProtocolProposal,
   decideCheckpoint,
+  revokePartnerApiKey,
+  rotatePartnerWebhookSubscriptionSecret,
   resolveAlert,
+  updatePartnerWebhookSubscription,
   updateCaseStatus
 } from "../../lib/operator-api";
 
@@ -167,4 +175,94 @@ export async function createProtocolProposalAction(formData: FormData): Promise<
 
   revalidatePath("/protocol-proposals");
   redirect(`/protocol-proposals/${proposal.proposal.id}`);
+}
+
+export async function createPartnerAccountAction(formData: FormData): Promise<void> {
+  const partner = await createPartnerAccount({
+    metadata: optionalString(formData, "metadata")
+      ? JSON.parse(requiredString(formData, "metadata")) as Record<string, unknown>
+      : undefined,
+    name: requiredString(formData, "name"),
+    slug: requiredString(formData, "slug")
+  });
+
+  revalidatePath("/partners");
+  redirect(`/partners/${partner.partnerAccount.id}`);
+}
+
+export async function createPartnerOrganizationLinkAction(formData: FormData): Promise<void> {
+  const partnerAccountId = requiredString(formData, "partnerAccountId");
+  await createPartnerOrganizationLink(partnerAccountId, {
+    actingUserId: requiredString(formData, "actingUserId"),
+    actingWalletId: requiredString(formData, "actingWalletId"),
+    externalReference: optionalString(formData, "externalReference") ?? undefined,
+    organizationId: requiredString(formData, "organizationId")
+  });
+
+  revalidatePath(`/partners/${partnerAccountId}`);
+  redirect(`/partners/${partnerAccountId}`);
+}
+
+export async function createPartnerApiKeyAction(formData: FormData): Promise<void> {
+  const partnerAccountId = requiredString(formData, "partnerAccountId");
+  await createPartnerApiKey(requiredString(formData, "partnerOrganizationLinkId"), {
+    displayName: requiredString(formData, "displayName"),
+    expiresAt: optionalString(formData, "expiresAt") ?? undefined
+  });
+
+  revalidatePath(`/partners/${partnerAccountId}`);
+  redirect(`/partners/${partnerAccountId}`);
+}
+
+export async function revokePartnerApiKeyAction(formData: FormData): Promise<void> {
+  const partnerAccountId = requiredString(formData, "partnerAccountId");
+  await revokePartnerApiKey(
+    requiredString(formData, "partnerApiKeyId"),
+    optionalString(formData, "reason") ?? undefined
+  );
+
+  revalidatePath(`/partners/${partnerAccountId}`);
+  redirect(`/partners/${partnerAccountId}`);
+}
+
+export async function createPartnerWebhookSubscriptionAction(
+  formData: FormData
+): Promise<void> {
+  const partnerAccountId = requiredString(formData, "partnerAccountId");
+  await createPartnerWebhookSubscription(requiredString(formData, "partnerOrganizationLinkId"), {
+    displayName: requiredString(formData, "displayName"),
+    endpointUrl: requiredString(formData, "endpointUrl"),
+    eventTypes: requiredString(formData, "eventTypes")
+      .split(",")
+      .map((value) => value.trim())
+      .filter(Boolean) as CreatePartnerWebhookSubscriptionInput["eventTypes"]
+  });
+
+  revalidatePath(`/partners/${partnerAccountId}`);
+  redirect(`/partners/${partnerAccountId}`);
+}
+
+export async function updatePartnerWebhookSubscriptionAction(
+  formData: FormData
+): Promise<void> {
+  const partnerAccountId = requiredString(formData, "partnerAccountId");
+  await updatePartnerWebhookSubscription(
+    requiredString(formData, "partnerWebhookSubscriptionId"),
+    requiredString(formData, "status") as "ACTIVE" | "PAUSED" | "DISABLED"
+  );
+
+  revalidatePath(`/partners/${partnerAccountId}`);
+  redirect(`/partners/${partnerAccountId}`);
+}
+
+export async function rotatePartnerWebhookSubscriptionSecretAction(
+  formData: FormData
+): Promise<void> {
+  const partnerAccountId = requiredString(formData, "partnerAccountId");
+  await rotatePartnerWebhookSubscriptionSecret(
+    requiredString(formData, "partnerWebhookSubscriptionId")
+  );
+
+  revalidatePath(`/partners/${partnerAccountId}`);
+  redirect(`/partners/${partnerAccountId}`);
 }

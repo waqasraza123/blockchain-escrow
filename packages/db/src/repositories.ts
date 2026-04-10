@@ -3,6 +3,7 @@ import type {
   EntityId,
   HexString,
   IsoTimestamp,
+  PartnerResourceType,
   WalletAddress
 } from "@blockchain-escrow/shared";
 
@@ -54,6 +55,16 @@ import type {
   OrganizationRecord,
   OperatorAccountRecord,
   OperatorAlertRecord,
+  PartnerAccountRecord,
+  PartnerApiKeyRecord,
+  PartnerHostedSessionRecord,
+  PartnerIdempotencyKeyRecord,
+  PartnerOrganizationLinkRecord,
+  PartnerResourceReferenceRecord,
+  PartnerWebhookDeliveryAttemptRecord,
+  PartnerWebhookDeliveryRecord,
+  PartnerWebhookEventRecord,
+  PartnerWebhookSubscriptionRecord,
   ProtocolConfigStateRecord,
   ProtocolProposalDraftRecord,
   SessionRecord,
@@ -253,6 +264,126 @@ export interface ProtocolProposalDraftRepository {
   create(record: ProtocolProposalDraftRecord): Promise<ProtocolProposalDraftRecord>;
   findById(id: EntityId): Promise<ProtocolProposalDraftRecord | null>;
   listAll(): Promise<ProtocolProposalDraftRecord[]>;
+}
+
+export interface PartnerAccountRepository {
+  create(record: PartnerAccountRecord): Promise<PartnerAccountRecord>;
+  findById(id: EntityId): Promise<PartnerAccountRecord | null>;
+  findBySlug(slug: string): Promise<PartnerAccountRecord | null>;
+  listAll(): Promise<PartnerAccountRecord[]>;
+}
+
+export interface PartnerOrganizationLinkRepository {
+  create(record: PartnerOrganizationLinkRecord): Promise<PartnerOrganizationLinkRecord>;
+  findById(id: EntityId): Promise<PartnerOrganizationLinkRecord | null>;
+  listByOrganizationId(organizationId: EntityId): Promise<PartnerOrganizationLinkRecord[]>;
+  listByPartnerAccountId(
+    partnerAccountId: EntityId
+  ): Promise<PartnerOrganizationLinkRecord[]>;
+  update(
+    id: EntityId,
+    updates: Partial<Omit<PartnerOrganizationLinkRecord, "id" | "partnerAccountId" | "organizationId" | "createdAt">>
+  ): Promise<PartnerOrganizationLinkRecord>;
+}
+
+export interface PartnerApiKeyRepository {
+  create(record: PartnerApiKeyRecord): Promise<PartnerApiKeyRecord>;
+  findActiveByKeyPrefix(keyPrefix: string): Promise<PartnerApiKeyRecord | null>;
+  findById(id: EntityId): Promise<PartnerApiKeyRecord | null>;
+  listByPartnerOrganizationLinkId(
+    partnerOrganizationLinkId: EntityId
+  ): Promise<PartnerApiKeyRecord[]>;
+  update(
+    id: EntityId,
+    updates: Partial<Omit<PartnerApiKeyRecord, "id" | "partnerOrganizationLinkId" | "createdAt" | "keyPrefix" | "secretHash">>
+  ): Promise<PartnerApiKeyRecord>;
+}
+
+export interface PartnerIdempotencyKeyRepository {
+  create(record: PartnerIdempotencyKeyRecord): Promise<PartnerIdempotencyKeyRecord>;
+  findByScope(input: {
+    partnerApiKeyId: EntityId;
+    requestKey: string;
+    requestMethod: string;
+    requestPath: string;
+  }): Promise<PartnerIdempotencyKeyRecord | null>;
+}
+
+export interface PartnerResourceReferenceRepository {
+  create(record: PartnerResourceReferenceRecord): Promise<PartnerResourceReferenceRecord>;
+  findByPartnerReferenceId(input: {
+    partnerOrganizationLinkId: EntityId;
+    partnerReferenceId: string;
+  }): Promise<PartnerResourceReferenceRecord | null>;
+  findByResource(input: {
+    partnerOrganizationLinkId: EntityId;
+    resourceId: EntityId;
+    resourceType: PartnerResourceType;
+  }): Promise<PartnerResourceReferenceRecord | null>;
+}
+
+export interface PartnerHostedSessionRepository {
+  create(record: PartnerHostedSessionRecord): Promise<PartnerHostedSessionRecord>;
+  findById(id: EntityId): Promise<PartnerHostedSessionRecord | null>;
+  findByLaunchTokenHash(launchTokenHash: string): Promise<PartnerHostedSessionRecord | null>;
+  listByOrganizationId(organizationId: EntityId): Promise<PartnerHostedSessionRecord[]>;
+  listByPartnerOrganizationLinkId(
+    partnerOrganizationLinkId: EntityId
+  ): Promise<PartnerHostedSessionRecord[]>;
+  update(
+    id: EntityId,
+    updates: Partial<Omit<PartnerHostedSessionRecord, "id" | "partnerOrganizationLinkId" | "launchTokenHash" | "createdAt">>
+  ): Promise<PartnerHostedSessionRecord>;
+}
+
+export interface PartnerWebhookSubscriptionRepository {
+  create(
+    record: PartnerWebhookSubscriptionRecord
+  ): Promise<PartnerWebhookSubscriptionRecord>;
+  findById(id: EntityId): Promise<PartnerWebhookSubscriptionRecord | null>;
+  listActiveByPartnerOrganizationLinkId(
+    partnerOrganizationLinkId: EntityId
+  ): Promise<PartnerWebhookSubscriptionRecord[]>;
+  listByPartnerOrganizationLinkIds(
+    partnerOrganizationLinkIds: readonly EntityId[]
+  ): Promise<PartnerWebhookSubscriptionRecord[]>;
+  listByPartnerOrganizationLinkId(
+    partnerOrganizationLinkId: EntityId
+  ): Promise<PartnerWebhookSubscriptionRecord[]>;
+  update(
+    id: EntityId,
+    updates: Partial<Omit<PartnerWebhookSubscriptionRecord, "id" | "partnerOrganizationLinkId" | "createdAt">>
+  ): Promise<PartnerWebhookSubscriptionRecord>;
+}
+
+export interface PartnerWebhookEventRepository {
+  create(record: PartnerWebhookEventRecord): Promise<PartnerWebhookEventRecord>;
+  findById(id: EntityId): Promise<PartnerWebhookEventRecord | null>;
+}
+
+export interface PartnerWebhookDeliveryRepository {
+  claimNextPending(now: IsoTimestamp): Promise<PartnerWebhookDeliveryRecord | null>;
+  create(record: PartnerWebhookDeliveryRecord): Promise<PartnerWebhookDeliveryRecord>;
+  findById(id: EntityId): Promise<PartnerWebhookDeliveryRecord | null>;
+  listByPartnerOrganizationLinkIds(
+    partnerOrganizationLinkIds: readonly EntityId[]
+  ): Promise<PartnerWebhookDeliveryRecord[]>;
+  listByPartnerOrganizationLinkId(
+    partnerOrganizationLinkId: EntityId
+  ): Promise<PartnerWebhookDeliveryRecord[]>;
+  update(
+    id: EntityId,
+    updates: Partial<Omit<PartnerWebhookDeliveryRecord, "id" | "partnerWebhookEventId" | "partnerWebhookSubscriptionId" | "partnerOrganizationLinkId" | "createdAt">>
+  ): Promise<PartnerWebhookDeliveryRecord>;
+}
+
+export interface PartnerWebhookDeliveryAttemptRepository {
+  create(
+    record: PartnerWebhookDeliveryAttemptRecord
+  ): Promise<PartnerWebhookDeliveryAttemptRecord>;
+  listByPartnerWebhookDeliveryId(
+    partnerWebhookDeliveryId: EntityId
+  ): Promise<PartnerWebhookDeliveryAttemptRecord[]>;
 }
 
 export interface StatementSnapshotRepository {
@@ -746,4 +877,17 @@ export interface Release9Repositories {
   financeExportArtifacts: FinanceExportArtifactRepository;
   financeExportJobs: FinanceExportJobRepository;
   statementSnapshots: StatementSnapshotRepository;
+}
+
+export interface Release10Repositories {
+  partnerAccounts: PartnerAccountRepository;
+  partnerApiKeys: PartnerApiKeyRepository;
+  partnerHostedSessions: PartnerHostedSessionRepository;
+  partnerIdempotencyKeys: PartnerIdempotencyKeyRepository;
+  partnerOrganizationLinks: PartnerOrganizationLinkRepository;
+  partnerResourceReferences: PartnerResourceReferenceRepository;
+  partnerWebhookDeliveries: PartnerWebhookDeliveryRepository;
+  partnerWebhookDeliveryAttempts: PartnerWebhookDeliveryAttemptRepository;
+  partnerWebhookEvents: PartnerWebhookEventRepository;
+  partnerWebhookSubscriptions: PartnerWebhookSubscriptionRepository;
 }

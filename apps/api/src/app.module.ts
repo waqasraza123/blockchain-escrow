@@ -10,6 +10,7 @@ import { FilesModule } from "./modules/files/files.module";
 import { FundingModule } from "./modules/funding/funding.module";
 import { MilestonesModule } from "./modules/milestones/milestones.module";
 import { OperatorModule } from "./modules/operator/operator.module";
+import { PartnerModule } from "./modules/partner/partner.module";
 import { OrganizationsModule } from "./modules/organizations/organizations.module";
 import { TemplatesModule } from "./modules/templates/templates.module";
 import { UsersModule } from "./modules/users/users.module";
@@ -26,6 +27,7 @@ import { WalletsModule } from "./modules/wallets/wallets.module";
     FundingModule,
     MilestonesModule,
     OperatorModule,
+    PartnerModule,
     FilesModule,
     OrganizationsModule,
     TemplatesModule,

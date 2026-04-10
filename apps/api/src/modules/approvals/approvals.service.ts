@@ -42,6 +42,7 @@ import {
   type FinanceExportJobDetailResponse,
   type GetCurrentApprovalRequestResponse,
   type JsonObject,
+  type ListApprovalRequestsParams,
   type ListApprovalRequestsResponse,
   type ListApprovalPoliciesResponse,
   type ListCostCentersResponse,
@@ -502,27 +503,33 @@ export class ApprovalsService {
     }
 
     await this.requireOrganizationAccess(parsed.data.organizationId, requestMetadata);
+    return this.listApprovalRequestsForOrganization(parsed.data);
+  }
+
+  async listApprovalRequestsForOrganization(
+    input: ListApprovalRequestsParams
+  ): Promise<ListApprovalRequestsResponse> {
     const approvalRequests =
       await this.release9Repositories.approvalRequests.listByOrganizationId(
-        parsed.data.organizationId
+        input.organizationId
       );
     const filtered = approvalRequests.filter((record) => {
-      if (parsed.data.actionKind && record.kind !== parsed.data.actionKind) {
+      if (input.actionKind && record.kind !== input.actionKind) {
         return false;
       }
-      if (parsed.data.dealVersionId && record.dealVersionId !== parsed.data.dealVersionId) {
+      if (input.dealVersionId && record.dealVersionId !== input.dealVersionId) {
         return false;
       }
-      if (parsed.data.draftDealId && record.draftDealId !== parsed.data.draftDealId) {
+      if (input.draftDealId && record.draftDealId !== input.draftDealId) {
         return false;
       }
-      if (parsed.data.status && record.status !== parsed.data.status) {
+      if (input.status && record.status !== input.status) {
         return false;
       }
-      if (parsed.data.subjectId && record.subjectId !== parsed.data.subjectId) {
+      if (input.subjectId && record.subjectId !== input.subjectId) {
         return false;
       }
-      if (parsed.data.subjectType && record.subjectType !== parsed.data.subjectType) {
+      if (input.subjectType && record.subjectType !== input.subjectType) {
         return false;
       }
       return true;
@@ -553,11 +560,18 @@ export class ApprovalsService {
     }
 
     await this.requireOrganizationAccess(parsed.data.organizationId, requestMetadata);
+    return this.getApprovalRequestDetailForOrganization(parsed.data);
+  }
+
+  async getApprovalRequestDetailForOrganization(input: {
+    approvalRequestId: string;
+    organizationId: string;
+  }): Promise<ApprovalRequestDetailResponse> {
     const approvalRequest = await this.release9Repositories.approvalRequests.findById(
-      parsed.data.approvalRequestId
+      input.approvalRequestId
     );
 
-    if (!approvalRequest || approvalRequest.organizationId !== parsed.data.organizationId) {
+    if (!approvalRequest || approvalRequest.organizationId !== input.organizationId) {
       throw new NotFoundException("approval request not found");
     }
 
@@ -576,17 +590,30 @@ export class ApprovalsService {
     body: unknown,
     requestMetadata: RequestMetadata
   ): Promise<CreateApprovalRequestResponse> {
+    const actor = await this.authenticatedSessionService.requireContext(
+      requestMetadata.cookieHeader
+    );
+    const access = await this.authorizeOrganizationActor(actor, organizationId, "ADMIN");
+    return this.createActionApprovalRequestWithActor(
+      access,
+      organizationId,
+      body,
+      requestMetadata
+    );
+  }
+
+  async createActionApprovalRequestWithActor(
+    access: OrganizationAccessContext,
+    organizationId: string,
+    body: unknown,
+    requestMetadata: RequestMetadata
+  ): Promise<CreateApprovalRequestResponse> {
     const parsed = createActionApprovalRequestSchema.safeParse(body);
 
     if (!parsed.success) {
       throw new BadRequestException(parsed.error.flatten());
     }
 
-    const access = await this.requireOrganizationAccess(
-      organizationId,
-      requestMetadata,
-      "ADMIN"
-    );
     const runtimeContext = this.toRuntimeContext(organizationId, parsed.data);
 
     return {
@@ -1429,6 +1456,14 @@ export class ApprovalsService {
     const actor = await this.authenticatedSessionService.requireContext(
       requestMetadata.cookieHeader
     );
+    return this.authorizeOrganizationActor(actor, organizationId, minimumRole);
+  }
+
+  async authorizeOrganizationActor(
+    actor: AuthenticatedSessionContext,
+    organizationId: string,
+    minimumRole: OrganizationMemberRecord["role"] = "MEMBER"
+  ): Promise<OrganizationAccessContext> {
     const [organization, membership] = await Promise.all([
       this.release1Repositories.organizations.findById(organizationId),
       this.release1Repositories.organizationMembers.findMembership(

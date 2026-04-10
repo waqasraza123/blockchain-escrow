@@ -288,6 +288,16 @@ export class AuditService {
       case "FINANCE_EXPORT_JOB":
       case "FINANCE_EXPORT_ARTIFACT":
       case "STATEMENT_SNAPSHOT":
+      case "PARTNER_ACCOUNT":
+      case "PARTNER_API_KEY":
+      case "PARTNER_HOSTED_SESSION":
+      case "PARTNER_IDEMPOTENCY_KEY":
+      case "PARTNER_ORGANIZATION_LINK":
+      case "PARTNER_RESOURCE_REFERENCE":
+      case "PARTNER_WEBHOOK_DELIVERY":
+      case "PARTNER_WEBHOOK_DELIVERY_ATTEMPT":
+      case "PARTNER_WEBHOOK_EVENT":
+      case "PARTNER_WEBHOOK_SUBSCRIPTION":
         throw new ForbiddenException(
           "audit logs for operator-only entities are not available on this surface"
         );

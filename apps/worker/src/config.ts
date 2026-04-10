@@ -62,11 +62,18 @@ export interface WorkerOperatorAlertConfiguration {
   readonly unresolvedDisputeAfterSeconds: number;
 }
 
+export interface WorkerPartnerWebhookConfiguration {
+  readonly maxAttempts: number;
+  readonly requestTimeoutMs: number;
+  readonly retryBaseDelaySeconds: number;
+}
+
 export interface WorkerConfig {
   readonly chainId: number;
   readonly fundingReconciliation: WorkerFundingReconciliationConfiguration;
   readonly milestoneSettlementExecutionReconciliation: WorkerMilestoneSettlementExecutionReconciliationConfiguration;
   readonly operatorAlerts: WorkerOperatorAlertConfiguration;
+  readonly partnerWebhooks: WorkerPartnerWebhookConfiguration;
   readonly pollIntervalMs: number;
   readonly port: number;
   readonly runOnce: boolean;
@@ -135,6 +142,17 @@ export function loadWorkerConfig(): WorkerConfig {
       unresolvedDisputeAfterSeconds: parsePositiveInteger(
         "WORKER_OPERATOR_ALERT_UNRESOLVED_DISPUTE_AFTER_SECONDS",
         86400
+      )
+    },
+    partnerWebhooks: {
+      maxAttempts: parsePositiveInteger("WORKER_PARTNER_WEBHOOK_MAX_ATTEMPTS", 5),
+      requestTimeoutMs: parsePositiveInteger(
+        "WORKER_PARTNER_WEBHOOK_REQUEST_TIMEOUT_MS",
+        5000
+      ),
+      retryBaseDelaySeconds: parsePositiveInteger(
+        "WORKER_PARTNER_WEBHOOK_RETRY_BASE_DELAY_SECONDS",
+        60
       )
     },
     pollIntervalMs: parsePositiveInteger("WORKER_POLL_INTERVAL_MS", 15000),

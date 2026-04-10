@@ -186,6 +186,12 @@ interface DraftProjectionContext {
   staleEvaluatedAt: string;
 }
 
+type DraftsOrganizationAccess = {
+  actor: AuthenticatedSessionContext;
+  membership: OrganizationMemberRecord;
+  organization: OrganizationRecord;
+};
+
 @Injectable()
 export class DraftsService {
   constructor(
@@ -210,15 +216,7 @@ export class DraftsService {
     }
 
     await this.requireOrganizationAccess(parsed.data.organizationId, requestMetadata);
-    const drafts = await this.repositories.draftDeals.listByOrganizationId(
-      parsed.data.organizationId
-    );
-    const now = new Date().toISOString();
-    const draftItems = await Promise.all(drafts.map((draft) => this.buildDraftListItem(draft, now)));
-
-    return {
-      drafts: draftItems
-    };
+    return this.listDraftsForOrganization(parsed.data.organizationId);
   }
 
   async getDraft(
@@ -231,17 +229,53 @@ export class DraftsService {
       throw new BadRequestException(parsed.error.flatten());
     }
 
-    const draft = await this.requireDraftAccess(
-      parsed.data.organizationId,
-      parsed.data.draftDealId,
-      requestMetadata
+    await this.requireOrganizationAccess(parsed.data.organizationId, requestMetadata);
+    return this.getDraftForOrganization(parsed.data.organizationId, parsed.data.draftDealId);
+  }
+
+  async listDraftsForOrganization(organizationId: string): Promise<ListDraftDealsResponse> {
+    const drafts = await this.repositories.draftDeals.listByOrganizationId(organizationId);
+    const now = new Date().toISOString();
+    const draftItems = await Promise.all(
+      drafts.map((draft) => this.buildDraftListItem(draft, now))
     );
-    const syncedDraft = (await this.syncDraftFundingState(draft.id, new Date().toISOString())) ?? draft;
+
+    return {
+      drafts: draftItems
+    };
+  }
+
+  async getDraftForOrganization(
+    organizationId: string,
+    draftDealId: string
+  ): Promise<DraftDealDetailResponse> {
+    const draft = await this.repositories.draftDeals.findById(draftDealId);
+
+    if (!draft || draft.organizationId !== organizationId) {
+      throw new NotFoundException("draft deal not found");
+    }
+
+    const syncedDraft =
+      (await this.syncDraftFundingState(draft.id, new Date().toISOString())) ?? draft;
 
     return this.buildDraftDetailResponse(syncedDraft);
   }
 
   async createDraft(
+    organizationId: string,
+    input: unknown,
+    requestMetadata: RequestMetadata
+  ): Promise<CreateDraftDealResponse> {
+    const authorized = await this.requireOrganizationAccess(
+      organizationId,
+      requestMetadata,
+      "ADMIN"
+    );
+    return this.createDraftWithActor(authorized, organizationId, input, requestMetadata);
+  }
+
+  async createDraftWithActor(
+    authorized: DraftsOrganizationAccess,
     organizationId: string,
     input: unknown,
     requestMetadata: RequestMetadata
@@ -252,11 +286,6 @@ export class DraftsService {
       throw new BadRequestException(parsed.error.flatten());
     }
 
-    const authorized = await this.requireOrganizationAccess(
-      organizationId,
-      requestMetadata,
-      "ADMIN"
-    );
     await this.approvalRuntimeService.assertMutationApproved({
       actionKind: "DRAFT_DEAL_CREATE",
       costCenterId: null,
@@ -353,6 +382,35 @@ export class DraftsService {
     requestMetadata: RequestMetadata
   ): Promise<CreateDealVersionResponse> {
     const parsedDraft = draftDealParamsSchema.safeParse(draftInput);
+
+    if (!parsedDraft.success) {
+      throw new BadRequestException(parsedDraft.error.flatten());
+    }
+
+    const authorized = await this.requireOrganizationAccess(
+      parsedDraft.data.organizationId,
+      requestMetadata,
+      "ADMIN"
+    );
+
+    return this.createVersionSnapshotWithActor(
+      authorized,
+      parsedDraft.data,
+      versionInput,
+      requestMetadata
+    );
+  }
+
+  async createVersionSnapshotWithActor(
+    authorized: DraftsOrganizationAccess,
+    draftInput: {
+      draftDealId: string;
+      organizationId: string;
+    },
+    versionInput: unknown,
+    requestMetadata: RequestMetadata
+  ): Promise<CreateDealVersionResponse> {
+    const parsedDraft = draftDealParamsSchema.safeParse(draftInput);
     const parsedVersion = createDealVersionSchema.safeParse(versionInput);
 
     if (!parsedDraft.success) {
@@ -363,11 +421,6 @@ export class DraftsService {
       throw new BadRequestException(parsedVersion.error.flatten());
     }
 
-    const authorized = await this.requireOrganizationAccess(
-      parsedDraft.data.organizationId,
-      requestMetadata,
-      "ADMIN"
-    );
     const draft = await this.repositories.draftDeals.findById(parsedDraft.data.draftDealId);
 
     if (!draft || draft.organizationId !== parsedDraft.data.organizationId) {
@@ -533,6 +586,38 @@ export class DraftsService {
     requestMetadata: RequestMetadata
   ): Promise<CreateDealVersionAcceptanceResponse> {
     const parsedVersion = dealVersionAcceptanceParamsSchema.safeParse(versionInput);
+
+    if (!parsedVersion.success) {
+      throw new BadRequestException(parsedVersion.error.flatten());
+    }
+
+    const actor = await this.authenticatedSessionService.requireContext(
+      requestMetadata.cookieHeader
+    );
+    const authorized = await this.authorizeOrganizationActor(
+      actor,
+      parsedVersion.data.organizationId
+    );
+
+    return this.createVersionAcceptanceWithActor(
+      authorized,
+      parsedVersion.data,
+      acceptanceInput,
+      requestMetadata
+    );
+  }
+
+  async createVersionAcceptanceWithActor(
+    authorized: DraftsOrganizationAccess,
+    versionInput: {
+      dealVersionId: string;
+      draftDealId: string;
+      organizationId: string;
+    },
+    acceptanceInput: unknown,
+    requestMetadata: RequestMetadata
+  ): Promise<CreateDealVersionAcceptanceResponse> {
+    const parsedVersion = dealVersionAcceptanceParamsSchema.safeParse(versionInput);
     const parsedAcceptance = createDealVersionAcceptanceSchema.safeParse(
       acceptanceInput
     );
@@ -545,15 +630,15 @@ export class DraftsService {
       throw new BadRequestException(parsedAcceptance.error.flatten());
     }
 
-    const authorized = await this.requireDealVersionAccess(
+    const versionAccess = await this.requireDealVersionAccessForActor(
+      authorized,
       parsedVersion.data.organizationId,
       parsedVersion.data.draftDealId,
-      parsedVersion.data.dealVersionId,
-      requestMetadata
+      parsedVersion.data.dealVersionId
     );
     const organizationParty = await this.requireOrganizationVersionParty(
-      authorized.version.id,
-      authorized.organization.id
+      versionAccess.version.id,
+      versionAccess.organization.id
     );
     const existing = await this.repositories.dealVersionAcceptances.findByDealVersionPartyId(
       organizationParty.id
@@ -565,43 +650,43 @@ export class DraftsService {
 
     await this.approvalRuntimeService.assertMutationApproved({
       actionKind: "DEAL_VERSION_ACCEPT",
-      costCenterId: authorized.draft.costCenterId ?? null,
-      dealVersionId: authorized.version.id,
+      costCenterId: versionAccess.draft.costCenterId ?? null,
+      dealVersionId: versionAccess.version.id,
       dealVersionMilestoneId: null,
-      draftDealId: authorized.draft.id,
+      draftDealId: versionAccess.draft.id,
       input: parsedAcceptance.data as unknown as JsonObject,
-      organizationId: authorized.organization.id,
-      settlementCurrency: authorized.version.settlementCurrency,
+      organizationId: versionAccess.organization.id,
+      settlementCurrency: versionAccess.version.settlementCurrency,
       subjectId: organizationParty.id,
-      subjectLabel: authorized.version.title,
+      subjectLabel: versionAccess.version.title,
       subjectMetadata: null,
       subjectSnapshot: {
-        dealVersionId: authorized.version.id,
+        dealVersionId: versionAccess.version.id,
         partyId: organizationParty.id
       },
       subjectType: "DEAL_VERSION_PARTY",
-      title: authorized.version.title,
+      title: versionAccess.version.title,
       totalAmountMinor: null
     });
 
     const now = new Date().toISOString();
     const acceptance = await this.repositories.dealVersionAcceptances.create({
       acceptedAt: now,
-      acceptedByUserId: authorized.actor.user.id,
-      dealVersionId: authorized.version.id,
+      acceptedByUserId: versionAccess.actor.user.id,
+      dealVersionId: versionAccess.version.id,
       dealVersionPartyId: organizationParty.id,
       id: randomUUID(),
-      organizationId: authorized.organization.id,
+      organizationId: versionAccess.organization.id,
       scheme: parsedAcceptance.data.scheme,
       signature: parsedAcceptance.data.signature,
-      signerWalletAddress: authorized.actor.wallet.address,
-      signerWalletId: authorized.actor.wallet.id,
+      signerWalletAddress: versionAccess.actor.wallet.address,
+      signerWalletId: versionAccess.actor.wallet.id,
       typedData: parsedAcceptance.data.typedData
     });
 
     await this.repositories.auditLogs.append({
       action: "DEAL_VERSION_ACCEPTANCE_CREATED",
-      actorUserId: authorized.actor.user.id,
+      actorUserId: versionAccess.actor.user.id,
       entityId: acceptance.id,
       entityType: "DEAL_VERSION_ACCEPTANCE",
       id: randomUUID(),
@@ -613,11 +698,11 @@ export class DraftsService {
         signerWalletId: acceptance.signerWalletId
       },
       occurredAt: now,
-      organizationId: authorized.organization.id,
+      organizationId: versionAccess.organization.id,
       userAgent: requestMetadata.userAgent
     });
 
-    await this.syncDraftFundingState(authorized.draft.id, now);
+    await this.syncDraftFundingState(versionAccess.draft.id, now);
 
     return {
       acceptance: this.toAcceptanceDetail(acceptance, organizationParty)
@@ -1488,10 +1573,30 @@ export class DraftsService {
     organization: OrganizationRecord;
     version: DealVersionRecord;
   }> {
-    const authorized = await this.requireOrganizationAccess(
-      organizationId,
-      requestMetadata
+    const actor = await this.authenticatedSessionService.requireContext(
+      requestMetadata.cookieHeader
     );
+    const authorized = await this.authorizeOrganizationActor(actor, organizationId);
+    return this.requireDealVersionAccessForActor(
+      authorized,
+      organizationId,
+      draftDealId,
+      dealVersionId
+    );
+  }
+
+  async requireDealVersionAccessForActor(
+    authorized: DraftsOrganizationAccess,
+    organizationId: string,
+    draftDealId: string,
+    dealVersionId: string
+  ): Promise<{
+    actor: AuthenticatedSessionContext;
+    draft: DraftDealRecord;
+    membership: OrganizationMemberRecord;
+    organization: OrganizationRecord;
+    version: DealVersionRecord;
+  }> {
     const [draft, version] = await Promise.all([
       this.repositories.draftDeals.findById(draftDealId),
       this.repositories.dealVersions.findById(dealVersionId)
@@ -1636,6 +1741,18 @@ export class DraftsService {
     const actor = await this.authenticatedSessionService.requireContext(
       requestMetadata.cookieHeader
     );
+    return this.authorizeOrganizationActor(actor, organizationId, minimumRole);
+  }
+
+  async authorizeOrganizationActor(
+    actor: AuthenticatedSessionContext,
+    organizationId: string,
+    minimumRole?: "OWNER" | "ADMIN" | "MEMBER"
+  ): Promise<{
+    actor: AuthenticatedSessionContext;
+    membership: OrganizationMemberRecord;
+    organization: OrganizationRecord;
+  }> {
     const [organization, membership] = await Promise.all([
       this.repositories.organizations.findById(organizationId),
       this.repositories.organizationMembers.findMembership(

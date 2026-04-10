@@ -12,6 +12,7 @@ const navigation = [
   { href: "/alerts", label: "Alerts" },
   { href: "/checkpoints", label: "Checkpoints" },
   { href: "/cases", label: "Cases" },
+  { href: "/partners", label: "Partners" },
   { href: "/protocol-proposals", label: "Protocol Proposals" }
 ];
 

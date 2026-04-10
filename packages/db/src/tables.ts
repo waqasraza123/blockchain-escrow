@@ -66,6 +66,22 @@ export const release9TableNames = {
 export type Release9TableName =
   (typeof release9TableNames)[keyof typeof release9TableNames];
 
+export const release10TableNames = {
+  partnerAccounts: "partner_accounts",
+  partnerApiKeys: "partner_api_keys",
+  partnerHostedSessions: "partner_hosted_sessions",
+  partnerIdempotencyKeys: "partner_idempotency_keys",
+  partnerOrganizationLinks: "partner_organization_links",
+  partnerResourceReferences: "partner_resource_references",
+  partnerWebhookDeliveries: "partner_webhook_deliveries",
+  partnerWebhookDeliveryAttempts: "partner_webhook_delivery_attempts",
+  partnerWebhookEvents: "partner_webhook_events",
+  partnerWebhookSubscriptions: "partner_webhook_subscriptions"
+} as const;
+
+export type Release10TableName =
+  (typeof release10TableNames)[keyof typeof release10TableNames];
+
 export const release4TableNames = {
   arbitratorRegistryEntryProjections: "arbitrator_registry_entry_projections",
   chainCursors: "chain_cursors",

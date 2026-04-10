@@ -24,6 +24,16 @@ import type {
   OperatorAlertStatus,
   OperatorRole,
   OperatorSubjectType,
+  PartnerAccountStatus,
+  PartnerApiKeyStatus,
+  PartnerHostedSessionStatus,
+  PartnerHostedSessionType,
+  PartnerOrganizationLinkStatus,
+  PartnerResourceType,
+  PartnerScope,
+  PartnerWebhookDeliveryStatus,
+  PartnerWebhookEventType,
+  PartnerWebhookSubscriptionStatus,
   MilestoneSettlementRequestKind,
   MilestoneSettlementRequestSource,
   ApprovalSubjectType,
@@ -235,6 +245,131 @@ export interface ProtocolProposalDraftRecord {
   target: ProtocolProposalTarget;
   targetAddress: WalletAddress;
   value: string;
+}
+
+export interface PartnerAccountRecord {
+  createdAt: IsoTimestamp;
+  id: EntityId;
+  metadata: JsonObject | null;
+  name: string;
+  slug: string;
+  status: PartnerAccountStatus;
+  updatedAt: IsoTimestamp;
+}
+
+export interface PartnerOrganizationLinkRecord {
+  actingUserId: EntityId;
+  actingWalletId: EntityId;
+  createdAt: IsoTimestamp;
+  externalReference: string | null;
+  id: EntityId;
+  organizationId: EntityId;
+  partnerAccountId: EntityId;
+  status: PartnerOrganizationLinkStatus;
+  updatedAt: IsoTimestamp;
+}
+
+export interface PartnerApiKeyRecord {
+  createdAt: IsoTimestamp;
+  displayName: string;
+  expiresAt: IsoTimestamp | null;
+  id: EntityId;
+  keyPrefix: string;
+  lastUsedAt: IsoTimestamp | null;
+  partnerOrganizationLinkId: EntityId;
+  revokedAt: IsoTimestamp | null;
+  scopes: PartnerScope[];
+  secretHash: string;
+  status: PartnerApiKeyStatus;
+  updatedAt: IsoTimestamp;
+}
+
+export interface PartnerIdempotencyKeyRecord {
+  createdAt: IsoTimestamp;
+  id: EntityId;
+  partnerApiKeyId: EntityId;
+  requestHash: string;
+  requestKey: string;
+  requestMethod: string;
+  requestPath: string;
+  responseBody: JsonObject;
+  responseStatusCode: number;
+}
+
+export interface PartnerResourceReferenceRecord {
+  createdAt: IsoTimestamp;
+  id: EntityId;
+  partnerOrganizationLinkId: EntityId;
+  partnerReferenceId: string;
+  resourceId: EntityId;
+  resourceType: PartnerResourceType;
+}
+
+export interface PartnerHostedSessionRecord {
+  activatedAt: IsoTimestamp | null;
+  completedAt: IsoTimestamp | null;
+  createdAt: IsoTimestamp;
+  dealMilestoneDisputeId: EntityId | null;
+  dealVersionId: EntityId | null;
+  dealVersionMilestoneId: EntityId | null;
+  draftDealId: EntityId | null;
+  expiresAt: IsoTimestamp;
+  id: EntityId;
+  launchTokenHash: string;
+  partnerApiKeyId: EntityId | null;
+  partnerOrganizationLinkId: EntityId;
+  partnerReferenceId: string | null;
+  status: PartnerHostedSessionStatus;
+  type: PartnerHostedSessionType;
+  updatedAt: IsoTimestamp;
+}
+
+export interface PartnerWebhookSubscriptionRecord {
+  createdAt: IsoTimestamp;
+  displayName: string;
+  endpointUrl: string;
+  eventTypes: PartnerWebhookEventType[];
+  id: EntityId;
+  lastDeliveryAt: IsoTimestamp | null;
+  partnerOrganizationLinkId: EntityId;
+  secretHash: string;
+  status: PartnerWebhookSubscriptionStatus;
+  updatedAt: IsoTimestamp;
+}
+
+export interface PartnerWebhookEventRecord {
+  createdAt: IsoTimestamp;
+  draftDealId: EntityId | null;
+  eventType: PartnerWebhookEventType;
+  hostedSessionId: EntityId | null;
+  id: EntityId;
+  organizationId: EntityId;
+  partnerOrganizationLinkId: EntityId;
+  payload: JsonObject;
+}
+
+export interface PartnerWebhookDeliveryRecord {
+  createdAt: IsoTimestamp;
+  deliveredAt: IsoTimestamp | null;
+  errorMessage: string | null;
+  id: EntityId;
+  lastAttemptAt: IsoTimestamp | null;
+  nextAttemptAt: IsoTimestamp | null;
+  partnerOrganizationLinkId: EntityId;
+  partnerWebhookEventId: EntityId;
+  partnerWebhookSubscriptionId: EntityId;
+  status: PartnerWebhookDeliveryStatus;
+}
+
+export interface PartnerWebhookDeliveryAttemptRecord {
+  attemptedAt: IsoTimestamp;
+  durationMs: number | null;
+  errorMessage: string | null;
+  finishedAt: IsoTimestamp | null;
+  id: EntityId;
+  nextRetryAt: IsoTimestamp | null;
+  partnerWebhookDeliveryId: EntityId;
+  responseStatusCode: number | null;
 }
 
 export interface CounterpartyRecord {

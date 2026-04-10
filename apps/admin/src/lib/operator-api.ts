@@ -4,17 +4,31 @@ import type {
   ComplianceCheckpointSummary,
   CreateComplianceCaseInput,
   CreateComplianceCheckpointInput,
+  CreatePartnerAccountInput,
+  CreatePartnerAccountResponse,
+  CreatePartnerApiKeyInput,
+  CreatePartnerApiKeyResponse,
+  CreatePartnerOrganizationLinkInput,
+  CreatePartnerOrganizationLinkResponse,
+  CreatePartnerWebhookSubscriptionInput,
+  CreatePartnerWebhookSubscriptionResponse,
   CreateProtocolProposalDraftInput,
   ListComplianceCasesResponse,
   ListComplianceCheckpointsResponse,
   ListOperatorAlertsResponse,
+  ListPartnerAccountsResponse,
   ListProtocolProposalDraftsResponse,
   OperatorDashboardResponse,
   OperatorHealthResponse,
   OperatorReconciliationResponse,
   OperatorSearchResponse,
   OperatorSessionResponse,
-  ProtocolProposalDraftDetailResponse
+  PartnerAccountDetailResponse,
+  ProtocolProposalDraftDetailResponse,
+  RevokePartnerApiKeyResponse,
+  RotatePartnerApiKeyResponse,
+  RotatePartnerWebhookSubscriptionSecretResponse,
+  UpdatePartnerWebhookSubscriptionResponse
 } from "@blockchain-escrow/shared";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
@@ -81,6 +95,100 @@ export async function getOperatorSession(
 
 export function getDashboard(): Promise<OperatorDashboardResponse> {
   return apiRequest("/operator/dashboard");
+}
+
+export function listPartners(): Promise<ListPartnerAccountsResponse> {
+  return apiRequest("/operator/partners");
+}
+
+export function getPartnerAccount(
+  partnerAccountId: string
+): Promise<PartnerAccountDetailResponse> {
+  return apiRequest(`/operator/partners/${partnerAccountId}`);
+}
+
+export function createPartnerAccount(
+  input: CreatePartnerAccountInput
+): Promise<CreatePartnerAccountResponse> {
+  return apiRequest("/operator/partners", {
+    body: JSON.stringify(input),
+    method: "POST"
+  });
+}
+
+export function createPartnerOrganizationLink(
+  partnerAccountId: string,
+  input: CreatePartnerOrganizationLinkInput
+): Promise<CreatePartnerOrganizationLinkResponse> {
+  return apiRequest(`/operator/partners/${partnerAccountId}/links`, {
+    body: JSON.stringify(input),
+    method: "POST"
+  });
+}
+
+export function createPartnerApiKey(
+  partnerOrganizationLinkId: string,
+  input: CreatePartnerApiKeyInput
+): Promise<CreatePartnerApiKeyResponse> {
+  return apiRequest(`/operator/partners/links/${partnerOrganizationLinkId}/api-keys`, {
+    body: JSON.stringify(input),
+    method: "POST"
+  });
+}
+
+export function revokePartnerApiKey(
+  partnerApiKeyId: string,
+  reason?: string
+): Promise<RevokePartnerApiKeyResponse> {
+  return apiRequest(`/operator/partners/api-keys/${partnerApiKeyId}/revoke`, {
+    body: JSON.stringify({ ...(reason ? { reason } : {}) }),
+    method: "POST"
+  });
+}
+
+export function rotatePartnerApiKey(
+  partnerApiKeyId: string,
+  input: CreatePartnerApiKeyInput & { revokeReason?: string }
+): Promise<RotatePartnerApiKeyResponse> {
+  return apiRequest(`/operator/partners/api-keys/${partnerApiKeyId}/rotate`, {
+    body: JSON.stringify(input),
+    method: "POST"
+  });
+}
+
+export function createPartnerWebhookSubscription(
+  partnerOrganizationLinkId: string,
+  input: CreatePartnerWebhookSubscriptionInput
+): Promise<CreatePartnerWebhookSubscriptionResponse> {
+  return apiRequest(
+    `/operator/partners/links/${partnerOrganizationLinkId}/webhook-subscriptions`,
+    {
+      body: JSON.stringify(input),
+      method: "POST"
+    }
+  );
+}
+
+export function updatePartnerWebhookSubscription(
+  partnerWebhookSubscriptionId: string,
+  status: "ACTIVE" | "PAUSED" | "DISABLED"
+): Promise<UpdatePartnerWebhookSubscriptionResponse> {
+  return apiRequest(
+    `/operator/partners/webhook-subscriptions/${partnerWebhookSubscriptionId}`,
+    {
+      body: JSON.stringify({ status }),
+      method: "POST"
+    }
+  );
+}
+
+export function rotatePartnerWebhookSubscriptionSecret(
+  partnerWebhookSubscriptionId: string
+): Promise<RotatePartnerWebhookSubscriptionSecretResponse> {
+  return apiRequest(
+    `/operator/partners/webhook-subscriptions/${partnerWebhookSubscriptionId}/rotate-secret`,
+    { method: "POST" }
+  );
 }
 
 export function getHealth(): Promise<OperatorHealthResponse> {

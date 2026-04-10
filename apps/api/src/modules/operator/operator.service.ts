@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 
 import {
   contractArtifacts,
@@ -11,6 +11,7 @@ import type {
   OperatorAlertRecord,
   Release1Repositories,
   Release4Repositories,
+  Release10Repositories,
   Release8Repositories,
   WalletRecord,
   DraftDealRecord
@@ -21,6 +22,10 @@ import {
   assignComplianceCaseSchema,
   complianceCaseParamsSchema,
   complianceCheckpointParamsSchema,
+  createPartnerAccountSchema,
+  createPartnerApiKeySchema,
+  createPartnerOrganizationLinkSchema,
+  createPartnerWebhookSubscriptionSchema,
   createComplianceCaseSchema,
   createComplianceCheckpointSchema,
   createProtocolProposalDraftSchema,
@@ -29,28 +34,50 @@ import {
   listOperatorAlertsParamsSchema,
   operatorAlertActionParamsSchema,
   operatorSearchParamsSchema,
+  partnerAccountParamsSchema,
+  partnerApiKeyParamsSchema,
+  partnerOrganizationLinkParamsSchema,
+  partnerWebhookSubscriptionParamsSchema,
   protocolProposalDraftParamsSchema,
   resolveOperatorAlertSchema,
-  updateComplianceCaseStatusSchema
+  revokePartnerApiKeySchema,
+  rotatePartnerApiKeySchema,
+  updateComplianceCaseStatusSchema,
+  updatePartnerWebhookSubscriptionSchema
 } from "@blockchain-escrow/shared";
 import type {
+  AcknowledgeOperatorAlertInput,
+  AddComplianceCaseNoteInput,
+  AssignComplianceCaseInput,
   ComplianceCaseDetailResponse,
+  ComplianceCaseParams,
   ComplianceCaseSummary,
+  ComplianceCheckpointParams,
   ComplianceCheckpointSummary,
-  JsonObject,
-  ProtocolProposalTarget,
   CreateComplianceCaseInput,
   CreateComplianceCheckpointInput,
+  CreatePartnerAccountInput,
+  CreatePartnerAccountResponse,
+  CreatePartnerApiKeyInput,
+  CreatePartnerApiKeyResponse,
+  CreatePartnerOrganizationLinkInput,
+  CreatePartnerOrganizationLinkResponse,
+  CreatePartnerWebhookSubscriptionInput,
+  CreatePartnerWebhookSubscriptionResponse,
   CreateProtocolProposalDraftInput,
+  DecideComplianceCheckpointInput,
+  JsonObject,
   ListComplianceCasesParams,
   ListComplianceCasesResponse,
   ListComplianceCheckpointsResponse,
   ListOperatorAlertsParams,
   ListOperatorAlertsResponse,
+  ListPartnerAccountsResponse,
   ListProtocolProposalDraftsResponse,
   OperatorDashboardCard,
   OperatorDashboardResponse,
   OperatorHealthResponse,
+  OperatorAlertActionParams,
   OperatorPermissionSet,
   OperatorReconciliationResponse,
   OperatorSearchHit,
@@ -58,20 +85,26 @@ import type {
   OperatorSearchResponse,
   OperatorSessionResponse,
   OperatorSubjectSummary,
+  PartnerAccountDetailResponse,
+  PartnerAccountParams,
+  PartnerApiKeyParams,
+  PartnerOrganizationLinkParams,
+  PartnerWebhookSubscriptionParams,
   ProtocolProposalAction,
+  ProtocolProposalDraftParams,
   ProtocolProposalDraftDetailResponse,
   ProtocolProposalDraftSummary,
+  ProtocolProposalTarget,
   RemoteServiceHealth,
   ResolveOperatorAlertInput,
+  RevokePartnerApiKeyInput,
+  RevokePartnerApiKeyResponse,
+  RotatePartnerApiKeyInput,
+  RotatePartnerApiKeyResponse,
+  RotatePartnerWebhookSubscriptionSecretResponse,
   UpdateComplianceCaseStatusInput,
-  AcknowledgeOperatorAlertInput,
-  AddComplianceCaseNoteInput,
-  AssignComplianceCaseInput,
-  ComplianceCaseParams,
-  ComplianceCheckpointParams,
-  DecideComplianceCheckpointInput,
-  OperatorAlertActionParams,
-  ProtocolProposalDraftParams
+  UpdatePartnerWebhookSubscriptionInput,
+  UpdatePartnerWebhookSubscriptionResponse
 } from "@blockchain-escrow/shared";
 import {
   BadRequestException,
@@ -87,6 +120,7 @@ import { buildCanonicalDealId } from "../drafts/deal-identity";
 import {
   RELEASE1_REPOSITORIES,
   RELEASE4_REPOSITORIES,
+  RELEASE10_REPOSITORIES,
   RELEASE8_REPOSITORIES
 } from "../../infrastructure/tokens";
 import type { RequestMetadata } from "../auth/auth.http";
@@ -287,6 +321,168 @@ function toProtocolProposalSummary(
   };
 }
 
+function hashSecret(secret: string): string {
+  return createHash("sha256").update(secret).digest("hex");
+}
+
+function mapPartnerAccount(record: {
+  createdAt: string;
+  id: string;
+  metadata: JsonObject | null;
+  name: string;
+  slug: string;
+  status: "ACTIVE" | "DISABLED";
+  updatedAt: string;
+}) {
+  return {
+    createdAt: record.createdAt,
+    id: record.id,
+    metadata: record.metadata,
+    name: record.name,
+    slug: record.slug,
+    status: record.status,
+    updatedAt: record.updatedAt
+  };
+}
+
+function mapPartnerLink(record: {
+  actingUserId: string;
+  actingWalletId: string;
+  createdAt: string;
+  externalReference: string | null;
+  id: string;
+  organizationId: string;
+  partnerAccountId: string;
+  status: "ACTIVE" | "DISABLED";
+  updatedAt: string;
+}) {
+  return {
+    actingUserId: record.actingUserId,
+    actingWalletId: record.actingWalletId,
+    createdAt: record.createdAt,
+    externalReference: record.externalReference,
+    id: record.id,
+    organizationId: record.organizationId,
+    partnerAccountId: record.partnerAccountId,
+    status: record.status,
+    updatedAt: record.updatedAt
+  };
+}
+
+function mapPartnerApiKey(record: {
+  createdAt: string;
+  displayName: string;
+  expiresAt: string | null;
+  id: string;
+  keyPrefix: string;
+  lastUsedAt: string | null;
+  partnerOrganizationLinkId: string;
+  revokedAt: string | null;
+  scopes: readonly (
+    | "deals:read"
+    | "deals:write"
+    | "funding:write"
+    | "milestones:write"
+    | "disputes:write"
+    | "approvals:read"
+    | "approvals:write"
+    | "hosted_sessions:write"
+    | "webhooks:read"
+  )[];
+  status: "ACTIVE" | "REVOKED" | "EXPIRED";
+  updatedAt: string;
+}) {
+  return {
+    createdAt: record.createdAt,
+    displayName: record.displayName,
+    expiresAt: record.expiresAt,
+    id: record.id,
+    keyPrefix: record.keyPrefix,
+    lastUsedAt: record.lastUsedAt,
+    partnerOrganizationLinkId: record.partnerOrganizationLinkId,
+    revokedAt: record.revokedAt,
+    scopes: [...record.scopes],
+    status: record.status,
+    updatedAt: record.updatedAt
+  };
+}
+
+function mapPartnerHostedSession(record: {
+  completedAt: string | null;
+  createdAt: string;
+  dealMilestoneDisputeId: string | null;
+  dealVersionId: string | null;
+  dealVersionMilestoneId: string | null;
+  draftDealId: string | null;
+  expiresAt: string;
+  id: string;
+  partnerOrganizationLinkId: string;
+  partnerReferenceId: string | null;
+  status: "PENDING" | "ACTIVE" | "COMPLETED" | "EXPIRED" | "CANCELLED";
+  type:
+    | "COUNTERPARTY_VERSION_ACCEPTANCE"
+    | "COUNTERPARTY_MILESTONE_SUBMISSION"
+    | "DISPUTE_EVIDENCE_UPLOAD"
+    | "DEAL_STATUS_REVIEW";
+  updatedAt: string;
+}) {
+  return {
+    completedAt: record.completedAt,
+    createdAt: record.createdAt,
+    dealMilestoneDisputeId: record.dealMilestoneDisputeId,
+    dealVersionId: record.dealVersionId,
+    dealVersionMilestoneId: record.dealVersionMilestoneId,
+    draftDealId: record.draftDealId,
+    expiresAt: record.expiresAt,
+    id: record.id,
+    partnerOrganizationLinkId: record.partnerOrganizationLinkId,
+    partnerReferenceId: record.partnerReferenceId,
+    status: record.status,
+    type: record.type,
+    updatedAt: record.updatedAt
+  };
+}
+
+function mapPartnerSubscription(record: {
+  createdAt: string;
+  displayName: string;
+  endpointUrl: string;
+  eventTypes: readonly (
+    | "draft.deal.created"
+    | "deal.version.created"
+    | "deal.version.accepted"
+    | "deal.version.counterparty_accepted"
+    | "funding.transaction.updated"
+    | "draft.deal.activated"
+    | "milestone.submission.created"
+    | "milestone.review.created"
+    | "milestone.settlement_requested"
+    | "milestone.dispute.opened"
+    | "milestone.dispute.decided"
+    | "settlement.execution.updated"
+    | "approval.request.updated"
+    | "hosted.session.completed"
+    | "hosted.session.expired"
+  )[];
+  id: string;
+  lastDeliveryAt: string | null;
+  partnerOrganizationLinkId: string;
+  status: "ACTIVE" | "PAUSED" | "DISABLED";
+  updatedAt: string;
+}) {
+  return {
+    createdAt: record.createdAt,
+    displayName: record.displayName,
+    endpointUrl: record.endpointUrl,
+    eventTypes: [...record.eventTypes],
+    id: record.id,
+    lastDeliveryAt: record.lastDeliveryAt,
+    partnerOrganizationLinkId: record.partnerOrganizationLinkId,
+    status: record.status,
+    updatedAt: record.updatedAt
+  };
+}
+
 @Injectable()
 export class OperatorService {
   constructor(
@@ -294,6 +490,8 @@ export class OperatorService {
     private readonly release1Repositories: Release1Repositories,
     @Inject(RELEASE4_REPOSITORIES)
     private readonly release4Repositories: Release4Repositories,
+    @Inject(RELEASE10_REPOSITORIES)
+    private readonly release10Repositories: Release10Repositories,
     @Inject(RELEASE8_REPOSITORIES)
     private readonly release8Repositories: Release8Repositories,
     private readonly authenticatedSessionService: AuthenticatedSessionService,
@@ -317,6 +515,402 @@ export class OperatorService {
         walletId: context.operatorAccount.walletId
       },
       permissions: context.permissions
+    };
+  }
+
+  async listPartners(
+    requestMetadata: RequestMetadata
+  ): Promise<ListPartnerAccountsResponse> {
+    const context = await this.requireOperatorContext(requestMetadata);
+    this.requireProtocolAdminPermission(context.permissions);
+    const partners = await this.release10Repositories.partnerAccounts.listAll();
+
+    return {
+      partners: partners.map((record) => mapPartnerAccount(record))
+    };
+  }
+
+  async createPartnerAccount(
+    input: unknown,
+    requestMetadata: RequestMetadata
+  ): Promise<CreatePartnerAccountResponse> {
+    const context = await this.requireOperatorContext(requestMetadata);
+    this.requireProtocolAdminPermission(context.permissions);
+    const body = parseInput(createPartnerAccountSchema, input);
+    const existing = await this.release10Repositories.partnerAccounts.findBySlug(body.slug);
+
+    if (existing) {
+      throw new ConflictException("partner slug already exists");
+    }
+
+    const now = new Date().toISOString();
+    const partner = await this.release10Repositories.partnerAccounts.create({
+      createdAt: now,
+      id: randomUUID(),
+      metadata: (body.metadata ?? null) as JsonObject | null,
+      name: body.name,
+      slug: body.slug,
+      status: "ACTIVE",
+      updatedAt: now
+    });
+    await this.release1Repositories.auditLogs.append({
+      action: "PARTNER_ACCOUNT_CREATED",
+      actorUserId: context.operatorAccount.userId,
+      entityId: partner.id,
+      entityType: "PARTNER_ACCOUNT",
+      id: randomUUID(),
+      ipAddress: requestMetadata.ipAddress,
+      metadata: { slug: partner.slug },
+      occurredAt: now,
+      organizationId: null,
+      userAgent: requestMetadata.userAgent
+    });
+
+    return {
+      partnerAccount: mapPartnerAccount(partner)
+    };
+  }
+
+  async getPartnerAccount(
+    input: unknown,
+    requestMetadata: RequestMetadata
+  ): Promise<PartnerAccountDetailResponse> {
+    const context = await this.requireOperatorContext(requestMetadata);
+    this.requireProtocolAdminPermission(context.permissions);
+    const params = parseInput(partnerAccountParamsSchema, input);
+    const partner = await this.requirePartnerAccount(params.partnerAccountId);
+    const links =
+      await this.release10Repositories.partnerOrganizationLinks.listByPartnerAccountId(
+        partner.id
+      );
+    const [apiKeys, hostedSessions, subscriptions, deliveries] = await Promise.all([
+      Promise.all(
+        links.map((link) =>
+          this.release10Repositories.partnerApiKeys.listByPartnerOrganizationLinkId(link.id)
+        )
+      ),
+      Promise.all(
+        links.map((link) =>
+          this.release10Repositories.partnerHostedSessions.listByPartnerOrganizationLinkId(link.id)
+        )
+      ),
+      this.release10Repositories.partnerWebhookSubscriptions.listByPartnerOrganizationLinkIds(
+        links.map((link) => link.id)
+      ),
+      this.release10Repositories.partnerWebhookDeliveries.listByPartnerOrganizationLinkIds(
+        links.map((link) => link.id)
+      )
+    ]);
+
+    return {
+      apiKeys: apiKeys.flat().map((record) => mapPartnerApiKey(record)),
+      hostedSessions: hostedSessions.flat().map((record) => mapPartnerHostedSession(record)),
+      links: links.map((record) => mapPartnerLink(record)),
+      partner: mapPartnerAccount(partner),
+      recentDeliveries: await Promise.all(
+        deliveries.slice(0, 20).map((record) => this.buildPartnerDeliverySummary(record.id))
+      ),
+      subscriptions: subscriptions.map((record) => mapPartnerSubscription(record))
+    };
+  }
+
+  async createPartnerOrganizationLink(
+    partnerAccountId: string,
+    input: unknown,
+    requestMetadata: RequestMetadata
+  ): Promise<CreatePartnerOrganizationLinkResponse> {
+    const context = await this.requireOperatorContext(requestMetadata);
+    this.requireProtocolAdminPermission(context.permissions);
+    const partner = await this.requirePartnerAccount(partnerAccountId);
+    const body = parseInput(createPartnerOrganizationLinkSchema, input);
+    const [organization, user, wallet, existingLinks] = await Promise.all([
+      this.release1Repositories.organizations.findById(body.organizationId),
+      this.release1Repositories.users.findById(body.actingUserId),
+      this.release1Repositories.wallets.findById(body.actingWalletId),
+      this.release10Repositories.partnerOrganizationLinks.listByPartnerAccountId(partner.id)
+    ]);
+
+    if (!organization) {
+      throw new NotFoundException("organization not found");
+    }
+    if (!user) {
+      throw new NotFoundException("acting user not found");
+    }
+    if (!wallet || wallet.userId !== user.id) {
+      throw new ConflictException("acting wallet must belong to the acting user");
+    }
+    if (
+      existingLinks.some(
+        (record) => record.organizationId === organization.id && record.status === "ACTIVE"
+      )
+    ) {
+      throw new ConflictException("partner is already linked to the organization");
+    }
+
+    const now = new Date().toISOString();
+    const link = await this.release10Repositories.partnerOrganizationLinks.create({
+      actingUserId: user.id,
+      actingWalletId: wallet.id,
+      createdAt: now,
+      externalReference: body.externalReference ?? null,
+      id: randomUUID(),
+      organizationId: organization.id,
+      partnerAccountId: partner.id,
+      status: "ACTIVE",
+      updatedAt: now
+    });
+    await this.release1Repositories.auditLogs.append({
+      action: "PARTNER_ORGANIZATION_LINK_CREATED",
+      actorUserId: context.operatorAccount.userId,
+      entityId: link.id,
+      entityType: "PARTNER_ORGANIZATION_LINK",
+      id: randomUUID(),
+      ipAddress: requestMetadata.ipAddress,
+      metadata: { partnerAccountId: partner.id },
+      occurredAt: now,
+      organizationId: organization.id,
+      userAgent: requestMetadata.userAgent
+    });
+
+    return {
+      link: mapPartnerLink(link)
+    };
+  }
+
+  async createPartnerApiKey(
+    partnerOrganizationLinkId: string,
+    input: unknown,
+    requestMetadata: RequestMetadata
+  ): Promise<CreatePartnerApiKeyResponse> {
+    const context = await this.requireOperatorContext(requestMetadata);
+    this.requireProtocolAdminPermission(context.permissions);
+    const body = parseInput(createPartnerApiKeySchema, input);
+    const link = await this.requirePartnerLink(partnerOrganizationLinkId);
+    const keyId = randomBytes(8).toString("hex");
+    const secret = randomBytes(24).toString("hex");
+    const keyPrefix = `besk_${keyId}`;
+    const now = new Date().toISOString();
+    const apiKey = await this.release10Repositories.partnerApiKeys.create({
+      createdAt: now,
+      displayName: body.displayName,
+      expiresAt: body.expiresAt ?? null,
+      id: randomUUID(),
+      keyPrefix,
+      lastUsedAt: null,
+      partnerOrganizationLinkId: link.id,
+      revokedAt: null,
+      scopes: body.scopes ?? [
+        "deals:read",
+        "deals:write",
+        "funding:write",
+        "milestones:write",
+        "disputes:write",
+        "approvals:read",
+        "approvals:write",
+        "hosted_sessions:write",
+        "webhooks:read"
+      ],
+      secretHash: hashSecret(secret),
+      status: "ACTIVE",
+      updatedAt: now
+    });
+    await this.release1Repositories.auditLogs.append({
+      action: "PARTNER_API_KEY_CREATED",
+      actorUserId: context.operatorAccount.userId,
+      entityId: apiKey.id,
+      entityType: "PARTNER_API_KEY",
+      id: randomUUID(),
+      ipAddress: requestMetadata.ipAddress,
+      metadata: { partnerOrganizationLinkId: link.id, scopes: apiKey.scopes },
+      occurredAt: now,
+      organizationId: link.organizationId,
+      userAgent: requestMetadata.userAgent
+    });
+
+    return {
+      apiKey: {
+        ...mapPartnerApiKey(apiKey),
+        apiKey: `${keyPrefix}_${secret}`
+      }
+    };
+  }
+
+  async revokePartnerApiKey(
+    input: unknown,
+    bodyInput: unknown,
+    requestMetadata: RequestMetadata
+  ): Promise<RevokePartnerApiKeyResponse> {
+    const context = await this.requireOperatorContext(requestMetadata);
+    this.requireProtocolAdminPermission(context.permissions);
+    const params = parseInput(partnerApiKeyParamsSchema, input);
+    const body = parseInput(revokePartnerApiKeySchema, bodyInput);
+    const apiKey = await this.requirePartnerApiKey(params.partnerApiKeyId);
+    const now = new Date().toISOString();
+    const updated = await this.release10Repositories.partnerApiKeys.update(apiKey.id, {
+      revokedAt: now,
+      status: "REVOKED",
+      updatedAt: now
+    });
+    const link = await this.requirePartnerLink(updated.partnerOrganizationLinkId);
+    await this.release1Repositories.auditLogs.append({
+      action: "PARTNER_API_KEY_REVOKED",
+      actorUserId: context.operatorAccount.userId,
+      entityId: updated.id,
+      entityType: "PARTNER_API_KEY",
+      id: randomUUID(),
+      ipAddress: requestMetadata.ipAddress,
+      metadata: body.reason ? { reason: body.reason } : null,
+      occurredAt: now,
+      organizationId: link.organizationId,
+      userAgent: requestMetadata.userAgent
+    });
+
+    return { apiKey: mapPartnerApiKey(updated) };
+  }
+
+  async rotatePartnerApiKey(
+    input: unknown,
+    bodyInput: unknown,
+    requestMetadata: RequestMetadata
+  ): Promise<RotatePartnerApiKeyResponse> {
+    const params = parseInput(partnerApiKeyParamsSchema, input);
+    const body = parseInput(rotatePartnerApiKeySchema, bodyInput);
+    const revoked = await this.revokePartnerApiKey(
+      params,
+      { reason: body.revokeReason },
+      requestMetadata
+    );
+    const replacement = await this.createPartnerApiKey(
+      revoked.apiKey.partnerOrganizationLinkId,
+      {
+        displayName: body.displayName,
+        expiresAt: body.expiresAt,
+        scopes: body.scopes
+      },
+      requestMetadata
+    );
+
+    return {
+      previousApiKey: revoked.apiKey,
+      replacementApiKey: replacement.apiKey
+    };
+  }
+
+  async createPartnerWebhookSubscription(
+    partnerOrganizationLinkId: string,
+    input: unknown,
+    requestMetadata: RequestMetadata
+  ): Promise<CreatePartnerWebhookSubscriptionResponse> {
+    const context = await this.requireOperatorContext(requestMetadata);
+    this.requireProtocolAdminPermission(context.permissions);
+    const body = parseInput(createPartnerWebhookSubscriptionSchema, input);
+    const link = await this.requirePartnerLink(partnerOrganizationLinkId);
+    const now = new Date().toISOString();
+    const secret = randomBytes(24).toString("hex");
+    const subscription =
+      await this.release10Repositories.partnerWebhookSubscriptions.create({
+        createdAt: now,
+        displayName: body.displayName,
+        endpointUrl: body.endpointUrl,
+        eventTypes: body.eventTypes,
+        id: randomUUID(),
+        lastDeliveryAt: null,
+        partnerOrganizationLinkId: link.id,
+        secretHash: secret,
+        status: "ACTIVE",
+        updatedAt: now
+      });
+    await this.release1Repositories.auditLogs.append({
+      action: "PARTNER_WEBHOOK_SUBSCRIPTION_CREATED",
+      actorUserId: context.operatorAccount.userId,
+      entityId: subscription.id,
+      entityType: "PARTNER_WEBHOOK_SUBSCRIPTION",
+      id: randomUUID(),
+      ipAddress: requestMetadata.ipAddress,
+      metadata: { endpointUrl: subscription.endpointUrl, eventTypes: subscription.eventTypes },
+      occurredAt: now,
+      organizationId: link.organizationId,
+      userAgent: requestMetadata.userAgent
+    });
+
+    return {
+      subscription: mapPartnerSubscription(subscription)
+    };
+  }
+
+  async updatePartnerWebhookSubscription(
+    input: unknown,
+    bodyInput: unknown,
+    requestMetadata: RequestMetadata
+  ): Promise<UpdatePartnerWebhookSubscriptionResponse> {
+    const context = await this.requireOperatorContext(requestMetadata);
+    this.requireProtocolAdminPermission(context.permissions);
+    const params = parseInput(partnerWebhookSubscriptionParamsSchema, input);
+    const body = parseInput(updatePartnerWebhookSubscriptionSchema, bodyInput);
+    const existing = await this.requirePartnerWebhookSubscription(
+      params.partnerWebhookSubscriptionId
+    );
+    const updated = await this.release10Repositories.partnerWebhookSubscriptions.update(
+      existing.id,
+      {
+        status: body.status,
+        updatedAt: new Date().toISOString()
+      }
+    );
+    await this.release1Repositories.auditLogs.append({
+      action: "PARTNER_WEBHOOK_SUBSCRIPTION_UPDATED",
+      actorUserId: context.operatorAccount.userId,
+      entityId: updated.id,
+      entityType: "PARTNER_WEBHOOK_SUBSCRIPTION",
+      id: randomUUID(),
+      ipAddress: requestMetadata.ipAddress,
+      metadata: { status: updated.status },
+      occurredAt: updated.updatedAt,
+      organizationId: (await this.requirePartnerLink(updated.partnerOrganizationLinkId))
+        .organizationId,
+      userAgent: requestMetadata.userAgent
+    });
+
+    return {
+      subscription: mapPartnerSubscription(updated)
+    };
+  }
+
+  async rotatePartnerWebhookSubscriptionSecret(
+    input: unknown,
+    requestMetadata: RequestMetadata
+  ): Promise<RotatePartnerWebhookSubscriptionSecretResponse> {
+    const context = await this.requireOperatorContext(requestMetadata);
+    this.requireProtocolAdminPermission(context.permissions);
+    const params = parseInput(partnerWebhookSubscriptionParamsSchema, input);
+    const existing = await this.requirePartnerWebhookSubscription(
+      params.partnerWebhookSubscriptionId
+    );
+    const secret = randomBytes(24).toString("hex");
+    const updated = await this.release10Repositories.partnerWebhookSubscriptions.update(
+      existing.id,
+      {
+        secretHash: secret,
+        updatedAt: new Date().toISOString()
+      }
+    );
+    await this.release1Repositories.auditLogs.append({
+      action: "PARTNER_WEBHOOK_SUBSCRIPTION_UPDATED",
+      actorUserId: context.operatorAccount.userId,
+      entityId: updated.id,
+      entityType: "PARTNER_WEBHOOK_SUBSCRIPTION",
+      id: randomUUID(),
+      ipAddress: requestMetadata.ipAddress,
+      metadata: { rotated: true },
+      occurredAt: updated.updatedAt,
+      organizationId: (await this.requirePartnerLink(updated.partnerOrganizationLinkId))
+        .organizationId,
+      userAgent: requestMetadata.userAgent
+    });
+
+    return {
+      secret,
+      subscription: mapPartnerSubscription(updated)
     };
   }
 
@@ -1514,6 +2108,83 @@ export class OperatorService {
     }
 
     return record;
+  }
+
+  private async buildPartnerDeliverySummary(deliveryId: string) {
+    const delivery = await this.release10Repositories.partnerWebhookDeliveries.findById(
+      deliveryId
+    );
+
+    if (!delivery) {
+      throw new NotFoundException("partner webhook delivery not found");
+    }
+
+    const event = await this.release10Repositories.partnerWebhookEvents.findById(
+      delivery.partnerWebhookEventId
+    );
+
+    if (!event) {
+      throw new NotFoundException("partner webhook event not found");
+    }
+
+    return {
+      createdAt: delivery.createdAt,
+      deliveredAt: delivery.deliveredAt,
+      errorMessage: delivery.errorMessage,
+      eventType: event.eventType,
+      id: delivery.id,
+      lastAttemptAt: delivery.lastAttemptAt,
+      nextAttemptAt: delivery.nextAttemptAt,
+      partnerOrganizationLinkId: delivery.partnerOrganizationLinkId,
+      partnerWebhookSubscriptionId: delivery.partnerWebhookSubscriptionId,
+      status: delivery.status
+    };
+  }
+
+  private async requirePartnerAccount(partnerAccountId: string) {
+    const partner = await this.release10Repositories.partnerAccounts.findById(partnerAccountId);
+
+    if (!partner) {
+      throw new NotFoundException("partner account not found");
+    }
+
+    return partner;
+  }
+
+  private async requirePartnerLink(partnerOrganizationLinkId: string) {
+    const link =
+      await this.release10Repositories.partnerOrganizationLinks.findById(
+        partnerOrganizationLinkId
+      );
+
+    if (!link) {
+      throw new NotFoundException("partner organization link not found");
+    }
+
+    return link;
+  }
+
+  private async requirePartnerApiKey(partnerApiKeyId: string) {
+    const apiKey = await this.release10Repositories.partnerApiKeys.findById(partnerApiKeyId);
+
+    if (!apiKey) {
+      throw new NotFoundException("partner api key not found");
+    }
+
+    return apiKey;
+  }
+
+  private async requirePartnerWebhookSubscription(partnerWebhookSubscriptionId: string) {
+    const subscription =
+      await this.release10Repositories.partnerWebhookSubscriptions.findById(
+        partnerWebhookSubscriptionId
+      );
+
+    if (!subscription) {
+      throw new NotFoundException("partner webhook subscription not found");
+    }
+
+    return subscription;
   }
 
   private requireAlertPermission(permissions: OperatorPermissionSet): void {

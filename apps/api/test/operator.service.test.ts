@@ -14,6 +14,7 @@ import {
   seedAuthenticatedActor
 } from "./helpers/auth-test-context";
 import { InMemoryRelease1Repositories } from "./helpers/in-memory-release1-repositories";
+import { InMemoryRelease10Repositories } from "./helpers/in-memory-release10-repositories";
 import { InMemoryRelease4Repositories } from "./helpers/in-memory-release4-repositories";
 import { InMemoryRelease8Repositories } from "./helpers/in-memory-release8-repositories";
 
@@ -31,6 +32,7 @@ function createServices() {
   const release1Repositories = new InMemoryRelease1Repositories();
   const release4Repositories = new InMemoryRelease4Repositories();
   const release8Repositories = new InMemoryRelease8Repositories();
+  const release10Repositories = new InMemoryRelease10Repositories();
   const sessionTokenService = new FakeSessionTokenService();
   const authenticatedSessionService = new AuthenticatedSessionService(
     release1Repositories,
@@ -43,11 +45,13 @@ function createServices() {
     operatorService: new OperatorService(
       release1Repositories,
       release4Repositories,
+      release10Repositories,
       release8Repositories,
       authenticatedSessionService,
       configuration
     ),
     release1Repositories,
+    release10Repositories,
     release4Repositories,
     release8Repositories,
     sessionTokenService

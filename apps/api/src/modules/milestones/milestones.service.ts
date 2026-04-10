@@ -209,6 +209,11 @@ interface CounterpartyMilestoneSubmissionContext {
   versionSellerParty: DealVersionPartyRecord;
 }
 
+type MilestoneOrganizationAccess = Pick<
+  MilestoneWorkflowAccessContext,
+  "actor" | "membership" | "organization"
+>;
+
 interface LoadedMilestoneVersionRecords {
   disputeRecords: LoadedMilestoneDisputeRecords;
   deadlineExpiriesBySubmissionId: ReadonlyMap<
@@ -462,11 +467,23 @@ export class MilestonesService {
       throw new BadRequestException(parsed.error.flatten());
     }
 
-    const access = await this.requireWorkflowAccess(
+    await this.requireOrganizationAccess(parsed.data.organizationId, requestMetadata);
+    return this.getSettlementStatementForOrganization(
       parsed.data.organizationId,
       parsed.data.draftDealId,
-      parsed.data.dealVersionId,
-      requestMetadata
+      parsed.data.dealVersionId
+    );
+  }
+
+  async getSettlementStatementForOrganization(
+    organizationId: string,
+    draftDealId: string,
+    dealVersionId: string
+  ): Promise<GetDealVersionSettlementStatementResponse> {
+    const access = await this.requireWorkflowAccessWithoutRequest(
+      organizationId,
+      draftDealId,
+      dealVersionId
     );
     const [linkedAgreement, records] = await Promise.all([
       this.findLinkedAgreementForDraft(access.draft),
@@ -1069,6 +1086,40 @@ export class MilestonesService {
     requestMetadata: RequestMetadata
   ): Promise<CreateDealMilestoneReviewResponse> {
     const parsedParams = milestoneReviewParamsSchema.safeParse(paramsInput);
+
+    if (!parsedParams.success) {
+      throw new BadRequestException(parsedParams.error.flatten());
+    }
+
+    const actor = await this.authenticatedSessionService.requireContext(
+      requestMetadata.cookieHeader
+    );
+    const authorized = await this.authorizeOrganizationActor(
+      actor,
+      parsedParams.data.organizationId
+    );
+
+    return this.createMilestoneReviewWithActor(
+      authorized,
+      parsedParams.data,
+      bodyInput,
+      requestMetadata
+    );
+  }
+
+  async createMilestoneReviewWithActor(
+    authorized: MilestoneOrganizationAccess,
+    paramsInput: {
+      dealMilestoneSubmissionId: string;
+      dealVersionId: string;
+      dealVersionMilestoneId: string;
+      draftDealId: string;
+      organizationId: string;
+    },
+    bodyInput: unknown,
+    requestMetadata: RequestMetadata
+  ): Promise<CreateDealMilestoneReviewResponse> {
+    const parsedParams = milestoneReviewParamsSchema.safeParse(paramsInput);
     const parsedBody = createMilestoneReviewSchema.safeParse(bodyInput);
 
     if (!parsedParams.success) {
@@ -1079,13 +1130,19 @@ export class MilestonesService {
       throw new BadRequestException(parsedBody.error.flatten());
     }
 
-    const access = await this.requireMilestoneReviewAccess(
+    const workflowAccess = await this.requireWorkflowAccessForActor(
+      authorized,
       parsedParams.data.organizationId,
       parsedParams.data.draftDealId,
-      parsedParams.data.dealVersionId,
-      parsedParams.data.dealVersionMilestoneId,
-      parsedParams.data.dealMilestoneSubmissionId,
-      requestMetadata
+      parsedParams.data.dealVersionId
+    );
+    const milestoneAccess = await this.requireMilestoneAccessForActor(
+      workflowAccess,
+      parsedParams.data.dealVersionMilestoneId
+    );
+    const access = await this.requireMilestoneReviewAccessForActor(
+      milestoneAccess,
+      parsedParams.data.dealMilestoneSubmissionId
     );
 
     if (access.organizationParty.role !== "BUYER") {
@@ -1195,6 +1252,42 @@ export class MilestonesService {
   ): Promise<CreateDealMilestoneSettlementRequestResponse> {
     const parsedParams =
       milestoneSettlementRequestParamsSchema.safeParse(paramsInput);
+
+    if (!parsedParams.success) {
+      throw new BadRequestException(parsedParams.error.flatten());
+    }
+
+    const actor = await this.authenticatedSessionService.requireContext(
+      requestMetadata.cookieHeader
+    );
+    const authorized = await this.authorizeOrganizationActor(
+      actor,
+      parsedParams.data.organizationId
+    );
+
+    return this.createMilestoneSettlementRequestWithActor(
+      authorized,
+      parsedParams.data,
+      bodyInput,
+      requestMetadata
+    );
+  }
+
+  async createMilestoneSettlementRequestWithActor(
+    authorized: MilestoneOrganizationAccess,
+    paramsInput: {
+      dealMilestoneReviewId: string;
+      dealMilestoneSubmissionId: string;
+      dealVersionId: string;
+      dealVersionMilestoneId: string;
+      draftDealId: string;
+      organizationId: string;
+    },
+    bodyInput: unknown,
+    requestMetadata: RequestMetadata
+  ): Promise<CreateDealMilestoneSettlementRequestResponse> {
+    const parsedParams =
+      milestoneSettlementRequestParamsSchema.safeParse(paramsInput);
     const parsedBody =
       createMilestoneSettlementRequestSchema.safeParse(bodyInput);
 
@@ -1206,14 +1299,23 @@ export class MilestonesService {
       throw new BadRequestException(parsedBody.error.flatten());
     }
 
-    const access = await this.requireMilestoneSettlementRequestAccess(
+    const workflowAccess = await this.requireWorkflowAccessForActor(
+      authorized,
       parsedParams.data.organizationId,
       parsedParams.data.draftDealId,
-      parsedParams.data.dealVersionId,
-      parsedParams.data.dealVersionMilestoneId,
-      parsedParams.data.dealMilestoneSubmissionId,
-      parsedParams.data.dealMilestoneReviewId,
-      requestMetadata
+      parsedParams.data.dealVersionId
+    );
+    const milestoneAccess = await this.requireMilestoneAccessForActor(
+      workflowAccess,
+      parsedParams.data.dealVersionMilestoneId
+    );
+    const reviewAccess = await this.requireMilestoneReviewAccessForActor(
+      milestoneAccess,
+      parsedParams.data.dealMilestoneSubmissionId
+    );
+    const access = await this.requireMilestoneSettlementRequestAccessForActor(
+      reviewAccess,
+      parsedParams.data.dealMilestoneReviewId
     );
 
     if (access.organizationParty.role !== "BUYER") {
@@ -1346,6 +1448,41 @@ export class MilestonesService {
     requestMetadata: RequestMetadata
   ): Promise<CreateDealMilestoneDisputeResponse> {
     const parsedParams = milestoneDisputeParamsSchema.safeParse(paramsInput);
+
+    if (!parsedParams.success) {
+      throw new BadRequestException(parsedParams.error.flatten());
+    }
+
+    const actor = await this.authenticatedSessionService.requireContext(
+      requestMetadata.cookieHeader
+    );
+    const authorized = await this.authorizeOrganizationActor(
+      actor,
+      parsedParams.data.organizationId
+    );
+
+    return this.createMilestoneDisputeWithActor(
+      authorized,
+      parsedParams.data,
+      bodyInput,
+      requestMetadata
+    );
+  }
+
+  async createMilestoneDisputeWithActor(
+    authorized: MilestoneOrganizationAccess,
+    paramsInput: {
+      dealMilestoneReviewId: string;
+      dealMilestoneSubmissionId: string;
+      dealVersionId: string;
+      dealVersionMilestoneId: string;
+      draftDealId: string;
+      organizationId: string;
+    },
+    bodyInput: unknown,
+    requestMetadata: RequestMetadata
+  ): Promise<CreateDealMilestoneDisputeResponse> {
+    const parsedParams = milestoneDisputeParamsSchema.safeParse(paramsInput);
     const parsedBody = createMilestoneDisputeSchema.safeParse(bodyInput);
 
     if (!parsedParams.success) {
@@ -1356,14 +1493,14 @@ export class MilestonesService {
       throw new BadRequestException(parsedBody.error.flatten());
     }
 
-    const access = await this.requireMilestoneDisputeAccess(
+    const access = await this.requireMilestoneDisputeAccessForActor(
+      authorized,
       parsedParams.data.organizationId,
       parsedParams.data.draftDealId,
       parsedParams.data.dealVersionId,
       parsedParams.data.dealVersionMilestoneId,
       parsedParams.data.dealMilestoneSubmissionId,
-      parsedParams.data.dealMilestoneReviewId,
-      requestMetadata
+      parsedParams.data.dealMilestoneReviewId
     );
 
     this.assertEscrowIsActive(access.draft, access.linkedAgreement);
@@ -3480,11 +3617,69 @@ export class MilestonesService {
     requestMetadata: RequestMetadata,
     minimumRole?: "OWNER" | "ADMIN" | "MEMBER"
   ): Promise<MilestoneWorkflowAccessContext> {
-    const authorized = await this.requireOrganizationAccess(
+    const actor = await this.authenticatedSessionService.requireContext(
+      requestMetadata.cookieHeader
+    );
+    const authorized = await this.authorizeOrganizationActor(
+      actor,
       organizationId,
-      requestMetadata,
       minimumRole
     );
+    return this.requireWorkflowAccessForActor(
+      authorized,
+      organizationId,
+      draftDealId,
+      dealVersionId
+    );
+  }
+
+  async requireWorkflowAccessWithoutRequest(
+    organizationId: string,
+    draftDealId: string,
+    dealVersionId: string
+  ): Promise<MilestoneWorkflowAccessContext> {
+    const organization = await this.repositories.organizations.findById(organizationId);
+
+    if (!organization) {
+      throw new NotFoundException("organization not found");
+    }
+
+    const wallets = await this.repositories.wallets.listByUserId(organization.createdByUserId);
+    const wallet = wallets[0];
+
+    if (!wallet) {
+      throw new ConflictException("organization synthetic actor wallet is missing");
+    }
+
+    const actor = await this.authenticatedSessionService.loadSyntheticContext({
+      userId: organization.createdByUserId,
+      walletId: wallet.id
+    });
+
+    const membership =
+      await this.repositories.organizationMembers.findMembership(
+        organizationId,
+        organization.createdByUserId
+      );
+
+    if (!membership) {
+      throw new ConflictException("organization synthetic actor membership is missing");
+    }
+
+    return this.requireWorkflowAccessForActor(
+      { actor, membership, organization },
+      organizationId,
+      draftDealId,
+      dealVersionId
+    );
+  }
+
+  async requireWorkflowAccessForActor(
+    authorized: MilestoneOrganizationAccess,
+    organizationId: string,
+    draftDealId: string,
+    dealVersionId: string
+  ): Promise<MilestoneWorkflowAccessContext> {
     const [draft, version] = await Promise.all([
       this.repositories.draftDeals.findById(draftDealId),
       this.repositories.dealVersions.findById(dealVersionId)
@@ -3545,6 +3740,16 @@ export class MilestonesService {
       dealVersionId,
       requestMetadata
     );
+    return this.requireMilestoneAccessForActor(
+      access,
+      dealVersionMilestoneId
+    );
+  }
+
+  async requireMilestoneAccessForActor(
+    access: MilestoneWorkflowAccessContext,
+    dealVersionMilestoneId: string
+  ): Promise<MilestoneAccessContext> {
     const [linkedAgreement, milestone] = await Promise.all([
       this.findLinkedAgreementForDraft(access.draft),
       this.repositories.dealVersionMilestones.findById(dealVersionMilestoneId)
@@ -3691,13 +3896,23 @@ export class MilestonesService {
       dealVersionMilestoneId,
       requestMetadata
     );
+    return this.requireMilestoneReviewAccessForActor(
+      access,
+      dealMilestoneSubmissionId
+    );
+  }
+
+  async requireMilestoneReviewAccessForActor(
+    access: MilestoneAccessContext,
+    dealMilestoneSubmissionId: string
+  ): Promise<MilestoneReviewAccessContext> {
     const [submission, review, milestoneSubmissions] = await Promise.all([
       this.repositories.dealMilestoneSubmissions.findById(dealMilestoneSubmissionId),
       this.repositories.dealMilestoneReviews.findByDealMilestoneSubmissionId(
         dealMilestoneSubmissionId
       ),
       this.repositories.dealMilestoneSubmissions.listByDealVersionMilestoneId(
-        dealVersionMilestoneId
+        access.milestone.id
       )
     ]);
 
@@ -3741,6 +3956,16 @@ export class MilestonesService {
       dealMilestoneSubmissionId,
       requestMetadata
     );
+    return this.requireMilestoneSettlementRequestAccessForActor(
+      access,
+      dealMilestoneReviewId
+    );
+  }
+
+  async requireMilestoneSettlementRequestAccessForActor(
+    access: MilestoneReviewAccessContext,
+    dealMilestoneReviewId: string
+  ): Promise<MilestoneSettlementRequestAccessContext> {
     const settlementRequest =
       await this.repositories.dealMilestoneSettlementRequests.findByDealMilestoneReviewId(
         dealMilestoneReviewId
@@ -3778,6 +4003,35 @@ export class MilestonesService {
       dealMilestoneSubmissionId,
       dealMilestoneReviewId,
       requestMetadata
+    );
+  }
+
+  async requireMilestoneDisputeAccessForActor(
+    authorized: MilestoneOrganizationAccess,
+    organizationId: string,
+    draftDealId: string,
+    dealVersionId: string,
+    dealVersionMilestoneId: string,
+    dealMilestoneSubmissionId: string,
+    dealMilestoneReviewId: string
+  ): Promise<MilestoneDisputeAccessContext> {
+    const workflow = await this.requireWorkflowAccessForActor(
+      authorized,
+      organizationId,
+      draftDealId,
+      dealVersionId
+    );
+    const milestoneAccess = await this.requireMilestoneAccessForActor(
+      workflow,
+      dealVersionMilestoneId
+    );
+    const reviewAccess = await this.requireMilestoneReviewAccessForActor(
+      milestoneAccess,
+      dealMilestoneSubmissionId
+    );
+    return this.requireMilestoneSettlementRequestAccessForActor(
+      reviewAccess,
+      dealMilestoneReviewId
     );
   }
 
@@ -4037,6 +4291,18 @@ export class MilestonesService {
     const actor = await this.authenticatedSessionService.requireContext(
       requestMetadata.cookieHeader
     );
+    return this.authorizeOrganizationActor(actor, organizationId, minimumRole);
+  }
+
+  async authorizeOrganizationActor(
+    actor: AuthenticatedSessionContext,
+    organizationId: string,
+    minimumRole?: "OWNER" | "ADMIN" | "MEMBER"
+  ): Promise<{
+    actor: AuthenticatedSessionContext;
+    membership: OrganizationMemberRecord;
+    organization: OrganizationRecord;
+  }> {
     const [organization, membership] = await Promise.all([
       this.repositories.organizations.findById(organizationId),
       this.repositories.organizationMembers.findMembership(

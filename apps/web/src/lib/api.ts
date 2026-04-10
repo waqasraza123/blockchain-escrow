@@ -2,10 +2,17 @@ import type {
   ApprovalRequestDetailResponse,
   CreateApprovalRequestResponse,
   CreateFinanceExportResponse,
+  CreateCounterpartyDealVersionAcceptanceResponse,
+  CreateCounterpartyDealMilestoneSubmissionResponse,
+  CreateFileResponse,
   CreateStatementSnapshotResponse,
   DealVersionApprovalRequestParams,
   DraftDealDetailResponse,
   FinanceExportJobDetailResponse,
+  HostedDisputeEvidenceLinkResponse,
+  HostedSessionContextResponse,
+  HostedSessionExchangeResponse,
+  HostedSessionStatusResponse,
   GetCurrentApprovalRequestResponse,
   GetDealVersionSettlementStatementResponse,
   GetFundingPreparationResponse,
@@ -18,6 +25,8 @@ import type {
   ListStatementSnapshotsResponse,
   MeResponse,
   OrganizationDetailResponse,
+  OrganizationPartnerOverviewResponse,
+  PrepareCounterpartyDealMilestoneSubmissionResponse,
   ReportingDashboardResponse,
   PreviewApprovalRequirementResponse
 } from "@blockchain-escrow/shared";
@@ -248,4 +257,75 @@ export function getFinanceExportJob(
   exportJobId: string
 ): Promise<FinanceExportJobDetailResponse> {
   return apiRequest(`/organizations/${organizationId}/finance-exports/${exportJobId}`);
+}
+
+export function getOrganizationPartnerOverview(
+  organizationId: string
+): Promise<OrganizationPartnerOverviewResponse> {
+  return apiRequest(`/organizations/${organizationId}/integrations/partners`);
+}
+
+export function getHostedLaunchSession(
+  launchToken: string
+): Promise<{ hostedSession: unknown | null }> {
+  return apiRequest(`/hosted/sessions/${launchToken}`, { allowUnauthorized: true });
+}
+
+export function exchangeHostedLaunchSession(
+  launchToken: string
+): Promise<HostedSessionExchangeResponse> {
+  return apiRequest(`/hosted/sessions/${launchToken}/exchange`, { method: "POST" });
+}
+
+export function getHostedSession(): Promise<HostedSessionStatusResponse> {
+  return apiRequest("/hosted/api/session");
+}
+
+export function getHostedContext(): Promise<HostedSessionContextResponse> {
+  return apiRequest("/hosted/api/context");
+}
+
+export function createHostedVersionAcceptance(
+  body: Record<string, unknown>
+): Promise<CreateCounterpartyDealVersionAcceptanceResponse> {
+  return apiRequest("/hosted/api/version-acceptance", {
+    body: JSON.stringify(body),
+    method: "POST"
+  });
+}
+
+export function prepareHostedMilestoneSubmission(
+  body: Record<string, unknown>
+): Promise<PrepareCounterpartyDealMilestoneSubmissionResponse> {
+  return apiRequest("/hosted/api/milestone-submissions/prepare", {
+    body: JSON.stringify(body),
+    method: "POST"
+  });
+}
+
+export function createHostedMilestoneSubmission(
+  body: Record<string, unknown>
+): Promise<CreateCounterpartyDealMilestoneSubmissionResponse> {
+  return apiRequest("/hosted/api/milestone-submissions", {
+    body: JSON.stringify(body),
+    method: "POST"
+  });
+}
+
+export function createHostedFile(
+  body: Record<string, unknown>
+): Promise<CreateFileResponse> {
+  return apiRequest("/hosted/api/files", {
+    body: JSON.stringify(body),
+    method: "POST"
+  });
+}
+
+export function linkHostedDisputeEvidence(
+  body: Record<string, unknown>
+): Promise<HostedDisputeEvidenceLinkResponse> {
+  return apiRequest("/hosted/api/dispute-evidence-links", {
+    body: JSON.stringify(body),
+    method: "POST"
+  });
 }
