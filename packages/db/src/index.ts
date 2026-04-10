@@ -4,6 +4,7 @@ export * from "./prisma-release4-repositories";
 export * from "./prisma-release8-repositories";
 export * from "./prisma-release9-repositories";
 export * from "./prisma-release10-repositories";
+export * from "./prisma-release11-repositories";
 export * from "./records";
 export * from "./repositories";
 export * from "./tables";

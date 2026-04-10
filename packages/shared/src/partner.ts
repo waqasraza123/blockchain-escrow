@@ -30,6 +30,13 @@ import type {
 } from "./drafts";
 import type { CreateFileResponse, FileSummary } from "./files";
 import type { EntityId, IsoTimestamp, JsonObject, WalletAddress } from "./primitives";
+import type {
+  InvoiceSummary,
+  PartnerBrandAssetSummary,
+  TenantBillingOverview,
+  TenantDomainSummary,
+  TenantSettingsSummary
+} from "./tenant";
 
 export const partnerAccountStatusSchema = z.enum(["ACTIVE", "DISABLED"]);
 export type PartnerAccountStatus = z.infer<typeof partnerAccountStatusSchema>;
@@ -349,9 +356,13 @@ export interface ListPartnerAccountsResponse {
 
 export interface PartnerAccountDetailResponse {
   apiKeys: PartnerApiKeySummary[];
+  billing: TenantBillingOverview | null;
+  brandAssets: PartnerBrandAssetSummary[];
+  domains: TenantDomainSummary[];
   hostedSessions: PartnerHostedSessionSummary[];
   partner: PartnerAccountSummary;
   recentDeliveries: PartnerWebhookDeliverySummary[];
+  settings: TenantSettingsSummary | null;
   subscriptions: PartnerWebhookSubscriptionSummary[];
   links: PartnerOrganizationLinkSummary[];
 }
@@ -400,9 +411,16 @@ export interface PartnerHostedSessionResponse {
 
 export interface OrganizationPartnerOverviewResponse {
   apiKeys: PartnerApiKeySummary[];
+  billing: Array<{
+    activeAssignmentId: EntityId | null;
+    partnerAccountId: EntityId;
+    recentInvoices: InvoiceSummary[];
+  }>;
+  domains: TenantDomainSummary[];
   hostedSessions: PartnerHostedSessionSummary[];
   partners: PartnerAccountSummary[];
   recentDeliveries: PartnerWebhookDeliverySummary[];
+  settings: TenantSettingsSummary[];
   subscriptions: PartnerWebhookSubscriptionSummary[];
 }
 

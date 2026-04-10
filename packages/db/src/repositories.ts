@@ -14,6 +14,10 @@ import type {
   ApprovalRequestStepRecord,
   ArbitratorRegistryEntryRecord,
   AuditLogRecord,
+  BillingFeeScheduleRecord,
+  BillingFeeScheduleTierRecord,
+  BillingPlanRecord,
+  BillingUsageMeterEventRecord,
   ChainCursorRecord,
   ComplianceCaseNoteRecord,
   ComplianceCaseRecord,
@@ -57,9 +61,11 @@ import type {
   OperatorAlertRecord,
   PartnerAccountRecord,
   PartnerApiKeyRecord,
+  PartnerBrandAssetRecord,
   PartnerHostedSessionRecord,
   PartnerIdempotencyKeyRecord,
   PartnerOrganizationLinkRecord,
+  PartnerTenantSettingsRecord,
   PartnerResourceReferenceRecord,
   PartnerWebhookDeliveryAttemptRecord,
   PartnerWebhookDeliveryRecord,
@@ -69,6 +75,10 @@ import type {
   ProtocolProposalDraftRecord,
   SessionRecord,
   StatementSnapshotRecord,
+  TenantBillingPlanAssignmentRecord,
+  TenantDomainRecord,
+  TenantInvoiceLineItemRecord,
+  TenantInvoiceRecord,
   TemplateRecord,
   TokenAllowlistEntryRecord,
   UserRecord,
@@ -384,6 +394,110 @@ export interface PartnerWebhookDeliveryAttemptRepository {
   listByPartnerWebhookDeliveryId(
     partnerWebhookDeliveryId: EntityId
   ): Promise<PartnerWebhookDeliveryAttemptRecord[]>;
+}
+
+export interface PartnerBrandAssetRepository {
+  create(record: PartnerBrandAssetRecord): Promise<PartnerBrandAssetRecord>;
+  findById(id: EntityId): Promise<PartnerBrandAssetRecord | null>;
+  listByPartnerAccountId(partnerAccountId: EntityId): Promise<PartnerBrandAssetRecord[]>;
+}
+
+export interface PartnerTenantSettingsRepository {
+  findByPartnerAccountId(
+    partnerAccountId: EntityId
+  ): Promise<PartnerTenantSettingsRecord | null>;
+  upsert(record: PartnerTenantSettingsRecord): Promise<PartnerTenantSettingsRecord>;
+}
+
+export interface TenantDomainRepository {
+  create(record: TenantDomainRecord): Promise<TenantDomainRecord>;
+  findActiveByHostname(hostname: string): Promise<TenantDomainRecord | null>;
+  findByHostname(hostname: string): Promise<TenantDomainRecord | null>;
+  findById(id: EntityId): Promise<TenantDomainRecord | null>;
+  listByPartnerAccountId(partnerAccountId: EntityId): Promise<TenantDomainRecord[]>;
+  update(
+    id: EntityId,
+    updates: Partial<Omit<TenantDomainRecord, "id" | "partnerAccountId" | "createdAt">>
+  ): Promise<TenantDomainRecord>;
+}
+
+export interface BillingPlanRepository {
+  create(record: BillingPlanRecord): Promise<BillingPlanRecord>;
+  findByCode(code: string): Promise<BillingPlanRecord | null>;
+  findById(id: EntityId): Promise<BillingPlanRecord | null>;
+  listAll(): Promise<BillingPlanRecord[]>;
+  update(
+    id: EntityId,
+    updates: Partial<Omit<BillingPlanRecord, "id" | "code" | "createdAt">>
+  ): Promise<BillingPlanRecord>;
+}
+
+export interface BillingFeeScheduleRepository {
+  create(record: BillingFeeScheduleRecord): Promise<BillingFeeScheduleRecord>;
+  findById(id: EntityId): Promise<BillingFeeScheduleRecord | null>;
+  listByBillingPlanId(billingPlanId: EntityId): Promise<BillingFeeScheduleRecord[]>;
+}
+
+export interface BillingFeeScheduleTierRepository {
+  create(record: BillingFeeScheduleTierRecord): Promise<BillingFeeScheduleTierRecord>;
+  listByBillingFeeScheduleId(
+    billingFeeScheduleId: EntityId
+  ): Promise<BillingFeeScheduleTierRecord[]>;
+}
+
+export interface TenantBillingPlanAssignmentRepository {
+  create(
+    record: TenantBillingPlanAssignmentRecord
+  ): Promise<TenantBillingPlanAssignmentRecord>;
+  findActiveByPartnerAccountIdAt(input: {
+    at: IsoTimestamp;
+    partnerAccountId: EntityId;
+  }): Promise<TenantBillingPlanAssignmentRecord | null>;
+  listByPartnerAccountId(
+    partnerAccountId: EntityId
+  ): Promise<TenantBillingPlanAssignmentRecord[]>;
+  update(
+    id: EntityId,
+    updates: Partial<
+      Omit<TenantBillingPlanAssignmentRecord, "id" | "partnerAccountId" | "createdAt">
+    >
+  ): Promise<TenantBillingPlanAssignmentRecord>;
+}
+
+export interface BillingUsageMeterEventRepository {
+  create(record: BillingUsageMeterEventRecord): Promise<BillingUsageMeterEventRecord>;
+  findByExternalKey(externalKey: string): Promise<BillingUsageMeterEventRecord | null>;
+  listByPartnerAccountIdWithin(input: {
+    occurredAtGte: IsoTimestamp;
+    occurredAtLt: IsoTimestamp;
+    partnerAccountId: EntityId;
+  }): Promise<BillingUsageMeterEventRecord[]>;
+}
+
+export interface TenantInvoiceRepository {
+  create(record: TenantInvoiceRecord): Promise<TenantInvoiceRecord>;
+  findById(id: EntityId): Promise<TenantInvoiceRecord | null>;
+  findByPartnerAccountIdAndPeriod(input: {
+    partnerAccountId: EntityId;
+    periodEnd: IsoTimestamp;
+    periodStart: IsoTimestamp;
+  }): Promise<TenantInvoiceRecord | null>;
+  listAll(): Promise<TenantInvoiceRecord[]>;
+  listByPartnerAccountId(partnerAccountId: EntityId): Promise<TenantInvoiceRecord[]>;
+  update(
+    id: EntityId,
+    updates: Partial<
+      Omit<
+        TenantInvoiceRecord,
+        "id" | "partnerAccountId" | "billingPlanId" | "billingFeeScheduleId" | "periodStart" | "periodEnd" | "createdAt"
+      >
+    >
+  ): Promise<TenantInvoiceRecord>;
+}
+
+export interface TenantInvoiceLineItemRepository {
+  create(record: TenantInvoiceLineItemRecord): Promise<TenantInvoiceLineItemRecord>;
+  listByInvoiceId(invoiceId: EntityId): Promise<TenantInvoiceLineItemRecord[]>;
 }
 
 export interface StatementSnapshotRepository {
@@ -890,4 +1004,17 @@ export interface Release10Repositories {
   partnerWebhookDeliveryAttempts: PartnerWebhookDeliveryAttemptRepository;
   partnerWebhookEvents: PartnerWebhookEventRepository;
   partnerWebhookSubscriptions: PartnerWebhookSubscriptionRepository;
+}
+
+export interface Release11Repositories extends Release10Repositories {
+  billingFeeScheduleTiers: BillingFeeScheduleTierRepository;
+  billingFeeSchedules: BillingFeeScheduleRepository;
+  billingPlans: BillingPlanRepository;
+  invoices: TenantInvoiceRepository;
+  invoiceLineItems: TenantInvoiceLineItemRepository;
+  partnerBrandAssets: PartnerBrandAssetRepository;
+  tenantBillingPlanAssignments: TenantBillingPlanAssignmentRepository;
+  tenantDomains: TenantDomainRepository;
+  tenantSettings: PartnerTenantSettingsRepository;
+  usageMeterEvents: BillingUsageMeterEventRepository;
 }

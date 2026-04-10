@@ -32,6 +32,7 @@ import {
 import type { RequestMetadata } from "../auth/auth.http";
 import { DraftsService } from "../drafts/drafts.service";
 import { MilestonesService } from "../milestones/milestones.service";
+import { TenantService } from "../tenant/tenant.service";
 import { PartnerAuthService } from "./partner-auth.service";
 import { PartnerEventsService } from "./partner-events.service";
 
@@ -74,6 +75,7 @@ export class PartnerHostedService {
     private readonly release10Repositories: Release10Repositories,
     private readonly draftsService: DraftsService,
     private readonly milestonesService: MilestonesService,
+    private readonly tenantService: TenantService,
     private readonly partnerAuthService: PartnerAuthService,
     private readonly partnerEventsService: PartnerEventsService
   ) {}
@@ -445,6 +447,13 @@ export class PartnerHostedService {
         hostedSessionId: hostedSession.id,
         type: hostedSession.type
       }
+    });
+    await this.tenantService.recordUsageEvent({
+      externalKey: `partner-hosted-completed:${hostedSession.id}`,
+      metric: "PARTNER_HOSTED_SESSION_COMPLETED",
+      organizationId: link.organizationId,
+      partnerAccountId: link.partnerAccountId,
+      partnerOrganizationLinkId: link.id
     });
   }
 

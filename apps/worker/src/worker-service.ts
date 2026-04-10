@@ -2,7 +2,7 @@ import {
   createPrismaClient,
   createPrismaRelease4Repositories,
   createRelease1Repositories,
-  createRelease10Repositories,
+  createRelease11Repositories,
   createRelease8Repositories,
   createRelease9Repositories
 } from "@blockchain-escrow/db";
@@ -18,6 +18,7 @@ import { MilestoneSettlementExecutionReconciler } from "./milestone-settlement-e
 import { MilestoneSettlementPreparationReconciler } from "./milestone-settlement-preparation-reconciler";
 import { OperatorAlertReconciler } from "./operator-alert-reconciler";
 import { PartnerWebhookDeliveryReconciler } from "./partner-webhook-delivery-reconciler";
+import { TenantInvoiceReconciler } from "./tenant-invoice-reconciler";
 
 export class WorkerService {
   private readonly prisma = createPrismaClient();
@@ -25,7 +26,7 @@ export class WorkerService {
   private readonly release4Repositories = createPrismaRelease4Repositories(this.prisma);
   private readonly release8Repositories = createRelease8Repositories(this.prisma);
   private readonly release9Repositories = createRelease9Repositories(this.prisma);
-  private readonly release10Repositories = createRelease10Repositories(this.prisma);
+  private readonly release11Repositories = createRelease11Repositories(this.prisma);
   private readonly draftCustodyStateReconciler: DraftCustodyStateReconciler;
   private readonly draftActivationReconciler: DraftActivationReconciler;
   private readonly financeExportReconciler: FinanceExportReconciler;
@@ -35,6 +36,7 @@ export class WorkerService {
   private readonly milestoneSettlementPreparationReconciler: MilestoneSettlementPreparationReconciler;
   private readonly operatorAlertReconciler: OperatorAlertReconciler;
   private readonly partnerWebhookDeliveryReconciler: PartnerWebhookDeliveryReconciler;
+  private readonly tenantInvoiceReconciler: TenantInvoiceReconciler;
   private intervalHandle: NodeJS.Timeout | null = null;
   private isRunning = false;
 
@@ -88,9 +90,10 @@ export class WorkerService {
     );
     this.partnerWebhookDeliveryReconciler = new PartnerWebhookDeliveryReconciler(
       this.release1Repositories,
-      this.release10Repositories,
+      this.release11Repositories,
       this.config.partnerWebhooks
     );
+    this.tenantInvoiceReconciler = new TenantInvoiceReconciler(this.release11Repositories);
   }
 
   async start(): Promise<void> {
@@ -131,6 +134,7 @@ export class WorkerService {
         fundingSummary,
         operatorAlertSummary,
         partnerWebhookDeliverySummary,
+        tenantInvoiceSummary,
         milestoneReviewDeadlineSummary,
         milestoneSettlementExecutionSummary,
         milestoneSettlementPreparationSummary
@@ -141,6 +145,7 @@ export class WorkerService {
         this.fundingReconciler.reconcileOnce(),
         this.operatorAlertReconciler.reconcileOnce(),
         this.partnerWebhookDeliveryReconciler.reconcileOnce(),
+        this.tenantInvoiceReconciler.reconcileOnce(),
         this.milestoneReviewDeadlineReconciler.reconcileOnce(),
         this.milestoneSettlementExecutionReconciler.reconcileOnce(),
         this.milestoneSettlementPreparationReconciler.reconcileOnce()
@@ -152,6 +157,7 @@ export class WorkerService {
         ...fundingSummary,
         ...operatorAlertSummary,
         ...partnerWebhookDeliverySummary,
+        ...tenantInvoiceSummary,
         ...milestoneReviewDeadlineSummary,
         ...milestoneSettlementExecutionSummary,
         ...milestoneSettlementPreparationSummary

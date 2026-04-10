@@ -1,7 +1,13 @@
 import type {
+  AssignTenantBillingPlanInput,
+  AssignTenantBillingPlanResponse,
   ComplianceCaseDetailResponse,
   ComplianceCaseSummary,
   ComplianceCheckpointSummary,
+  CreateBillingFeeScheduleInput,
+  CreateBillingFeeScheduleResponse,
+  CreateBillingPlanInput,
+  CreateBillingPlanResponse,
   CreateComplianceCaseInput,
   CreateComplianceCheckpointInput,
   CreatePartnerAccountInput,
@@ -13,6 +19,12 @@ import type {
   CreatePartnerWebhookSubscriptionInput,
   CreatePartnerWebhookSubscriptionResponse,
   CreateProtocolProposalDraftInput,
+  CreateTenantDomainInput,
+  CreateTenantDomainResponse,
+  InvoiceDetailResponse,
+  ListBillingPlansResponse,
+  ListBillingFeeSchedulesResponse,
+  ListInvoicesResponse,
   ListComplianceCasesResponse,
   ListComplianceCheckpointsResponse,
   ListOperatorAlertsResponse,
@@ -24,10 +36,17 @@ import type {
   OperatorSearchResponse,
   OperatorSessionResponse,
   PartnerAccountDetailResponse,
+  RegisterPartnerBrandAssetInput,
+  RegisterPartnerBrandAssetResponse,
   ProtocolProposalDraftDetailResponse,
   RevokePartnerApiKeyResponse,
   RotatePartnerApiKeyResponse,
   RotatePartnerWebhookSubscriptionSecretResponse,
+  TenantBillingOverviewResponse,
+  TenantSettingsInput,
+  UpdateBillingPlanInput,
+  UpdateBillingPlanResponse,
+  UpdateInvoiceStatusResponse,
   UpdatePartnerWebhookSubscriptionResponse
 } from "@blockchain-escrow/shared";
 import { cookies } from "next/headers";
@@ -189,6 +208,133 @@ export function rotatePartnerWebhookSubscriptionSecret(
     `/operator/partners/webhook-subscriptions/${partnerWebhookSubscriptionId}/rotate-secret`,
     { method: "POST" }
   );
+}
+
+export function upsertTenantSettings(
+  partnerAccountId: string,
+  input: TenantSettingsInput
+) {
+  return apiRequest(`/operator/partners/${partnerAccountId}/settings`, {
+    body: JSON.stringify(input),
+    method: "POST"
+  });
+}
+
+export function registerPartnerBrandAsset(
+  partnerAccountId: string,
+  input: RegisterPartnerBrandAssetInput
+): Promise<RegisterPartnerBrandAssetResponse> {
+  return apiRequest(`/operator/partners/${partnerAccountId}/brand-assets`, {
+    body: JSON.stringify(input),
+    method: "POST"
+  });
+}
+
+export function createTenantDomain(
+  partnerAccountId: string,
+  input: CreateTenantDomainInput
+): Promise<CreateTenantDomainResponse> {
+  return apiRequest(`/operator/partners/${partnerAccountId}/domains`, {
+    body: JSON.stringify(input),
+    method: "POST"
+  });
+}
+
+export function verifyTenantDomain(domainId: string): Promise<CreateTenantDomainResponse> {
+  return apiRequest(`/operator/partners/domains/${domainId}/verify`, {
+    method: "POST"
+  });
+}
+
+export function activateTenantDomain(domainId: string): Promise<CreateTenantDomainResponse> {
+  return apiRequest(`/operator/partners/domains/${domainId}/activate`, {
+    method: "POST"
+  });
+}
+
+export function disableTenantDomain(domainId: string): Promise<CreateTenantDomainResponse> {
+  return apiRequest(`/operator/partners/domains/${domainId}/disable`, {
+    method: "POST"
+  });
+}
+
+export function listBillingPlans(): Promise<ListBillingPlansResponse> {
+  return apiRequest("/operator/billing-plans");
+}
+
+export function listBillingFeeSchedules(
+  billingPlanId: string
+): Promise<ListBillingFeeSchedulesResponse> {
+  return apiRequest(`/operator/billing-plans/${billingPlanId}/fee-schedules`);
+}
+
+export function createBillingPlan(
+  input: CreateBillingPlanInput
+): Promise<CreateBillingPlanResponse> {
+  return apiRequest("/operator/billing-plans", {
+    body: JSON.stringify(input),
+    method: "POST"
+  });
+}
+
+export function updateBillingPlan(
+  billingPlanId: string,
+  input: UpdateBillingPlanInput
+): Promise<UpdateBillingPlanResponse> {
+  return apiRequest(`/operator/billing-plans/${billingPlanId}`, {
+    body: JSON.stringify(input),
+    method: "POST"
+  });
+}
+
+export function createBillingFeeSchedule(
+  billingPlanId: string,
+  input: CreateBillingFeeScheduleInput
+): Promise<CreateBillingFeeScheduleResponse> {
+  return apiRequest(`/operator/billing-plans/${billingPlanId}/fee-schedules`, {
+    body: JSON.stringify(input),
+    method: "POST"
+  });
+}
+
+export function assignBillingPlan(
+  partnerAccountId: string,
+  input: AssignTenantBillingPlanInput
+): Promise<AssignTenantBillingPlanResponse> {
+  return apiRequest(`/operator/partners/${partnerAccountId}/billing/assignments`, {
+    body: JSON.stringify(input),
+    method: "POST"
+  });
+}
+
+export function getPartnerBillingOverview(
+  partnerAccountId: string
+): Promise<TenantBillingOverviewResponse> {
+  return apiRequest(`/operator/partners/${partnerAccountId}/billing`);
+}
+
+export function listPartnerInvoices(
+  partnerAccountId: string
+): Promise<ListInvoicesResponse> {
+  return apiRequest(`/operator/partners/${partnerAccountId}/billing/invoices`);
+}
+
+export function listAllInvoices(): Promise<ListInvoicesResponse> {
+  return apiRequest("/operator/billing/invoices");
+}
+
+export function getInvoice(invoiceId: string): Promise<InvoiceDetailResponse> {
+  return apiRequest(`/operator/billing/invoices/${invoiceId}`);
+}
+
+export function updateInvoiceStatus(
+  invoiceId: string,
+  status: "FINALIZED" | "SENT" | "PAID" | "DISPUTED" | "VOID"
+): Promise<UpdateInvoiceStatusResponse> {
+  return apiRequest(`/operator/billing/invoices/${invoiceId}/status`, {
+    body: JSON.stringify({ status }),
+    method: "POST"
+  });
 }
 
 export function getHealth(): Promise<OperatorHealthResponse> {

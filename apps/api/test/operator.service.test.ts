@@ -7,6 +7,7 @@ import type { OperatorConfiguration } from "../src/modules/operator/operator.tok
 import { AuthenticatedSessionService } from "../src/modules/auth/authenticated-session.service";
 import { buildCanonicalDealId } from "../src/modules/drafts/deal-identity";
 import { OperatorService } from "../src/modules/operator/operator.service";
+import { TenantService } from "../src/modules/tenant/tenant.service";
 import type { RequestMetadata } from "../src/modules/auth/auth.http";
 import {
   authConfiguration,
@@ -14,7 +15,7 @@ import {
   seedAuthenticatedActor
 } from "./helpers/auth-test-context";
 import { InMemoryRelease1Repositories } from "./helpers/in-memory-release1-repositories";
-import { InMemoryRelease10Repositories } from "./helpers/in-memory-release10-repositories";
+import { InMemoryRelease11Repositories } from "./helpers/in-memory-release11-repositories";
 import { InMemoryRelease4Repositories } from "./helpers/in-memory-release4-repositories";
 import { InMemoryRelease8Repositories } from "./helpers/in-memory-release8-repositories";
 
@@ -32,13 +33,14 @@ function createServices() {
   const release1Repositories = new InMemoryRelease1Repositories();
   const release4Repositories = new InMemoryRelease4Repositories();
   const release8Repositories = new InMemoryRelease8Repositories();
-  const release10Repositories = new InMemoryRelease10Repositories();
+  const release10Repositories = new InMemoryRelease11Repositories();
   const sessionTokenService = new FakeSessionTokenService();
   const authenticatedSessionService = new AuthenticatedSessionService(
     release1Repositories,
     authConfiguration,
     sessionTokenService
   );
+  const tenantService = new TenantService(release10Repositories);
 
   return {
     authenticatedSessionService,
@@ -48,6 +50,7 @@ function createServices() {
       release10Repositories,
       release8Repositories,
       authenticatedSessionService,
+      tenantService,
       configuration
     ),
     release1Repositories,

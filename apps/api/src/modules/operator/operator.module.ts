@@ -2,6 +2,7 @@ import { Module } from "@nestjs/common";
 
 import { PersistenceModule } from "../../infrastructure/persistence.module";
 import { AuthModule } from "../auth/auth.module";
+import { TenantModule } from "../tenant/tenant.module";
 import { OperatorController } from "./operator.controller";
 import { OperatorService } from "./operator.service";
 import {
@@ -10,7 +11,7 @@ import {
 } from "./operator.tokens";
 
 @Module({
-  imports: [AuthModule, PersistenceModule],
+  imports: [AuthModule, PersistenceModule, TenantModule],
   controllers: [OperatorController],
   providers: [
     OperatorService,

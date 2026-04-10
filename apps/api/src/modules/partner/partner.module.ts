@@ -6,6 +6,7 @@ import { AuthModule } from "../auth/auth.module";
 import { DraftsModule } from "../drafts/drafts.module";
 import { FundingModule } from "../funding/funding.module";
 import { MilestonesModule } from "../milestones/milestones.module";
+import { TenantModule } from "../tenant/tenant.module";
 import { PartnerAuthService } from "./partner-auth.service";
 import { PartnerController, PartnerHostedController } from "./partner.controller";
 import { PartnerEventsService } from "./partner-events.service";
@@ -23,6 +24,7 @@ import {
     DraftsModule,
     FundingModule,
     ApprovalsModule,
+    TenantModule,
     forwardRef(() => MilestonesModule)
   ],
   controllers: [PartnerController, PartnerHostedController],

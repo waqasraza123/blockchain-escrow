@@ -1,4 +1,4 @@
-import { getHostedLaunchSession } from "../../../lib/api";
+import { getHostedLaunchSession, getTenantPublicContext } from "../../../lib/api";
 import { Card, WorkspaceHeader } from "../../(workspace)/ui";
 import { exchangeHostedSessionAction } from "../actions";
 
@@ -8,16 +8,33 @@ type HostedLaunchPageProps = {
 
 export default async function HostedLaunchPage(props: HostedLaunchPageProps) {
   const params = await props.params;
-  const session = await getHostedLaunchSession(params.launchToken);
+  const [session, tenantContext] = await Promise.all([
+    getHostedLaunchSession(params.launchToken),
+    getTenantPublicContext()
+  ]);
+  const tenant = tenantContext.tenant;
 
   return (
-    <div className="workspace-main" style={{ maxWidth: 840, margin: "0 auto", padding: 32 }}>
+    <div
+      className="workspace-main"
+      style={{
+        background: tenant
+          ? `linear-gradient(135deg, ${tenant.settings.backgroundColorHex}, ${tenant.settings.primaryColorHex})`
+          : undefined,
+        color: tenant?.settings.textColorHex,
+        maxWidth: 840,
+        margin: "0 auto",
+        padding: 32
+      }}
+    >
       <WorkspaceHeader
         eyebrow="Hosted Session"
-        title="Partner Hosted Workflow"
+        title={tenant ? tenant.settings.displayName : "Partner Hosted Workflow"}
         subtitle="Launch a constrained participant flow without an organization session."
       />
-      <Card title="Session Launch">
+      <Card
+        title="Session Launch"
+      >
         <p className="muted">
           {session.hostedSession
             ? "This hosted session is ready to exchange into a short-lived workflow cookie."

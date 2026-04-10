@@ -26,11 +26,12 @@ import type {
   MeResponse,
   OrganizationDetailResponse,
   OrganizationPartnerOverviewResponse,
+  TenantPublicContextResponse,
   PrepareCounterpartyDealMilestoneSubmissionResponse,
   ReportingDashboardResponse,
   PreviewApprovalRequirementResponse
 } from "@blockchain-escrow/shared";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 
 const defaultApiBaseUrl = "http://127.0.0.1:4000";
@@ -48,10 +49,16 @@ async function getCookieHeader(): Promise<string> {
     .join("; ");
 }
 
+async function getTenantHostHeader(): Promise<string | null> {
+  const headerStore = await headers();
+  return headerStore.get("host");
+}
+
 async function apiRequest<T>(
   path: string,
   init?: RequestInit & { allowUnauthorized?: boolean }
 ): Promise<T> {
+  const tenantHost = await getTenantHostHeader();
   const response = await fetch(`${getApiBaseUrl()}${path}`, {
     ...init,
     cache: "no-store",
@@ -59,7 +66,8 @@ async function apiRequest<T>(
       Accept: "application/json",
       ...(init?.body ? { "Content-Type": "application/json" } : {}),
       ...(init?.headers ?? {}),
-      cookie: await getCookieHeader()
+      cookie: await getCookieHeader(),
+      ...(tenantHost ? { "x-tenant-host": tenantHost } : {})
     }
   });
 
@@ -263,6 +271,15 @@ export function getOrganizationPartnerOverview(
   organizationId: string
 ): Promise<OrganizationPartnerOverviewResponse> {
   return apiRequest(`/organizations/${organizationId}/integrations/partners`);
+}
+
+export function getTenantPublicContext(
+  slug?: string
+): Promise<TenantPublicContextResponse> {
+  const suffix = slug ? `?slug=${encodeURIComponent(slug)}` : "";
+  return apiRequest(`/public/tenant-context${suffix}`, {
+    allowUnauthorized: true
+  });
 }
 
 export function getHostedLaunchSession(

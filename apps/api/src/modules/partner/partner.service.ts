@@ -76,6 +76,7 @@ import { ApprovalsService } from "../approvals/approvals.service";
 import { DraftsService } from "../drafts/drafts.service";
 import { FundingService } from "../funding/funding.service";
 import { MilestonesService } from "../milestones/milestones.service";
+import { TenantService } from "../tenant/tenant.service";
 import { PartnerAuthService, type PartnerApiContext } from "./partner-auth.service";
 import { PartnerEventsService } from "./partner-events.service";
 import {
@@ -239,6 +240,7 @@ export class PartnerService {
     private readonly draftsService: DraftsService,
     private readonly fundingService: FundingService,
     private readonly milestonesService: MilestonesService,
+    private readonly tenantService: TenantService,
     private readonly partnerAuthService: PartnerAuthService,
     private readonly partnerEventsService: PartnerEventsService
   ) {}
@@ -903,10 +905,23 @@ export class PartnerService {
           userAgent: requestMetadata.userAgent
         });
 
+        const hostedBaseUrl = await this.tenantService.getHostedBaseUrl(
+          context.account.id,
+          this.configuration.hostedBaseUrl
+        );
+
+        await this.tenantService.recordUsageEvent({
+          externalKey: `partner-hosted-created:${hostedSession.id}`,
+          metric: "PARTNER_HOSTED_SESSION_CREATED",
+          organizationId: context.link.organizationId,
+          partnerAccountId: context.account.id,
+          partnerOrganizationLinkId: context.link.id
+        });
+
         return {
           hostedSession: {
             ...mapHostedSession(hostedSession),
-            launchUrl: `${this.configuration.hostedBaseUrl}/hosted/${launchToken}`
+            launchUrl: `${hostedBaseUrl}/hosted/${launchToken}`
           }
         };
       }
@@ -1040,8 +1055,28 @@ export class PartnerService {
       )
     ]);
 
+    const settings = await Promise.all(
+      accounts
+        .filter((record): record is PartnerAccountRecord => Boolean(record))
+        .map((record) =>
+          this.tenantService.getPartnerDetailExtension(record.id).then((detail) => ({
+            activeAssignmentId: detail.billing?.activeAssignment?.id ?? null,
+            partnerAccountId: record.id,
+            recentInvoices: detail.billing?.recentInvoices ?? [],
+            settings: detail.settings,
+            domains: detail.domains
+          }))
+        )
+    );
+
     return {
       apiKeys: apiKeys.flat().map(mapPartnerApiKey),
+      billing: settings.map((entry) => ({
+        activeAssignmentId: entry.activeAssignmentId,
+        partnerAccountId: entry.partnerAccountId,
+        recentInvoices: entry.recentInvoices
+      })),
+      domains: settings.flatMap((entry) => entry.domains),
       hostedSessions: hostedSessions.map(mapHostedSession),
       partners: accounts.filter((record): record is PartnerAccountRecord => Boolean(record)).map(
         mapPartnerAccount
@@ -1049,6 +1084,9 @@ export class PartnerService {
       recentDeliveries: await Promise.all(
         deliveries.slice(0, 20).map((delivery) => this.buildWebhookDeliverySummary(delivery.id))
       ),
+      settings: settings
+        .map((entry) => entry.settings)
+        .filter((record): record is NonNullable<typeof record> => Boolean(record)),
       subscriptions: subscriptions.map((subscription) => mapSubscription(subscription))
     };
   }
@@ -1265,6 +1303,14 @@ export class PartnerService {
     }
 
     const response = await factory();
+
+    await this.tenantService.recordUsageEvent({
+      externalKey: `partner-api-write:${context.apiKey.id}:${requestMethod}:${requestPath}:${requestKey}`,
+      metric: "PARTNER_API_WRITE_REQUEST",
+      organizationId: context.link.organizationId,
+      partnerAccountId: context.account.id,
+      partnerOrganizationLinkId: context.link.id
+    });
 
     await this.release10Repositories.partnerIdempotencyKeys.create({
       createdAt: new Date().toISOString(),

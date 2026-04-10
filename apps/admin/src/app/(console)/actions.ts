@@ -8,15 +8,26 @@ import {
   acknowledgeAlert,
   addCaseNote,
   assignCase,
+  assignBillingPlan,
+  createBillingFeeSchedule,
+  createBillingPlan,
   createPartnerAccount,
   createPartnerApiKey,
   createPartnerOrganizationLink,
+  createTenantDomain,
   createPartnerWebhookSubscription,
   createCase,
   createCheckpoint,
   createProtocolProposal,
   decideCheckpoint,
+  disableTenantDomain,
+  registerPartnerBrandAsset,
   revokePartnerApiKey,
+  upsertTenantSettings,
+  updateBillingPlan,
+  updateInvoiceStatus,
+  activateTenantDomain,
+  verifyTenantDomain,
   rotatePartnerWebhookSubscriptionSecret,
   resolveAlert,
   updatePartnerWebhookSubscription,
@@ -261,6 +272,156 @@ export async function rotatePartnerWebhookSubscriptionSecretAction(
   const partnerAccountId = requiredString(formData, "partnerAccountId");
   await rotatePartnerWebhookSubscriptionSecret(
     requiredString(formData, "partnerWebhookSubscriptionId")
+  );
+
+  revalidatePath(`/partners/${partnerAccountId}`);
+  redirect(`/partners/${partnerAccountId}`);
+}
+
+export async function upsertTenantSettingsAction(formData: FormData): Promise<void> {
+  const partnerAccountId = requiredString(formData, "partnerAccountId");
+  await upsertTenantSettings(partnerAccountId, {
+    accentColorHex: requiredString(formData, "accentColorHex"),
+    backgroundColorHex: requiredString(formData, "backgroundColorHex"),
+    displayName: requiredString(formData, "displayName"),
+    faviconAssetId: optionalString(formData, "faviconAssetId"),
+    legalName: requiredString(formData, "legalName"),
+    logoAssetId: optionalString(formData, "logoAssetId"),
+    primaryColorHex: requiredString(formData, "primaryColorHex"),
+    privacyPolicyUrl: requiredString(formData, "privacyPolicyUrl"),
+    supportEmail: requiredString(formData, "supportEmail"),
+    supportUrl: requiredString(formData, "supportUrl"),
+    termsOfServiceUrl: requiredString(formData, "termsOfServiceUrl"),
+    textColorHex: requiredString(formData, "textColorHex")
+  });
+
+  revalidatePath(`/partners/${partnerAccountId}`);
+  redirect(`/partners/${partnerAccountId}`);
+}
+
+export async function registerPartnerBrandAssetAction(formData: FormData): Promise<void> {
+  const partnerAccountId = requiredString(formData, "partnerAccountId");
+  await registerPartnerBrandAsset(partnerAccountId, {
+    byteSize: requiredInteger(formData, "byteSize"),
+    mediaType: requiredString(formData, "mediaType"),
+    originalFilename: requiredString(formData, "originalFilename"),
+    role: requiredString(formData, "role") as "LOGO" | "FAVICON",
+    sha256Hex: requiredString(formData, "sha256Hex"),
+    storageKey: requiredString(formData, "storageKey")
+  });
+
+  revalidatePath(`/partners/${partnerAccountId}`);
+  redirect(`/partners/${partnerAccountId}`);
+}
+
+export async function createTenantDomainAction(formData: FormData): Promise<void> {
+  const partnerAccountId = requiredString(formData, "partnerAccountId");
+  await createTenantDomain(partnerAccountId, {
+    hostname: requiredString(formData, "hostname"),
+    surface: requiredString(formData, "surface") as "ENTRYPOINT" | "HOSTED"
+  });
+
+  revalidatePath(`/partners/${partnerAccountId}`);
+  redirect(`/partners/${partnerAccountId}`);
+}
+
+export async function verifyTenantDomainAction(formData: FormData): Promise<void> {
+  const partnerAccountId = requiredString(formData, "partnerAccountId");
+  await verifyTenantDomain(requiredString(formData, "domainId"));
+  revalidatePath(`/partners/${partnerAccountId}`);
+  redirect(`/partners/${partnerAccountId}`);
+}
+
+export async function activateTenantDomainAction(formData: FormData): Promise<void> {
+  const partnerAccountId = requiredString(formData, "partnerAccountId");
+  await activateTenantDomain(requiredString(formData, "domainId"));
+  revalidatePath(`/partners/${partnerAccountId}`);
+  redirect(`/partners/${partnerAccountId}`);
+}
+
+export async function disableTenantDomainAction(formData: FormData): Promise<void> {
+  const partnerAccountId = requiredString(formData, "partnerAccountId");
+  await disableTenantDomain(requiredString(formData, "domainId"));
+  revalidatePath(`/partners/${partnerAccountId}`);
+  redirect(`/partners/${partnerAccountId}`);
+}
+
+export async function createBillingPlanAction(formData: FormData): Promise<void> {
+  const plan = await createBillingPlan({
+    baseMonthlyFeeMinor: requiredString(formData, "baseMonthlyFeeMinor"),
+    code: requiredString(formData, "code"),
+    currency: "USD",
+    displayName: requiredString(formData, "displayName"),
+    invoiceDueDays: requiredInteger(formData, "invoiceDueDays")
+  });
+
+  revalidatePath("/billing");
+  redirect(`/billing?billingPlanId=${plan.billingPlan.id}`);
+}
+
+export async function updateBillingPlanAction(formData: FormData): Promise<void> {
+  const billingPlanId = requiredString(formData, "billingPlanId");
+  await updateBillingPlan(billingPlanId, {
+    baseMonthlyFeeMinor: optionalString(formData, "baseMonthlyFeeMinor") ?? undefined,
+    currency: "USD",
+    displayName: optionalString(formData, "displayName") ?? undefined,
+    invoiceDueDays: optionalString(formData, "invoiceDueDays")
+      ? requiredInteger(formData, "invoiceDueDays")
+      : undefined,
+    status:
+      (optionalString(formData, "status") as "ACTIVE" | "ARCHIVED" | null) ?? undefined
+  });
+
+  revalidatePath("/billing");
+  redirect(`/billing?billingPlanId=${billingPlanId}`);
+}
+
+export async function createBillingFeeScheduleAction(formData: FormData): Promise<void> {
+  const billingPlanId = requiredString(formData, "billingPlanId");
+  await createBillingFeeSchedule(billingPlanId, {
+    effectiveFrom: requiredString(formData, "effectiveFrom"),
+    tiers: [
+      {
+        includedUnits: requiredString(formData, "includedUnits"),
+        metric: requiredString(formData, "metric") as
+          | "PARTNER_API_WRITE_REQUEST"
+          | "PARTNER_WEBHOOK_DELIVERY_ATTEMPT"
+          | "PARTNER_WEBHOOK_DELIVERY_SUCCESS"
+          | "PARTNER_HOSTED_SESSION_CREATED"
+          | "PARTNER_HOSTED_SESSION_COMPLETED",
+        startsAtUnit: requiredString(formData, "startsAtUnit"),
+        unitPriceMinor: requiredString(formData, "unitPriceMinor"),
+        upToUnit: optionalString(formData, "upToUnit")
+      }
+    ]
+  });
+
+  revalidatePath("/billing");
+  redirect(`/billing?billingPlanId=${billingPlanId}`);
+}
+
+export async function assignBillingPlanAction(formData: FormData): Promise<void> {
+  const partnerAccountId = requiredString(formData, "partnerAccountId");
+  await assignBillingPlan(partnerAccountId, {
+    billingFeeScheduleId: requiredString(formData, "billingFeeScheduleId"),
+    billingPlanId: requiredString(formData, "billingPlanId"),
+    effectiveFrom: requiredString(formData, "effectiveFrom")
+  });
+
+  revalidatePath(`/partners/${partnerAccountId}`);
+  redirect(`/partners/${partnerAccountId}`);
+}
+
+export async function updateInvoiceStatusAction(formData: FormData): Promise<void> {
+  const partnerAccountId = requiredString(formData, "partnerAccountId");
+  await updateInvoiceStatus(
+    requiredString(formData, "invoiceId"),
+    requiredString(formData, "status") as
+      | "FINALIZED"
+      | "SENT"
+      | "PAID"
+      | "DISPUTED"
+      | "VOID"
   );
 
   revalidatePath(`/partners/${partnerAccountId}`);

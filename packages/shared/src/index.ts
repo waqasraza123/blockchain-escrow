@@ -14,6 +14,7 @@ export * from "./operator";
 export * from "./partner";
 export * from "./primitives";
 export * from "./settlement-execution-reconciliation";
+export * from "./tenant";
 export * from "./templates";
 export * from "./users";
 export * from "./wallets";

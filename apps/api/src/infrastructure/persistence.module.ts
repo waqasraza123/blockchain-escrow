@@ -4,7 +4,8 @@ import {
   createRelease1Repositories,
   createRelease8Repositories,
   createRelease9Repositories,
-  createRelease10Repositories
+  createRelease10Repositories,
+  createRelease11Repositories
 } from "@blockchain-escrow/db";
 import { Global, Injectable, Module, OnModuleDestroy } from "@nestjs/common";
 
@@ -13,7 +14,8 @@ import {
   RELEASE4_REPOSITORIES,
   RELEASE8_REPOSITORIES,
   RELEASE9_REPOSITORIES,
-  RELEASE10_REPOSITORIES
+  RELEASE10_REPOSITORIES,
+  RELEASE11_REPOSITORIES
 } from "./tokens";
 
 type PrismaClientInstance = ReturnType<typeof createPrismaClient>;
@@ -60,6 +62,12 @@ class PrismaService implements OnModuleDestroy {
       inject: [PrismaService],
       useFactory: (prisma: PrismaService) =>
         createRelease10Repositories(prisma.client)
+    },
+    {
+      provide: RELEASE11_REPOSITORIES,
+      inject: [PrismaService],
+      useFactory: (prisma: PrismaService) =>
+        createRelease11Repositories(prisma.client)
     }
   ],
   exports: [
@@ -68,7 +76,8 @@ class PrismaService implements OnModuleDestroy {
     RELEASE4_REPOSITORIES,
     RELEASE8_REPOSITORIES,
     RELEASE9_REPOSITORIES,
-    RELEASE10_REPOSITORIES
+    RELEASE10_REPOSITORIES,
+    RELEASE11_REPOSITORIES
   ]
 })
 export class PersistenceModule {}

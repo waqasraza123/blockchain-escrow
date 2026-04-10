@@ -3,12 +3,13 @@ import test from "node:test";
 
 import type {
   AuditLogRecord,
+  BillingUsageMeterEventRecord,
   PartnerWebhookDeliveryAttemptRecord,
   PartnerWebhookDeliveryRecord,
   PartnerWebhookEventRecord,
   PartnerWebhookSubscriptionRecord,
   Release1Repositories,
-  Release10Repositories
+  Release11Repositories
 } from "@blockchain-escrow/db";
 
 import type { WorkerPartnerWebhookConfiguration } from "../src/config";
@@ -42,7 +43,9 @@ function createRelease10Repositories(input?: {
   event?: PartnerWebhookEventRecord | null;
   subscription?: PartnerWebhookSubscriptionRecord | null;
 }) {
+  const now = "2026-04-10T10:00:00.000Z";
   const attempts = [...(input?.attempts ?? [])];
+  const usageEvents: BillingUsageMeterEventRecord[] = [];
   const delivery = input?.delivery ?? null;
   const event = input?.event ?? null;
   const subscription = input?.subscription ?? null;
@@ -50,7 +53,24 @@ function createRelease10Repositories(input?: {
   return {
     attempts,
     delivery,
+    usageEvents,
     repositories: {
+      partnerOrganizationLinks: {
+        findById: async () =>
+          delivery
+            ? {
+                actingUserId: "user-1",
+                actingWalletId: "wallet-1",
+                createdAt: now,
+                externalReference: null,
+                id: delivery.partnerOrganizationLinkId,
+                organizationId: "org-1",
+                partnerAccountId: "partner-1",
+                status: "ACTIVE",
+                updatedAt: now
+              }
+            : null
+      },
       partnerWebhookDeliveries: {
         claimNextPending: async () => delivery,
         update: async (_id: string, updates: Partial<PartnerWebhookDeliveryRecord>) => {
@@ -80,8 +100,14 @@ function createRelease10Repositories(input?: {
           Object.assign(subscription, updates);
           return subscription;
         }
+      },
+      usageMeterEvents: {
+        create: async (record: BillingUsageMeterEventRecord) => {
+          usageEvents.push(record);
+          return record;
+        }
       }
-    } as unknown as Release10Repositories
+    } as unknown as Release11Repositories
   };
 }
 
@@ -143,6 +169,7 @@ test("PartnerWebhookDeliveryReconciler marks successful deliveries", async () =>
   } satisfies PartnerWebhookDeliveryReconciliationResult);
   assert.equal(release10.delivery?.status, "SUCCEEDED");
   assert.equal(release10.attempts.length, 1);
+  assert.equal(release10.usageEvents.length, 2);
   assert.equal(auditLogs[0]?.action, "PARTNER_WEBHOOK_DELIVERY_SUCCEEDED");
 });
 
@@ -206,5 +233,6 @@ test("PartnerWebhookDeliveryReconciler schedules retries on delivery failures", 
   assert.equal(release10.delivery?.status, "PENDING");
   assert.equal(release10.attempts.length, 1);
   assert.equal(release10.attempts[0]?.responseStatusCode, 500);
+  assert.equal(release10.usageEvents.length, 1);
   assert.equal(auditLogs[0]?.action, "PARTNER_WEBHOOK_DELIVERY_FAILED");
 });

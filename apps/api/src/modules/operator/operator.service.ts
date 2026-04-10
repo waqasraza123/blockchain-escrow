@@ -19,7 +19,11 @@ import type {
 import {
   acknowledgeOperatorAlertSchema,
   addComplianceCaseNoteSchema,
+  assignTenantBillingPlanSchema,
   assignComplianceCaseSchema,
+  billingPlanParamsSchema,
+  createBillingFeeScheduleSchema,
+  createBillingPlanSchema,
   complianceCaseParamsSchema,
   complianceCheckpointParamsSchema,
   createPartnerAccountSchema,
@@ -29,7 +33,10 @@ import {
   createComplianceCaseSchema,
   createComplianceCheckpointSchema,
   createProtocolProposalDraftSchema,
+  createTenantDomainSchema,
   decideComplianceCheckpointSchema,
+  invoiceParamsSchema,
+  invoiceActionSchema,
   listComplianceCasesParamsSchema,
   listOperatorAlertsParamsSchema,
   operatorAlertActionParamsSchema,
@@ -38,17 +45,27 @@ import {
   partnerApiKeyParamsSchema,
   partnerOrganizationLinkParamsSchema,
   partnerWebhookSubscriptionParamsSchema,
+  registerPartnerBrandAssetSchema,
   protocolProposalDraftParamsSchema,
   resolveOperatorAlertSchema,
   revokePartnerApiKeySchema,
   rotatePartnerApiKeySchema,
+  tenantDomainParamsSchema,
+  tenantSettingsSchema,
   updateComplianceCaseStatusSchema,
+  updateBillingPlanSchema,
   updatePartnerWebhookSubscriptionSchema
 } from "@blockchain-escrow/shared";
 import type {
   AcknowledgeOperatorAlertInput,
   AddComplianceCaseNoteInput,
+  AssignTenantBillingPlanInput,
+  AssignTenantBillingPlanResponse,
   AssignComplianceCaseInput,
+  CreateBillingFeeScheduleInput,
+  CreateBillingFeeScheduleResponse,
+  CreateBillingPlanInput,
+  CreateBillingPlanResponse,
   ComplianceCaseDetailResponse,
   ComplianceCaseParams,
   ComplianceCaseSummary,
@@ -65,15 +82,23 @@ import type {
   CreatePartnerWebhookSubscriptionInput,
   CreatePartnerWebhookSubscriptionResponse,
   CreateProtocolProposalDraftInput,
+  CreateTenantDomainInput,
+  CreateTenantDomainResponse,
   DecideComplianceCheckpointInput,
+  InvoiceActionInput,
+  InvoiceDetailResponse,
   JsonObject,
+  ListBillingPlansResponse,
+  ListBillingFeeSchedulesResponse,
   ListComplianceCasesParams,
   ListComplianceCasesResponse,
   ListComplianceCheckpointsResponse,
+  ListInvoicesResponse,
   ListOperatorAlertsParams,
   ListOperatorAlertsResponse,
   ListPartnerAccountsResponse,
   ListProtocolProposalDraftsResponse,
+  ListTenantDomainsResponse,
   OperatorDashboardCard,
   OperatorDashboardResponse,
   OperatorHealthResponse,
@@ -95,6 +120,8 @@ import type {
   ProtocolProposalDraftDetailResponse,
   ProtocolProposalDraftSummary,
   ProtocolProposalTarget,
+  RegisterPartnerBrandAssetInput,
+  RegisterPartnerBrandAssetResponse,
   RemoteServiceHealth,
   ResolveOperatorAlertInput,
   RevokePartnerApiKeyInput,
@@ -102,7 +129,13 @@ import type {
   RotatePartnerApiKeyInput,
   RotatePartnerApiKeyResponse,
   RotatePartnerWebhookSubscriptionSecretResponse,
+  TenantBillingOverviewResponse,
+  TenantDomainParams,
+  TenantSettingsInput,
   UpdateComplianceCaseStatusInput,
+  UpdateBillingPlanInput,
+  UpdateBillingPlanResponse,
+  UpdateInvoiceStatusResponse,
   UpdatePartnerWebhookSubscriptionInput,
   UpdatePartnerWebhookSubscriptionResponse
 } from "@blockchain-escrow/shared";
@@ -125,6 +158,7 @@ import {
 } from "../../infrastructure/tokens";
 import type { RequestMetadata } from "../auth/auth.http";
 import { AuthenticatedSessionService } from "../auth/authenticated-session.service";
+import { TenantService } from "../tenant/tenant.service";
 import {
   OPERATOR_CONFIGURATION,
   type OperatorConfiguration
@@ -495,6 +529,7 @@ export class OperatorService {
     @Inject(RELEASE8_REPOSITORIES)
     private readonly release8Repositories: Release8Repositories,
     private readonly authenticatedSessionService: AuthenticatedSessionService,
+    private readonly tenantService: TenantService,
     @Inject(OPERATOR_CONFIGURATION)
     private readonly configuration: OperatorConfiguration
   ) {}
@@ -601,15 +636,20 @@ export class OperatorService {
         links.map((link) => link.id)
       )
     ]);
+    const extension = await this.tenantService.getPartnerDetailExtension(partner.id);
 
     return {
       apiKeys: apiKeys.flat().map((record) => mapPartnerApiKey(record)),
+      billing: extension.billing,
+      brandAssets: extension.brandAssets,
+      domains: extension.domains,
       hostedSessions: hostedSessions.flat().map((record) => mapPartnerHostedSession(record)),
       links: links.map((record) => mapPartnerLink(record)),
       partner: mapPartnerAccount(partner),
       recentDeliveries: await Promise.all(
         deliveries.slice(0, 20).map((record) => this.buildPartnerDeliverySummary(record.id))
       ),
+      settings: extension.settings,
       subscriptions: subscriptions.map((record) => mapPartnerSubscription(record))
     };
   }
@@ -912,6 +952,215 @@ export class OperatorService {
       secret,
       subscription: mapPartnerSubscription(updated)
     };
+  }
+
+  async upsertTenantSettings(
+    partnerAccountId: string,
+    input: unknown,
+    requestMetadata: RequestMetadata
+  ) {
+    const context = await this.requireOperatorContext(requestMetadata);
+    this.requireProtocolAdminPermission(context.permissions);
+    const body = parseInput(tenantSettingsSchema, input);
+
+    return this.tenantService.upsertSettings(partnerAccountId, body);
+  }
+
+  async registerPartnerBrandAsset(
+    partnerAccountId: string,
+    input: unknown,
+    requestMetadata: RequestMetadata
+  ): Promise<RegisterPartnerBrandAssetResponse> {
+    const context = await this.requireOperatorContext(requestMetadata);
+    this.requireProtocolAdminPermission(context.permissions);
+    const body = parseInput(registerPartnerBrandAssetSchema, input);
+
+    return this.tenantService.registerBrandAsset(partnerAccountId, body);
+  }
+
+  async createTenantDomain(
+    partnerAccountId: string,
+    input: unknown,
+    requestMetadata: RequestMetadata
+  ): Promise<CreateTenantDomainResponse> {
+    const context = await this.requireOperatorContext(requestMetadata);
+    this.requireProtocolAdminPermission(context.permissions);
+    const body = parseInput(createTenantDomainSchema, input);
+
+    return this.tenantService.createDomain(partnerAccountId, body);
+  }
+
+  async listTenantDomains(
+    partnerAccountId: string,
+    requestMetadata: RequestMetadata
+  ): Promise<ListTenantDomainsResponse> {
+    const context = await this.requireOperatorContext(requestMetadata);
+    this.requireProtocolAdminPermission(context.permissions);
+
+    return this.tenantService.listDomains(partnerAccountId);
+  }
+
+  async verifyTenantDomain(
+    input: unknown,
+    requestMetadata: RequestMetadata
+  ): Promise<CreateTenantDomainResponse> {
+    const context = await this.requireOperatorContext(requestMetadata);
+    this.requireProtocolAdminPermission(context.permissions);
+    const params = parseInput(tenantDomainParamsSchema, input);
+
+    return this.tenantService.updateDomainStatus({
+      domainId: params.domainId,
+      status: "VERIFIED"
+    });
+  }
+
+  async activateTenantDomain(
+    input: unknown,
+    requestMetadata: RequestMetadata
+  ): Promise<CreateTenantDomainResponse> {
+    const context = await this.requireOperatorContext(requestMetadata);
+    this.requireProtocolAdminPermission(context.permissions);
+    const params = parseInput(tenantDomainParamsSchema, input);
+
+    return this.tenantService.updateDomainStatus({
+      domainId: params.domainId,
+      status: "ACTIVE"
+    });
+  }
+
+  async disableTenantDomain(
+    input: unknown,
+    requestMetadata: RequestMetadata
+  ): Promise<CreateTenantDomainResponse> {
+    const context = await this.requireOperatorContext(requestMetadata);
+    this.requireProtocolAdminPermission(context.permissions);
+    const params = parseInput(tenantDomainParamsSchema, input);
+
+    return this.tenantService.updateDomainStatus({
+      domainId: params.domainId,
+      status: "DISABLED"
+    });
+  }
+
+  async listBillingPlans(
+    requestMetadata: RequestMetadata
+  ): Promise<ListBillingPlansResponse> {
+    const context = await this.requireOperatorContext(requestMetadata);
+    this.requireProtocolAdminPermission(context.permissions);
+
+    return this.tenantService.listBillingPlans();
+  }
+
+  async listBillingFeeSchedules(
+    input: unknown,
+    requestMetadata: RequestMetadata
+  ): Promise<ListBillingFeeSchedulesResponse> {
+    const context = await this.requireOperatorContext(requestMetadata);
+    this.requireProtocolAdminPermission(context.permissions);
+    const params = parseInput(billingPlanParamsSchema, input);
+
+    return this.tenantService.listBillingFeeSchedules(params.billingPlanId);
+  }
+
+  async createBillingPlan(
+    input: unknown,
+    requestMetadata: RequestMetadata
+  ): Promise<CreateBillingPlanResponse> {
+    const context = await this.requireOperatorContext(requestMetadata);
+    this.requireProtocolAdminPermission(context.permissions);
+    const body = parseInput(createBillingPlanSchema, input);
+
+    return this.tenantService.createBillingPlan(body);
+  }
+
+  async updateBillingPlan(
+    input: unknown,
+    bodyInput: unknown,
+    requestMetadata: RequestMetadata
+  ): Promise<UpdateBillingPlanResponse> {
+    const context = await this.requireOperatorContext(requestMetadata);
+    this.requireProtocolAdminPermission(context.permissions);
+    const params = parseInput(billingPlanParamsSchema, input);
+    const body = parseInput(updateBillingPlanSchema, bodyInput);
+
+    return this.tenantService.updateBillingPlan(params.billingPlanId, body);
+  }
+
+  async createBillingFeeSchedule(
+    billingPlanId: string,
+    input: unknown,
+    requestMetadata: RequestMetadata
+  ): Promise<CreateBillingFeeScheduleResponse> {
+    const context = await this.requireOperatorContext(requestMetadata);
+    this.requireProtocolAdminPermission(context.permissions);
+    const body = parseInput(createBillingFeeScheduleSchema, input);
+
+    return this.tenantService.createBillingFeeSchedule(billingPlanId, body);
+  }
+
+  async assignBillingPlan(
+    partnerAccountId: string,
+    input: unknown,
+    requestMetadata: RequestMetadata
+  ): Promise<AssignTenantBillingPlanResponse> {
+    const context = await this.requireOperatorContext(requestMetadata);
+    this.requireProtocolAdminPermission(context.permissions);
+    const body = parseInput(assignTenantBillingPlanSchema, input);
+
+    return this.tenantService.assignBillingPlan(partnerAccountId, body);
+  }
+
+  async getPartnerBillingOverview(
+    partnerAccountId: string,
+    requestMetadata: RequestMetadata
+  ): Promise<TenantBillingOverviewResponse> {
+    const context = await this.requireOperatorContext(requestMetadata);
+    this.requireProtocolAdminPermission(context.permissions);
+
+    return this.tenantService.buildBillingOverview(partnerAccountId);
+  }
+
+  async listPartnerInvoices(
+    partnerAccountId: string,
+    requestMetadata: RequestMetadata
+  ): Promise<ListInvoicesResponse> {
+    const context = await this.requireOperatorContext(requestMetadata);
+    this.requireProtocolAdminPermission(context.permissions);
+
+    return this.tenantService.listInvoices(partnerAccountId);
+  }
+
+  async listAllInvoices(
+    requestMetadata: RequestMetadata
+  ): Promise<ListInvoicesResponse> {
+    const context = await this.requireOperatorContext(requestMetadata);
+    this.requireProtocolAdminPermission(context.permissions);
+
+    return this.tenantService.listAllInvoices();
+  }
+
+  async getInvoice(
+    input: unknown,
+    requestMetadata: RequestMetadata
+  ): Promise<InvoiceDetailResponse> {
+    const context = await this.requireOperatorContext(requestMetadata);
+    this.requireProtocolAdminPermission(context.permissions);
+    const params = parseInput(invoiceParamsSchema, input);
+
+    return this.tenantService.getInvoice(params.invoiceId);
+  }
+
+  async updateInvoiceStatus(
+    input: unknown,
+    bodyInput: unknown,
+    requestMetadata: RequestMetadata
+  ): Promise<UpdateInvoiceStatusResponse> {
+    const context = await this.requireOperatorContext(requestMetadata);
+    this.requireProtocolAdminPermission(context.permissions);
+    const params = parseInput(invoiceParamsSchema, input);
+    const body = parseInput(invoiceActionSchema, bodyInput);
+
+    return this.tenantService.updateInvoiceStatus(params.invoiceId, body.status);
   }
 
   async search(

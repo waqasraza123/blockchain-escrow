@@ -1,6 +1,6 @@
 import { createHmac, randomUUID } from "node:crypto";
 
-import type { Release1Repositories, Release10Repositories } from "@blockchain-escrow/db";
+import type { Release1Repositories, Release11Repositories } from "@blockchain-escrow/db";
 
 import type { WorkerPartnerWebhookConfiguration } from "./config";
 
@@ -19,14 +19,14 @@ function addSeconds(value: string, seconds: number): string {
 export class PartnerWebhookDeliveryReconciler {
   constructor(
     private readonly release1Repositories: Release1Repositories,
-    private readonly release10Repositories: Release10Repositories,
+    private readonly release11Repositories: Release11Repositories,
     private readonly configuration: WorkerPartnerWebhookConfiguration,
     private readonly fetchImpl: FetchLike = fetch,
     private readonly now: () => string = () => new Date().toISOString()
   ) {}
 
   async reconcileOnce(): Promise<PartnerWebhookDeliveryReconciliationResult> {
-    const claimed = await this.release10Repositories.partnerWebhookDeliveries.claimNextPending(
+    const claimed = await this.release11Repositories.partnerWebhookDeliveries.claimNextPending(
       this.now()
     );
 
@@ -38,18 +38,21 @@ export class PartnerWebhookDeliveryReconciler {
       };
     }
 
-    const [event, subscription, attempts] = await Promise.all([
-      this.release10Repositories.partnerWebhookEvents.findById(claimed.partnerWebhookEventId),
-      this.release10Repositories.partnerWebhookSubscriptions.findById(
+    const [event, subscription, attempts, link] = await Promise.all([
+      this.release11Repositories.partnerWebhookEvents.findById(claimed.partnerWebhookEventId),
+      this.release11Repositories.partnerWebhookSubscriptions.findById(
         claimed.partnerWebhookSubscriptionId
       ),
-      this.release10Repositories.partnerWebhookDeliveryAttempts.listByPartnerWebhookDeliveryId(
+      this.release11Repositories.partnerWebhookDeliveryAttempts.listByPartnerWebhookDeliveryId(
         claimed.id
+      ),
+      this.release11Repositories.partnerOrganizationLinks.findById(
+        claimed.partnerOrganizationLinkId
       )
     ]);
 
-    if (!event || !subscription) {
-      await this.release10Repositories.partnerWebhookDeliveries.update(claimed.id, {
+    if (!event || !subscription || !link) {
+      await this.release11Repositories.partnerWebhookDeliveries.update(claimed.id, {
         errorMessage: "webhook delivery dependencies are missing",
         nextAttemptAt: null,
         status: "FAILED"
@@ -94,6 +97,7 @@ export class PartnerWebhookDeliveryReconciler {
       if (!response.ok) {
         return this.failDelivery(
           claimed.id,
+          link.partnerAccountId,
           subscription.partnerOrganizationLinkId,
           event.organizationId,
           attempts.length + 1,
@@ -105,7 +109,7 @@ export class PartnerWebhookDeliveryReconciler {
         );
       }
 
-      await this.release10Repositories.partnerWebhookDeliveryAttempts.create({
+      const attempt = await this.release11Repositories.partnerWebhookDeliveryAttempts.create({
         attemptedAt: startedAt,
         durationMs,
         errorMessage: null,
@@ -115,16 +119,38 @@ export class PartnerWebhookDeliveryReconciler {
         partnerWebhookDeliveryId: claimed.id,
         responseStatusCode: response.status
       });
-      await this.release10Repositories.partnerWebhookDeliveries.update(claimed.id, {
+      await this.recordAttemptMetric(
+        link.partnerAccountId,
+        link.id,
+        event.organizationId,
+        attempt.id,
+        startedAt
+      );
+      await this.release11Repositories.partnerWebhookDeliveries.update(claimed.id, {
         deliveredAt: finishedAt,
         errorMessage: null,
         lastAttemptAt: finishedAt,
         nextAttemptAt: null,
         status: "SUCCEEDED"
       });
-      await this.release10Repositories.partnerWebhookSubscriptions.update(subscription.id, {
+      await this.release11Repositories.partnerWebhookSubscriptions.update(subscription.id, {
         lastDeliveryAt: finishedAt,
         updatedAt: finishedAt
+      });
+      await this.release11Repositories.usageMeterEvents.create({
+        externalKey: `partner-webhook-success:${claimed.id}`,
+        id: randomUUID(),
+        metadata: {
+          deliveryId: claimed.id,
+          eventId: event.id,
+          eventType: event.eventType
+        },
+        metric: "PARTNER_WEBHOOK_DELIVERY_SUCCESS",
+        occurredAt: finishedAt,
+        organizationId: event.organizationId,
+        partnerAccountId: link.partnerAccountId,
+        partnerOrganizationLinkId: link.id,
+        quantity: "1"
       });
       await this.release1Repositories.auditLogs.append({
         action: "PARTNER_WEBHOOK_DELIVERY_SUCCEEDED",
@@ -156,6 +182,7 @@ export class PartnerWebhookDeliveryReconciler {
 
       return this.failDelivery(
         claimed.id,
+        link.partnerAccountId,
         subscription.partnerOrganizationLinkId,
         event.organizationId,
         attempts.length + 1,
@@ -170,6 +197,7 @@ export class PartnerWebhookDeliveryReconciler {
 
   private async failDelivery(
     deliveryId: string,
+    partnerAccountId: string,
     partnerOrganizationLinkId: string,
     organizationId: string,
     attemptNumber: number,
@@ -187,7 +215,7 @@ export class PartnerWebhookDeliveryReconciler {
           this.configuration.retryBaseDelaySeconds * 2 ** (attemptNumber - 1)
         );
 
-    await this.release10Repositories.partnerWebhookDeliveryAttempts.create({
+    const attempt = await this.release11Repositories.partnerWebhookDeliveryAttempts.create({
       attemptedAt,
       durationMs,
       errorMessage,
@@ -197,7 +225,14 @@ export class PartnerWebhookDeliveryReconciler {
       partnerWebhookDeliveryId: deliveryId,
       responseStatusCode
     });
-    await this.release10Repositories.partnerWebhookDeliveries.update(deliveryId, {
+    await this.recordAttemptMetric(
+      partnerAccountId,
+      partnerOrganizationLinkId,
+      organizationId,
+      attempt.id,
+      attemptedAt
+    );
+    await this.release11Repositories.partnerWebhookDeliveries.update(deliveryId, {
       errorMessage,
       lastAttemptAt: finishedAt,
       nextAttemptAt: nextRetryAt,
@@ -226,5 +261,28 @@ export class PartnerWebhookDeliveryReconciler {
       processedPartnerWebhookDeliveryCount: 1,
       succeededPartnerWebhookDeliveryCount: 0
     };
+  }
+
+  private async recordAttemptMetric(
+    partnerAccountId: string,
+    partnerOrganizationLinkId: string,
+    organizationId: string,
+    attemptId: string,
+    occurredAt: string
+  ): Promise<void> {
+    await this.release11Repositories.usageMeterEvents.create({
+      externalKey: `partner-webhook-attempt:${attemptId}`,
+      id: randomUUID(),
+      metadata: {
+        attemptId,
+        partnerOrganizationLinkId
+      },
+      metric: "PARTNER_WEBHOOK_DELIVERY_ATTEMPT",
+      occurredAt,
+      organizationId,
+      partnerAccountId,
+      partnerOrganizationLinkId,
+      quantity: "1"
+    });
   }
 }

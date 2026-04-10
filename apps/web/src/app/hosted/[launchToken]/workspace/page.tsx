@@ -1,6 +1,7 @@
 import {
   getHostedContext,
-  getHostedSession
+  getHostedSession,
+  getTenantPublicContext
 } from "../../../../lib/api";
 import { Card, DataTable, EmptyState, Pill, WorkspaceHeader, toneForStatus } from "../../../(workspace)/ui";
 import {
@@ -16,13 +17,29 @@ type HostedWorkspacePageProps = {
 
 export default async function HostedWorkspacePage(props: HostedWorkspacePageProps) {
   const params = await props.params;
-  const [session, context] = await Promise.all([getHostedSession(), getHostedContext()]);
+  const [session, context, tenantContext] = await Promise.all([
+    getHostedSession(),
+    getHostedContext(),
+    getTenantPublicContext()
+  ]);
+  const tenant = tenantContext.tenant;
 
   return (
-    <div className="workspace-main" style={{ maxWidth: 960, margin: "0 auto", padding: 32 }}>
+    <div
+      className="workspace-main"
+      style={{
+        background: tenant
+          ? `linear-gradient(135deg, ${tenant.settings.backgroundColorHex}, ${tenant.settings.primaryColorHex})`
+          : undefined,
+        color: tenant?.settings.textColorHex,
+        maxWidth: 960,
+        margin: "0 auto",
+        padding: 32
+      }}
+    >
       <WorkspaceHeader
         eyebrow="Hosted Session"
-        title={session.hostedSession.type.replaceAll("_", " ")}
+        title={tenant ? `${tenant.settings.displayName} Hosted Workflow` : session.hostedSession.type.replaceAll("_", " ")}
         subtitle="Scoped participant workflow backed by a short-lived hosted session cookie."
       />
       <div className="stack">

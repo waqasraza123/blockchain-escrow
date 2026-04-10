@@ -248,6 +248,45 @@ enum PartnerResourceType {
   PARTNER_HOSTED_SESSION
 }
 
+enum PartnerBrandAssetRole {
+  LOGO
+  FAVICON
+}
+
+enum TenantDomainSurface {
+  ENTRYPOINT
+  HOSTED
+}
+
+enum TenantDomainStatus {
+  PENDING
+  VERIFIED
+  ACTIVE
+  DISABLED
+}
+
+enum BillingPlanStatus {
+  ACTIVE
+  ARCHIVED
+}
+
+enum BillingUsageMetric {
+  PARTNER_API_WRITE_REQUEST
+  PARTNER_WEBHOOK_DELIVERY_ATTEMPT
+  PARTNER_WEBHOOK_DELIVERY_SUCCESS
+  PARTNER_HOSTED_SESSION_CREATED
+  PARTNER_HOSTED_SESSION_COMPLETED
+}
+
+enum InvoiceStatus {
+  DRAFT
+  FINALIZED
+  SENT
+  PAID
+  DISPUTED
+  VOID
+}
+
 enum CostCenterStatus {
   ACTIVE
   ARCHIVED
@@ -604,6 +643,7 @@ model Organization {
   members                OrganizationMember[]
   invites                OrganizationInvite[]
   auditLogs              AuditLog[]
+  usageMeterEvents       BillingUsageMeterEvent[]
 
   @@index([createdByUserId], map: "organizations_created_by_user_id_idx")
   @@map("organizations")
@@ -986,7 +1026,13 @@ model PartnerAccount {
   metadata  Json?
   createdAt DateTime             @db.Timestamptz(3)
   updatedAt DateTime             @db.Timestamptz(3)
+  brandAssets PartnerBrandAsset[]
+  billingAssignments TenantBillingPlanAssignment[]
+  domains   TenantDomain[]
+  invoices  TenantInvoice[]
   links     PartnerOrganizationLink[]
+  tenantSettings PartnerTenantSettings?
+  usageMeterEvents BillingUsageMeterEvent[]
 
   @@index([status], map: "partner_accounts_status_idx")
   @@index([createdAt], map: "partner_accounts_created_at_idx")
@@ -1007,6 +1053,7 @@ model PartnerOrganizationLink {
   apiKeys           PartnerApiKey[]
   hostedSessions    PartnerHostedSession[]
   resourceReferences PartnerResourceReference[]
+  usageMeterEvents  BillingUsageMeterEvent[]
   webhookDeliveries PartnerWebhookDelivery[]
   webhookEvents     PartnerWebhookEvent[]
   webhookSubscriptions PartnerWebhookSubscription[]
@@ -1175,6 +1222,201 @@ model PartnerWebhookDeliveryAttempt {
   @@index([partnerWebhookDeliveryId], map: "partner_webhook_attempts_delivery_id_idx")
   @@index([attemptedAt], map: "partner_webhook_attempts_attempted_at_idx")
   @@map("partner_webhook_delivery_attempts")
+}
+
+model PartnerBrandAsset {
+  id               String               @id @db.Text
+  partnerAccountId String               @db.Text
+  role             PartnerBrandAssetRole
+  originalFilename String               @db.Text
+  mediaType        String               @db.Text
+  byteSize         BigInt
+  sha256Hex        String               @db.Text
+  storageKey       String               @db.Text
+  createdAt        DateTime             @db.Timestamptz(3)
+  updatedAt        DateTime             @db.Timestamptz(3)
+  partnerAccount   PartnerAccount       @relation(fields: [partnerAccountId], references: [id], onDelete: Cascade)
+  faviconTenantSettings PartnerTenantSettings[] @relation("PartnerTenantSettingsFaviconAsset")
+  logoTenantSettings    PartnerTenantSettings[] @relation("PartnerTenantSettingsLogoAsset")
+
+  @@unique([partnerAccountId, storageKey], map: "partner_brand_assets_partner_storage_key_uq")
+  @@index([partnerAccountId], map: "partner_brand_assets_partner_account_id_idx")
+  @@index([partnerAccountId, role], map: "partner_brand_assets_partner_account_id_role_idx")
+  @@map("partner_brand_assets")
+}
+
+model PartnerTenantSettings {
+  partnerAccountId   String           @id @db.Text
+  displayName        String           @db.Text
+  legalName          String           @db.Text
+  supportEmail       String           @db.Text
+  supportUrl         String           @db.Text
+  termsOfServiceUrl  String           @db.Text
+  privacyPolicyUrl   String           @db.Text
+  logoAssetId        String?          @db.Text
+  faviconAssetId     String?          @db.Text
+  primaryColorHex    String           @db.Text
+  accentColorHex     String           @db.Text
+  backgroundColorHex String           @db.Text
+  textColorHex       String           @db.Text
+  createdAt          DateTime         @db.Timestamptz(3)
+  updatedAt          DateTime         @db.Timestamptz(3)
+  partnerAccount     PartnerAccount   @relation(fields: [partnerAccountId], references: [id], onDelete: Cascade)
+  faviconAsset       PartnerBrandAsset? @relation("PartnerTenantSettingsFaviconAsset", fields: [faviconAssetId], references: [id], onDelete: SetNull)
+  logoAsset          PartnerBrandAsset? @relation("PartnerTenantSettingsLogoAsset", fields: [logoAssetId], references: [id], onDelete: SetNull)
+
+  @@index([logoAssetId], map: "partner_tenant_settings_logo_asset_id_idx")
+  @@index([faviconAssetId], map: "partner_tenant_settings_favicon_asset_id_idx")
+  @@map("partner_tenant_settings")
+}
+
+model TenantDomain {
+  id               String              @id @db.Text
+  partnerAccountId String              @db.Text
+  hostname         String              @unique @db.Text
+  surface          TenantDomainSurface
+  status           TenantDomainStatus
+  verifiedAt       DateTime?           @db.Timestamptz(3)
+  createdAt        DateTime            @db.Timestamptz(3)
+  updatedAt        DateTime            @db.Timestamptz(3)
+  partnerAccount   PartnerAccount      @relation(fields: [partnerAccountId], references: [id], onDelete: Cascade)
+
+  @@index([partnerAccountId], map: "tenant_domains_partner_account_id_idx")
+  @@index([partnerAccountId, surface], map: "tenant_domains_partner_account_id_surface_idx")
+  @@index([partnerAccountId, surface, status], map: "tenant_domains_partner_surface_status_idx")
+  @@map("tenant_domains")
+}
+
+model BillingPlan {
+  id                 String                     @id @db.Text
+  code               String                     @unique @db.Text
+  displayName        String                     @db.Text
+  baseMonthlyFeeMinor String                    @db.Text
+  currency           String                     @db.Text
+  invoiceDueDays     Int
+  status             BillingPlanStatus
+  createdAt          DateTime                   @db.Timestamptz(3)
+  updatedAt          DateTime                   @db.Timestamptz(3)
+  feeSchedules       BillingFeeSchedule[]
+  tenantAssignments  TenantBillingPlanAssignment[]
+  invoices           TenantInvoice[]
+
+  @@index([status], map: "billing_plans_status_idx")
+  @@map("billing_plans")
+}
+
+model BillingFeeSchedule {
+  id            String                       @id @db.Text
+  billingPlanId String                       @db.Text
+  effectiveFrom DateTime                     @db.Timestamptz(3)
+  createdAt     DateTime                     @db.Timestamptz(3)
+  updatedAt     DateTime                     @db.Timestamptz(3)
+  billingPlan   BillingPlan                  @relation(fields: [billingPlanId], references: [id], onDelete: Cascade)
+  tiers         BillingFeeScheduleTier[]
+  tenantAssignments TenantBillingPlanAssignment[]
+  invoices      TenantInvoice[]
+
+  @@unique([billingPlanId, effectiveFrom], map: "billing_fee_schedules_plan_effective_from_uq")
+  @@index([billingPlanId], map: "billing_fee_schedules_billing_plan_id_idx")
+  @@map("billing_fee_schedules")
+}
+
+model BillingFeeScheduleTier {
+  id                   String             @id @db.Text
+  billingFeeScheduleId String             @db.Text
+  metric               BillingUsageMetric
+  position             Int
+  includedUnits        String             @db.Text
+  startsAtUnit         String             @db.Text
+  upToUnit             String?            @db.Text
+  unitPriceMinor       String             @db.Text
+  billingFeeSchedule   BillingFeeSchedule @relation(fields: [billingFeeScheduleId], references: [id], onDelete: Cascade)
+
+  @@unique([billingFeeScheduleId, metric, position], map: "billing_fee_schedule_tiers_schedule_metric_position_uq")
+  @@index([billingFeeScheduleId], map: "billing_fee_schedule_tiers_schedule_id_idx")
+  @@map("billing_fee_schedule_tiers")
+}
+
+model TenantBillingPlanAssignment {
+  id                   String              @id @db.Text
+  partnerAccountId     String              @db.Text
+  billingPlanId        String              @db.Text
+  billingFeeScheduleId String              @db.Text
+  effectiveFrom        DateTime            @db.Timestamptz(3)
+  effectiveTo          DateTime?           @db.Timestamptz(3)
+  createdAt            DateTime            @db.Timestamptz(3)
+  partnerAccount       PartnerAccount      @relation(fields: [partnerAccountId], references: [id], onDelete: Cascade)
+  billingPlan          BillingPlan         @relation(fields: [billingPlanId], references: [id], onDelete: Restrict)
+  billingFeeSchedule   BillingFeeSchedule  @relation(fields: [billingFeeScheduleId], references: [id], onDelete: Restrict)
+
+  @@unique([partnerAccountId, effectiveFrom], map: "tenant_billing_assignments_partner_effective_from_uq")
+  @@index([partnerAccountId], map: "tenant_billing_assignments_partner_idx")
+  @@index([billingPlanId], map: "tenant_billing_assignments_plan_idx")
+  @@index([billingFeeScheduleId], map: "tenant_billing_assignments_schedule_idx")
+  @@map("tenant_billing_plan_assignments")
+}
+
+model BillingUsageMeterEvent {
+  id                        String                    @id @db.Text
+  partnerAccountId          String                    @db.Text
+  partnerOrganizationLinkId String?                   @db.Text
+  organizationId            String?                   @db.Text
+  metric                    BillingUsageMetric
+  quantity                  String                    @db.Text
+  occurredAt                DateTime                  @db.Timestamptz(3)
+  externalKey               String?                   @unique @db.Text
+  metadata                  Json?
+  partnerAccount            PartnerAccount            @relation(fields: [partnerAccountId], references: [id], onDelete: Cascade)
+  partnerOrganizationLink   PartnerOrganizationLink?  @relation(fields: [partnerOrganizationLinkId], references: [id], onDelete: SetNull)
+  organization              Organization?             @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+
+  @@index([partnerAccountId], map: "billing_usage_meter_events_partner_account_id_idx")
+  @@index([partnerOrganizationLinkId], map: "billing_usage_meter_events_partner_org_link_id_idx")
+  @@index([organizationId], map: "billing_usage_meter_events_organization_id_idx")
+  @@index([partnerAccountId, occurredAt], map: "billing_usage_meter_events_partner_occurred_at_idx")
+  @@index([metric, occurredAt], map: "billing_usage_meter_events_metric_occurred_at_idx")
+  @@map("billing_usage_meter_events")
+}
+
+model TenantInvoice {
+  id                   String                     @id @db.Text
+  partnerAccountId     String                     @db.Text
+  billingPlanId        String                     @db.Text
+  billingFeeScheduleId String                     @db.Text
+  periodStart          DateTime                   @db.Timestamptz(3)
+  periodEnd            DateTime                   @db.Timestamptz(3)
+  currency             String                     @db.Text
+  subtotalMinor        String                     @db.Text
+  totalMinor           String                     @db.Text
+  dueAt                DateTime                   @db.Timestamptz(3)
+  status               InvoiceStatus
+  createdAt            DateTime                   @db.Timestamptz(3)
+  updatedAt            DateTime                   @db.Timestamptz(3)
+  partnerAccount       PartnerAccount             @relation(fields: [partnerAccountId], references: [id], onDelete: Cascade)
+  billingPlan          BillingPlan                @relation(fields: [billingPlanId], references: [id], onDelete: Restrict)
+  billingFeeSchedule   BillingFeeSchedule         @relation(fields: [billingFeeScheduleId], references: [id], onDelete: Restrict)
+  lineItems            TenantInvoiceLineItem[]
+
+  @@unique([partnerAccountId, periodStart, periodEnd], map: "tenant_invoices_partner_period_uq")
+  @@index([partnerAccountId], map: "tenant_invoices_partner_account_id_idx")
+  @@index([status], map: "tenant_invoices_status_idx")
+  @@index([periodStart, periodEnd], map: "tenant_invoices_period_idx")
+  @@map("tenant_invoices")
+}
+
+model TenantInvoiceLineItem {
+  id             String         @id @db.Text
+  invoiceId      String         @db.Text
+  description    String         @db.Text
+  metric         BillingUsageMetric?
+  quantity       String         @db.Text
+  unitPriceMinor String         @db.Text
+  amountMinor    String         @db.Text
+  createdAt      DateTime       @db.Timestamptz(3)
+  invoice        TenantInvoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([invoiceId], map: "tenant_invoice_line_items_invoice_id_idx")
+  @@map("tenant_invoice_line_items")
 }
 
 model DealVersionParty {

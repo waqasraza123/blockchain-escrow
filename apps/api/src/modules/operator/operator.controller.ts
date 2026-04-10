@@ -10,11 +10,17 @@ import {
 import type {
   AcknowledgeOperatorAlertInput,
   AddComplianceCaseNoteInput,
+  AssignTenantBillingPlanInput,
+  AssignTenantBillingPlanResponse,
   AssignComplianceCaseInput,
   ComplianceCaseDetailResponse,
   ComplianceCaseParams,
   ComplianceCheckpointParams,
   ComplianceCheckpointSummary,
+  CreateBillingFeeScheduleInput,
+  CreateBillingFeeScheduleResponse,
+  CreateBillingPlanInput,
+  CreateBillingPlanResponse,
   CreateComplianceCaseInput,
   CreateComplianceCheckpointInput,
   CreatePartnerAccountInput,
@@ -22,14 +28,23 @@ import type {
   CreatePartnerOrganizationLinkInput,
   CreatePartnerWebhookSubscriptionInput,
   CreateProtocolProposalDraftInput,
+  CreateTenantDomainInput,
+  CreateTenantDomainResponse,
   DecideComplianceCheckpointInput,
+  InvoiceActionInput,
+  InvoiceDetailResponse,
+  InvoiceParams,
+  ListBillingPlansResponse,
+  ListBillingFeeSchedulesResponse,
   ListComplianceCasesParams,
   ListComplianceCasesResponse,
   ListComplianceCheckpointsResponse,
+  ListInvoicesResponse,
   ListOperatorAlertsParams,
   ListOperatorAlertsResponse,
   ListPartnerAccountsResponse,
   ListProtocolProposalDraftsResponse,
+  ListTenantDomainsResponse,
   OperatorAlertActionParams,
   OperatorDashboardResponse,
   OperatorHealthResponse,
@@ -54,9 +69,17 @@ import type {
   CreatePartnerApiKeyResponse,
   CreatePartnerOrganizationLinkResponse,
   CreatePartnerWebhookSubscriptionResponse,
+  RegisterPartnerBrandAssetInput,
+  RegisterPartnerBrandAssetResponse,
+  TenantBillingOverviewResponse,
+  TenantDomainParams,
+  TenantSettingsInput,
+  UpdateBillingPlanInput,
+  UpdateBillingPlanResponse,
   UpdatePartnerWebhookSubscriptionInput,
   UpdatePartnerWebhookSubscriptionResponse,
-  UpdateComplianceCaseStatusInput
+  UpdateComplianceCaseStatusInput,
+  UpdateInvoiceStatusResponse
 } from "@blockchain-escrow/shared";
 
 import { readRequestMetadata, type HttpRequestLike } from "../auth/auth.http";
@@ -177,6 +200,195 @@ export class OperatorController {
   ): Promise<RotatePartnerWebhookSubscriptionSecretResponse> {
     return this.operatorService.rotatePartnerWebhookSubscriptionSecret(
       params,
+      readRequestMetadata(request)
+    );
+  }
+
+  @Post("partners/:partnerAccountId/settings")
+  async upsertTenantSettings(
+    @Param() params: PartnerAccountParams,
+    @Body() body: TenantSettingsInput,
+    @Req() request: HttpRequestLike
+  ) {
+    return this.operatorService.upsertTenantSettings(
+      params.partnerAccountId,
+      body,
+      readRequestMetadata(request)
+    );
+  }
+
+  @Post("partners/:partnerAccountId/brand-assets")
+  async registerPartnerBrandAsset(
+    @Param() params: PartnerAccountParams,
+    @Body() body: RegisterPartnerBrandAssetInput,
+    @Req() request: HttpRequestLike
+  ): Promise<RegisterPartnerBrandAssetResponse> {
+    return this.operatorService.registerPartnerBrandAsset(
+      params.partnerAccountId,
+      body,
+      readRequestMetadata(request)
+    );
+  }
+
+  @Get("partners/:partnerAccountId/domains")
+  async listTenantDomains(
+    @Param() params: PartnerAccountParams,
+    @Req() request: HttpRequestLike
+  ): Promise<ListTenantDomainsResponse> {
+    return this.operatorService.listTenantDomains(
+      params.partnerAccountId,
+      readRequestMetadata(request)
+    );
+  }
+
+  @Post("partners/:partnerAccountId/domains")
+  async createTenantDomain(
+    @Param() params: PartnerAccountParams,
+    @Body() body: CreateTenantDomainInput,
+    @Req() request: HttpRequestLike
+  ): Promise<CreateTenantDomainResponse> {
+    return this.operatorService.createTenantDomain(
+      params.partnerAccountId,
+      body,
+      readRequestMetadata(request)
+    );
+  }
+
+  @Post("partners/domains/:domainId/verify")
+  async verifyTenantDomain(
+    @Param() params: TenantDomainParams,
+    @Req() request: HttpRequestLike
+  ): Promise<CreateTenantDomainResponse> {
+    return this.operatorService.verifyTenantDomain(params, readRequestMetadata(request));
+  }
+
+  @Post("partners/domains/:domainId/activate")
+  async activateTenantDomain(
+    @Param() params: TenantDomainParams,
+    @Req() request: HttpRequestLike
+  ): Promise<CreateTenantDomainResponse> {
+    return this.operatorService.activateTenantDomain(params, readRequestMetadata(request));
+  }
+
+  @Post("partners/domains/:domainId/disable")
+  async disableTenantDomain(
+    @Param() params: TenantDomainParams,
+    @Req() request: HttpRequestLike
+  ): Promise<CreateTenantDomainResponse> {
+    return this.operatorService.disableTenantDomain(params, readRequestMetadata(request));
+  }
+
+  @Get("billing-plans")
+  async listBillingPlans(
+    @Req() request: HttpRequestLike
+  ): Promise<ListBillingPlansResponse> {
+    return this.operatorService.listBillingPlans(readRequestMetadata(request));
+  }
+
+  @Get("billing-plans/:billingPlanId/fee-schedules")
+  async listBillingFeeSchedules(
+    @Param("billingPlanId") billingPlanId: string,
+    @Req() request: HttpRequestLike
+  ): Promise<ListBillingFeeSchedulesResponse> {
+    return this.operatorService.listBillingFeeSchedules(
+      { billingPlanId },
+      readRequestMetadata(request)
+    );
+  }
+
+  @Post("billing-plans")
+  async createBillingPlan(
+    @Body() body: CreateBillingPlanInput,
+    @Req() request: HttpRequestLike
+  ): Promise<CreateBillingPlanResponse> {
+    return this.operatorService.createBillingPlan(body, readRequestMetadata(request));
+  }
+
+  @Post("billing-plans/:billingPlanId")
+  async updateBillingPlan(
+    @Param("billingPlanId") billingPlanId: string,
+    @Body() body: UpdateBillingPlanInput,
+    @Req() request: HttpRequestLike
+  ): Promise<UpdateBillingPlanResponse> {
+    return this.operatorService.updateBillingPlan(
+      { billingPlanId },
+      body,
+      readRequestMetadata(request)
+    );
+  }
+
+  @Post("billing-plans/:billingPlanId/fee-schedules")
+  async createBillingFeeSchedule(
+    @Param("billingPlanId") billingPlanId: string,
+    @Body() body: CreateBillingFeeScheduleInput,
+    @Req() request: HttpRequestLike
+  ): Promise<CreateBillingFeeScheduleResponse> {
+    return this.operatorService.createBillingFeeSchedule(
+      billingPlanId,
+      body,
+      readRequestMetadata(request)
+    );
+  }
+
+  @Post("partners/:partnerAccountId/billing/assignments")
+  async assignBillingPlan(
+    @Param() params: PartnerAccountParams,
+    @Body() body: AssignTenantBillingPlanInput,
+    @Req() request: HttpRequestLike
+  ): Promise<AssignTenantBillingPlanResponse> {
+    return this.operatorService.assignBillingPlan(
+      params.partnerAccountId,
+      body,
+      readRequestMetadata(request)
+    );
+  }
+
+  @Get("partners/:partnerAccountId/billing")
+  async getPartnerBillingOverview(
+    @Param() params: PartnerAccountParams,
+    @Req() request: HttpRequestLike
+  ): Promise<TenantBillingOverviewResponse> {
+    return this.operatorService.getPartnerBillingOverview(
+      params.partnerAccountId,
+      readRequestMetadata(request)
+    );
+  }
+
+  @Get("partners/:partnerAccountId/billing/invoices")
+  async listPartnerInvoices(
+    @Param() params: PartnerAccountParams,
+    @Req() request: HttpRequestLike
+  ): Promise<ListInvoicesResponse> {
+    return this.operatorService.listPartnerInvoices(
+      params.partnerAccountId,
+      readRequestMetadata(request)
+    );
+  }
+
+  @Get("billing/invoices")
+  async listAllInvoices(
+    @Req() request: HttpRequestLike
+  ): Promise<ListInvoicesResponse> {
+    return this.operatorService.listAllInvoices(readRequestMetadata(request));
+  }
+
+  @Get("billing/invoices/:invoiceId")
+  async getInvoice(
+    @Param() params: InvoiceParams,
+    @Req() request: HttpRequestLike
+  ): Promise<InvoiceDetailResponse> {
+    return this.operatorService.getInvoice(params, readRequestMetadata(request));
+  }
+
+  @Post("billing/invoices/:invoiceId/status")
+  async updateInvoiceStatus(
+    @Param() params: InvoiceParams,
+    @Body() body: InvoiceActionInput,
+    @Req() request: HttpRequestLike
+  ): Promise<UpdateInvoiceStatusResponse> {
+    return this.operatorService.updateInvoiceStatus(
+      params,
+      body,
       readRequestMetadata(request)
     );
   }

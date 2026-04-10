@@ -82,6 +82,22 @@ export const release10TableNames = {
 export type Release10TableName =
   (typeof release10TableNames)[keyof typeof release10TableNames];
 
+export const release11TableNames = {
+  billingFeeScheduleTiers: "billing_fee_schedule_tiers",
+  billingFeeSchedules: "billing_fee_schedules",
+  billingPlans: "billing_plans",
+  billingUsageMeterEvents: "billing_usage_meter_events",
+  partnerBrandAssets: "partner_brand_assets",
+  partnerTenantSettings: "partner_tenant_settings",
+  tenantBillingPlanAssignments: "tenant_billing_plan_assignments",
+  tenantDomains: "tenant_domains",
+  tenantInvoiceLineItems: "tenant_invoice_line_items",
+  tenantInvoices: "tenant_invoices"
+} as const;
+
+export type Release11TableName =
+  (typeof release11TableNames)[keyof typeof release11TableNames];
+
 export const release4TableNames = {
   arbitratorRegistryEntryProjections: "arbitrator_registry_entry_projections",
   chainCursors: "chain_cursors",

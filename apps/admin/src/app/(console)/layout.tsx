@@ -13,6 +13,7 @@ const navigation = [
   { href: "/checkpoints", label: "Checkpoints" },
   { href: "/cases", label: "Cases" },
   { href: "/partners", label: "Partners" },
+  { href: "/billing", label: "Billing" },
   { href: "/protocol-proposals", label: "Protocol Proposals" }
 ];
 

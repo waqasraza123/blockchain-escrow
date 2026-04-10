@@ -4,6 +4,8 @@ import type {
   ApprovalStepStatus,
   AuditAction,
   AuditEntityType,
+  BillingPlanStatus,
+  BillingUsageMetric,
   ChainId,
   CostCenterStatus,
   DealPartyRole,
@@ -24,6 +26,7 @@ import type {
   OperatorAlertStatus,
   OperatorRole,
   OperatorSubjectType,
+  PartnerBrandAssetRole,
   PartnerAccountStatus,
   PartnerApiKeyStatus,
   PartnerHostedSessionStatus,
@@ -34,6 +37,7 @@ import type {
   PartnerWebhookDeliveryStatus,
   PartnerWebhookEventType,
   PartnerWebhookSubscriptionStatus,
+  InvoiceStatus,
   MilestoneSettlementRequestKind,
   MilestoneSettlementRequestSource,
   ApprovalSubjectType,
@@ -47,6 +51,8 @@ import type {
   SessionStatus,
   SettlementCurrency,
   StatementSnapshotKind,
+  TenantDomainStatus,
+  TenantDomainSurface,
   TemplateSummary,
   TypedSignatureScheme,
   WalletAddress
@@ -370,6 +376,128 @@ export interface PartnerWebhookDeliveryAttemptRecord {
   nextRetryAt: IsoTimestamp | null;
   partnerWebhookDeliveryId: EntityId;
   responseStatusCode: number | null;
+}
+
+export interface PartnerBrandAssetRecord {
+  byteSize: number;
+  createdAt: IsoTimestamp;
+  id: EntityId;
+  mediaType: string;
+  originalFilename: string;
+  partnerAccountId: EntityId;
+  role: PartnerBrandAssetRole;
+  sha256Hex: string;
+  storageKey: string;
+  updatedAt: IsoTimestamp;
+}
+
+export interface PartnerTenantSettingsRecord {
+  accentColorHex: string;
+  backgroundColorHex: string;
+  createdAt: IsoTimestamp;
+  displayName: string;
+  faviconAssetId: EntityId | null;
+  legalName: string;
+  logoAssetId: EntityId | null;
+  partnerAccountId: EntityId;
+  primaryColorHex: string;
+  privacyPolicyUrl: string;
+  supportEmail: string;
+  supportUrl: string;
+  termsOfServiceUrl: string;
+  textColorHex: string;
+  updatedAt: IsoTimestamp;
+}
+
+export interface TenantDomainRecord {
+  createdAt: IsoTimestamp;
+  hostname: string;
+  id: EntityId;
+  partnerAccountId: EntityId;
+  status: TenantDomainStatus;
+  surface: TenantDomainSurface;
+  updatedAt: IsoTimestamp;
+  verifiedAt: IsoTimestamp | null;
+}
+
+export interface BillingPlanRecord {
+  baseMonthlyFeeMinor: string;
+  code: string;
+  createdAt: IsoTimestamp;
+  currency: "USD";
+  displayName: string;
+  id: EntityId;
+  invoiceDueDays: number;
+  status: BillingPlanStatus;
+  updatedAt: IsoTimestamp;
+}
+
+export interface BillingFeeScheduleRecord {
+  billingPlanId: EntityId;
+  createdAt: IsoTimestamp;
+  effectiveFrom: IsoTimestamp;
+  id: EntityId;
+  updatedAt: IsoTimestamp;
+}
+
+export interface BillingFeeScheduleTierRecord {
+  billingFeeScheduleId: EntityId;
+  id: EntityId;
+  includedUnits: string;
+  metric: BillingUsageMetric;
+  position: number;
+  startsAtUnit: string;
+  unitPriceMinor: string;
+  upToUnit: string | null;
+}
+
+export interface TenantBillingPlanAssignmentRecord {
+  billingFeeScheduleId: EntityId;
+  billingPlanId: EntityId;
+  createdAt: IsoTimestamp;
+  effectiveFrom: IsoTimestamp;
+  effectiveTo: IsoTimestamp | null;
+  id: EntityId;
+  partnerAccountId: EntityId;
+}
+
+export interface BillingUsageMeterEventRecord {
+  externalKey: string | null;
+  id: EntityId;
+  metadata: JsonObject | null;
+  metric: BillingUsageMetric;
+  occurredAt: IsoTimestamp;
+  organizationId: EntityId | null;
+  partnerAccountId: EntityId;
+  partnerOrganizationLinkId: EntityId | null;
+  quantity: string;
+}
+
+export interface TenantInvoiceRecord {
+  billingFeeScheduleId: EntityId;
+  billingPlanId: EntityId;
+  createdAt: IsoTimestamp;
+  currency: "USD";
+  dueAt: IsoTimestamp;
+  id: EntityId;
+  partnerAccountId: EntityId;
+  periodEnd: IsoTimestamp;
+  periodStart: IsoTimestamp;
+  status: InvoiceStatus;
+  subtotalMinor: string;
+  totalMinor: string;
+  updatedAt: IsoTimestamp;
+}
+
+export interface TenantInvoiceLineItemRecord {
+  amountMinor: string;
+  createdAt: IsoTimestamp;
+  description: string;
+  id: EntityId;
+  invoiceId: EntityId;
+  metric: BillingUsageMetric | null;
+  quantity: string;
+  unitPriceMinor: string;
 }
 
 export interface CounterpartyRecord {
