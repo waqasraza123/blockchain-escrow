@@ -11,7 +11,7 @@ test("operator can read dashboard, partners, and billing surfaces", async ({
 
   await operatorPage.goto(`${app.adminBaseUrl}/partners`);
   await expect(
-    operatorPage.getByRole("heading", { name: "Partner accounts" })
+    operatorPage.getByRole("heading", { level: 1, name: "Partner accounts" })
   ).toBeVisible();
   await expect(operatorPage.getByText("Tenant A Partner")).toBeVisible();
 

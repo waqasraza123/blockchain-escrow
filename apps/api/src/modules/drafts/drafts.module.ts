@@ -18,6 +18,7 @@ import {
       provide: FUNDING_RECONCILIATION_CONFIGURATION,
       useFactory: loadFundingReconciliationConfiguration
     }
-  ]
+  ],
+  exports: [DraftsService]
 })
 export class DraftsModule {}

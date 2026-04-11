@@ -117,7 +117,20 @@ function parseHostedSessionToken(
   token: string,
   secret: string
 ): { expiresAt: string; sessionId: string } {
-  const [sessionId, expiresAt, signature] = token.split(".");
+  const firstSeparatorIndex = token.indexOf(".");
+  const lastSeparatorIndex = token.lastIndexOf(".");
+
+  if (
+    firstSeparatorIndex <= 0 ||
+    lastSeparatorIndex <= firstSeparatorIndex + 1 ||
+    lastSeparatorIndex >= token.length - 1
+  ) {
+    throw new UnauthorizedException("hosted session token is invalid");
+  }
+
+  const sessionId = token.slice(0, firstSeparatorIndex);
+  const expiresAt = token.slice(firstSeparatorIndex + 1, lastSeparatorIndex);
+  const signature = token.slice(lastSeparatorIndex + 1);
 
   if (!sessionId || !expiresAt || !signature) {
     throw new UnauthorizedException("hosted session token is invalid");

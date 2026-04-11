@@ -41,7 +41,7 @@ export default defineConfig({
   },
   webServer: [
     {
-      command: "node scripts/with-local-env.mjs node apps/api/dist/main.js",
+      command: "node scripts/with-local-env.mjs pnpm --filter @blockchain-escrow/api start",
       cwd: repoRoot,
       env: {
         ...process.env,
@@ -74,7 +74,7 @@ export default defineConfig({
       url: adminBaseUrl
     }
   ],
-  ...(isCi ? { workers: 2 } : {}),
+  workers: 1,
   projects: [
     {
       name: "chromium",

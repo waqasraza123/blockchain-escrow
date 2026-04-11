@@ -17,14 +17,24 @@ test("customer can reach the dashboard, draft detail, and version detail", async
     customerPage.getByRole("link", { name: "Q2 Implementation Escrow" })
   ).toBeVisible();
 
-  await customerPage.getByRole("link", { name: "Q2 Implementation Escrow" }).click();
+  await Promise.all([
+    customerPage.waitForURL(
+      new RegExp(`/orgs/${seedData.customer.organizationId}/drafts/${seedData.customer.draftDealId}$`)
+    ),
+    customerPage.getByRole("link", { name: "Q2 Implementation Escrow" }).click()
+  ]);
   await expect(
     customerPage.getByRole("heading", { name: "Q2 Implementation Escrow" })
   ).toBeVisible();
 
-  await customerPage
-    .getByRole("link", { name: "Open version" })
-    .click();
+  await Promise.all([
+    customerPage.waitForURL(
+      new RegExp(
+        `/orgs/${seedData.customer.organizationId}/drafts/${seedData.customer.draftDealId}/versions/${seedData.customer.dealVersionId}$`
+      )
+    ),
+    customerPage.getByRole("link", { name: "Open version" }).click()
+  ]);
 
   await expect(
     customerPage.getByRole("heading", { name: "Q2 Implementation Escrow v1" })

@@ -29,5 +29,7 @@ test("customer can update wallet defaults and create a gas policy", async ({
   await customerPage.getByLabel("Sponsor window minutes").fill("30");
   await customerPage.getByRole("button", { name: "Create gas policy" }).click();
 
-  await expect(customerPage.getByText("Default Sponsor Budget")).toBeVisible();
+  await expect(
+    customerPage.getByRole("table").getByText("Default Sponsor Budget")
+  ).toBeVisible();
 });

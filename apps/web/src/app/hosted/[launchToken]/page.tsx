@@ -2,7 +2,6 @@ import { getHostedLaunchSession, getTenantPublicContext } from "../../../lib/api
 import { getI18n } from "../../../lib/i18n/server";
 import { LocaleTopbar } from "../../../components/locale-topbar";
 import { Card, WorkspaceHeader } from "../../(workspace)/ui";
-import { exchangeHostedSessionAction } from "../actions";
 
 type HostedLaunchPageProps = {
   params: Promise<{ launchToken: string }>;
@@ -50,7 +49,7 @@ export default async function HostedLaunchPage(props: HostedLaunchPageProps) {
             : messages.hosted.launchMissing}
         </p>
         {session.hostedSession ? (
-          <form action={exchangeHostedSessionAction} className="actions-row">
+          <form action="/api/hosted/exchange" className="actions-row" method="POST">
             <input name="launchToken" type="hidden" value={params.launchToken} />
             <button className="button" type="submit">
               {messages.hosted.openHostedSession}

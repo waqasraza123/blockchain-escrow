@@ -14,7 +14,16 @@ test("tenant entrypoint renders and persists arabic rtl locale", async ({
     page.getByRole("link", { name: "Continue to sign in" })
   ).toBeVisible();
 
-  await page.getByRole("button", { name: "العربية" }).click();
+  await Promise.all([
+    page.waitForResponse((response) => {
+      return (
+        response.url().includes("/api/preferences/locale") &&
+        response.request().method() === "POST"
+      );
+    }),
+    page.getByRole("button", { name: "العربية" }).click()
+  ]);
+  await page.waitForLoadState("domcontentloaded");
 
   await expect(page.locator("html")).toHaveAttribute("dir", "rtl");
   await expect(page.locator("html")).toHaveAttribute("lang", "ar");

@@ -28,13 +28,15 @@ type TestFixtures = {
 
 export const test = base.extend<TestFixtures, WorkerFixtures>({
   app: [
-    async (_fixtures, use) => {
+    async ({ browserName: _browserName }, use) => {
+      void _browserName;
       await use(loadAppConfig());
     },
     { scope: "worker" }
   ],
   seedData: [
-    async (_fixtures, use) => {
+    async ({ browserName: _browserName }, use) => {
+      void _browserName;
       await use(readSeedMetadata());
     },
     { scope: "worker" }

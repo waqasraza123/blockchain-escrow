@@ -17,6 +17,7 @@ test("platform sign-in works with the injected wallet shim", async ({
   await expect(page).toHaveURL(
     new RegExp(`/orgs/${seedData.customer.organizationId}$`)
   );
+  await page.waitForLoadState("domcontentloaded");
   await expect(
     page.getByRole("heading", { name: "Organization dashboard" })
   ).toBeVisible();
