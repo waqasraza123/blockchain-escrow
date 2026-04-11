@@ -9,6 +9,7 @@ const adminBaseUrl = process.env.E2E_ADMIN_BASE_URL ?? "http://admin.lvh.me:3301
 const apiPort = process.env.API_PORT ?? "4400";
 const platformPort = new URL(platformBaseUrl).port || "3300";
 const adminPort = new URL(adminBaseUrl).port || "3301";
+const reuseExistingServer = process.env.E2E_REUSE_EXISTING_SERVER === "1";
 
 export default defineConfig({
   fullyParallel: false,
@@ -47,7 +48,7 @@ export default defineConfig({
         ...process.env,
         LOCAL_ENV_FILES: ".env.e2e"
       },
-      reuseExistingServer: !isCi,
+      reuseExistingServer,
       timeout: 120_000,
       url: `http://127.0.0.1:${apiPort}/health/ready`
     },
@@ -58,7 +59,7 @@ export default defineConfig({
         ...process.env,
         LOCAL_ENV_FILES: ".env.e2e"
       },
-      reuseExistingServer: !isCi,
+      reuseExistingServer,
       timeout: 180_000,
       url: platformBaseUrl
     },
@@ -69,7 +70,7 @@ export default defineConfig({
         ...process.env,
         LOCAL_ENV_FILES: ".env.e2e"
       },
-      reuseExistingServer: !isCi,
+      reuseExistingServer,
       timeout: 180_000,
       url: adminBaseUrl
     }

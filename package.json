@@ -32,12 +32,12 @@
     "release4:bootstrap:local": "node scripts/release4-bootstrap-local.mjs",
     "release4:reset:local": "node scripts/with-local-env.mjs pnpm --filter @blockchain-escrow/indexer exec tsx src/reset-local.ts",
     "release4:verify:local": "node scripts/release4-verify-local.mjs",
-    "e2e:seed": "LOCAL_ENV_FILES=.env.e2e node scripts/with-local-env.mjs pnpm --filter @blockchain-escrow/e2e run seed",
-    "e2e:reset": "LOCAL_ENV_FILES=.env.e2e node scripts/with-local-env.mjs pnpm --filter @blockchain-escrow/e2e run reset",
-    "e2e:smoke": "LOCAL_ENV_FILES=.env.e2e node scripts/with-local-env.mjs pnpm --filter @blockchain-escrow/e2e run smoke",
-    "e2e:regression": "LOCAL_ENV_FILES=.env.e2e node scripts/with-local-env.mjs pnpm --filter @blockchain-escrow/e2e run regression",
-    "e2e:visual": "LOCAL_ENV_FILES=.env.e2e node scripts/with-local-env.mjs pnpm --filter @blockchain-escrow/e2e run visual",
-    "e2e:ui": "LOCAL_ENV_FILES=.env.e2e node scripts/with-local-env.mjs pnpm --filter @blockchain-escrow/e2e run ui",
+    "e2e:seed": "node scripts/run-e2e.mjs seed",
+    "e2e:reset": "node scripts/run-e2e.mjs reset",
+    "e2e:smoke": "node scripts/run-e2e.mjs smoke",
+    "e2e:regression": "node scripts/run-e2e.mjs regression",
+    "e2e:visual": "node scripts/run-e2e.mjs visual",
+    "e2e:ui": "node scripts/run-e2e.mjs ui",
     "e2e:install": "pnpm --filter @blockchain-escrow/e2e run install:browsers"
   },
   "devDependencies": {

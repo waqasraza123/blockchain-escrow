@@ -10,11 +10,17 @@ test("hosted launch exchanges into a scoped review workspace", async ({
   await expect(
     page.getByRole("heading", { name: seedData.tenant.displayName })
   ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Open hosted session" })
+  ).toBeVisible();
   await Promise.all([
     page.waitForURL(new RegExp(`/hosted/${seedData.hosted.launchToken}/workspace$`), {
-      timeout: 15_000
+      timeout: 15_000,
+      waitUntil: "domcontentloaded"
     }),
-    page.getByRole("button", { name: "Open hosted session" }).click()
+    page
+      .getByRole("button", { name: "Open hosted session" })
+      .click({ noWaitAfter: true })
   ]);
 
   await expect(page.getByText("Draft context")).toBeVisible();
