@@ -7,6 +7,17 @@ const __dirname = path.dirname(__filename);
 
 export const repoRoot = path.resolve(__dirname, "..");
 
+function parseEnvFileList(value) {
+  if (!value || typeof value !== "string") {
+    return [];
+  }
+
+  return value
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.length > 0);
+}
+
 function decodeDoubleQuotedValue(value) {
   return value.replace(/\\n/g, "\n").replace(/\\r/g, "\r").replace(/\\t/g, "\t").replace(/\\"/g, "\"").replace(/\\\\/g, "\\");
 }
@@ -98,9 +109,17 @@ function buildDerivedDatabaseUrl(env) {
 
 export function loadLocalEnvironment(baseEnv = process.env) {
   const exampleEnv = parseEnvFile(path.join(repoRoot, ".env.example"));
+  const extraEnvFiles = parseEnvFileList(baseEnv.LOCAL_ENV_FILES);
   const projectEnv = {
     ...parseEnvFile(path.join(repoRoot, ".env")),
-    ...parseEnvFile(path.join(repoRoot, ".env.local"))
+    ...parseEnvFile(path.join(repoRoot, ".env.local")),
+    ...extraEnvFiles.reduce(
+      (accumulator, relativePath) => ({
+        ...accumulator,
+        ...parseEnvFile(path.resolve(repoRoot, relativePath))
+      }),
+      {}
+    )
   };
 
   const environment = {

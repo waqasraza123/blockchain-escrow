@@ -243,7 +243,7 @@ test("milestone settlement execution reconciler persists confirmed terminal reco
   );
   assert.equal(
     release1.auditLogs[0]?.action,
-    "DEAL_MILESTONE_SETTLEMENT_EXECUTION_TRANSACTION_RECONCILIATION_UPDATED"
+    "DEAL_MILESTONE_SETTLEMENT_EXEC_TX_RECONCILED"
   );
 });
 
@@ -275,7 +275,7 @@ test("milestone settlement execution reconciler persists failed terminal reconci
   assert.equal(settlementExecutionTransaction.reconciledAgreementAddress, null);
   assert.equal(
     release1.auditLogs[0]?.action,
-    "DEAL_MILESTONE_SETTLEMENT_EXECUTION_TRANSACTION_RECONCILIATION_UPDATED"
+    "DEAL_MILESTONE_SETTLEMENT_EXEC_TX_RECONCILED"
   );
 });
 

@@ -170,7 +170,7 @@ export class MilestoneSettlementExecutionReconciler {
 
         await this.release1Repositories.auditLogs.append({
           action:
-            "DEAL_MILESTONE_SETTLEMENT_EXECUTION_TRANSACTION_RECONCILIATION_UPDATED",
+            "DEAL_MILESTONE_SETTLEMENT_EXEC_TX_RECONCILED",
           actorUserId: null,
           entityId: updatedTransaction.id,
           entityType: "DEAL_MILESTONE_SETTLEMENT_EXECUTION_TRANSACTION",

@@ -41,3 +41,45 @@ jobs:
 
       - name: Build
         run: pnpm build
+
+  browser-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.6.2
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile=false
+
+      - name: Install Playwright Chromium
+        run: pnpm e2e:install
+
+      - name: Boot local infra
+        run: pnpm boot:infra
+
+      - name: Run browser smoke
+        run: pnpm e2e:smoke
+
+      - name: Upload browser artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-smoke-artifacts
+          path: |
+            apps/e2e/playwright-report
+            apps/e2e/test-results
+
+      - name: Stop local infra
+        if: always()
+        run: pnpm stop:infra

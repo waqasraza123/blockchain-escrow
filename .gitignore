@@ -6,6 +6,7 @@ node_modules
 *.tsbuildinfo
 dist
 coverage
+.playwright
 .env
 .env.local
 .env.*.local
@@ -18,3 +19,7 @@ packages/contracts/out
 packages/contracts/broadcast
 packages/contracts/lib
 packages/contracts/scripts/.tmp
+apps/e2e/.auth
+apps/e2e/.tmp
+apps/e2e/playwright-report
+apps/e2e/test-results
