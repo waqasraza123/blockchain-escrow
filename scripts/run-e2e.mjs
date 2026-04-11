@@ -184,6 +184,7 @@ function buildLocalEnvFiles(value) {
 function buildEnvironment(command) {
   const baseEnv = {
     CI: process.env.CI,
+    E2E_SUITE: command === "ui" ? "smoke" : command,
     FORCE_COLOR: process.env.FORCE_COLOR,
     HOME: process.env.HOME,
     LOCAL_ENV_FILES: buildLocalEnvFiles(process.env.LOCAL_ENV_FILES),

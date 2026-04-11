@@ -3,6 +3,7 @@ import { defineConfig, devices } from "@playwright/test";
 import { repoRoot } from "./support/paths";
 
 const isCi = Boolean(process.env.CI);
+const suite = process.env.E2E_SUITE ?? "smoke";
 const platformBaseUrl =
   process.env.E2E_PLATFORM_BASE_URL ?? "http://platform.lvh.me:3300";
 const adminBaseUrl = process.env.E2E_ADMIN_BASE_URL ?? "http://admin.lvh.me:3301";
@@ -10,6 +11,12 @@ const apiPort = process.env.API_PORT ?? "4400";
 const platformPort = new URL(platformBaseUrl).port || "3300";
 const adminPort = new URL(adminBaseUrl).port || "3301";
 const reuseExistingServer = process.env.E2E_REUSE_EXISTING_SERVER === "1";
+const testIgnore =
+  suite === "regression"
+    ? ["**/smoke/**", "**/visual/**"]
+    : suite === "visual"
+      ? ["**/smoke/**", "**/regression/**"]
+      : ["**/regression/**", "**/visual/**"];
 
 export default defineConfig({
   fullyParallel: false,
@@ -30,12 +37,15 @@ export default defineConfig({
       ],
   retries: isCi ? 1 : 0,
   testDir: "./tests",
-  testIgnore: ["**/regression/**", "**/visual/**"],
+  testIgnore,
   timeout: 60_000,
   use: {
     actionTimeout: 10_000,
+    colorScheme: "light",
     baseURL: platformBaseUrl,
+    locale: "en-US",
     screenshot: "only-on-failure",
+    timezoneId: "UTC",
     trace: "on-first-retry",
     video: "on-first-retry",
     viewport: { width: 1440, height: 960 }
