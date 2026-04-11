@@ -36,6 +36,7 @@
     "e2e:reset": "node scripts/run-e2e.mjs reset",
     "e2e:smoke": "node scripts/run-e2e.mjs smoke",
     "e2e:regression": "node scripts/run-e2e.mjs regression",
+    "e2e:deploy-smoke": "node scripts/run-e2e.mjs deploy-smoke",
     "e2e:visual": "node scripts/run-e2e.mjs visual",
     "e2e:ui": "node scripts/run-e2e.mjs ui",
     "e2e:install": "pnpm --filter @blockchain-escrow/e2e run install:browsers"

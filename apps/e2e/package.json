@@ -10,6 +10,7 @@
     "reset": "tsx seed/cli.ts reset",
     "smoke": "playwright test tests/smoke",
     "regression": "playwright test tests/regression",
+    "deploy-smoke": "playwright test tests/deploy",
     "visual": "playwright test tests/visual",
     "ui": "playwright test --ui"
   },

@@ -4,7 +4,15 @@ import { execFileSync, spawn } from "node:child_process";
 
 import { loadLocalEnvironment, repoRoot } from "./local-env.mjs";
 
-const allowedCommands = new Set(["smoke", "regression", "visual", "ui", "seed", "reset"]);
+const allowedCommands = new Set([
+  "smoke",
+  "regression",
+  "deploy-smoke",
+  "visual",
+  "ui",
+  "seed",
+  "reset"
+]);
 
 function parsePort(value, fallback) {
   const candidate = value?.trim();
@@ -215,7 +223,7 @@ async function main() {
     parsePort(env.API_PORT, 4400)
   ];
 
-  if (command !== "ui") {
+  if (command !== "ui" && command !== "deploy-smoke") {
     clearReservedPorts(reservedPorts);
   }
 

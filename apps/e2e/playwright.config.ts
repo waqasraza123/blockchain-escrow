@@ -11,16 +11,18 @@ const apiPort = process.env.API_PORT ?? "4400";
 const platformPort = new URL(platformBaseUrl).port || "3300";
 const adminPort = new URL(adminBaseUrl).port || "3301";
 const reuseExistingServer = process.env.E2E_REUSE_EXISTING_SERVER === "1";
+const isDeploySmokeSuite = suite === "deploy-smoke";
 const testIgnore =
   suite === "regression"
     ? ["**/smoke/**", "**/visual/**"]
+    : suite === "deploy-smoke"
+      ? ["**/smoke/**", "**/regression/**", "**/visual/**"]
     : suite === "visual"
       ? ["**/smoke/**", "**/regression/**"]
       : ["**/regression/**", "**/visual/**"];
 
 export default defineConfig({
   fullyParallel: false,
-  globalSetup: "./support/global-setup.ts",
   outputDir: "test-results/results",
   reporter: isCi
     ? [
@@ -50,42 +52,47 @@ export default defineConfig({
     video: "on-first-retry",
     viewport: { width: 1440, height: 960 }
   },
-  webServer: [
-    {
-      command: "node scripts/with-local-env.mjs pnpm --filter @blockchain-escrow/api start",
-      cwd: repoRoot,
-      env: {
-        ...process.env,
-        LOCAL_ENV_FILES: ".env.e2e"
-      },
-      reuseExistingServer,
-      timeout: 120_000,
-      url: `http://127.0.0.1:${apiPort}/health/ready`
-    },
-    {
-      command: `node scripts/with-local-env.mjs pnpm --filter @blockchain-escrow/web exec next dev --port ${platformPort}`,
-      cwd: repoRoot,
-      env: {
-        ...process.env,
-        LOCAL_ENV_FILES: ".env.e2e"
-      },
-      reuseExistingServer,
-      timeout: 180_000,
-      url: platformBaseUrl
-    },
-    {
-      command: `node scripts/with-local-env.mjs pnpm --filter @blockchain-escrow/admin exec next dev --port ${adminPort}`,
-      cwd: repoRoot,
-      env: {
-        ...process.env,
-        LOCAL_ENV_FILES: ".env.e2e"
-      },
-      reuseExistingServer,
-      timeout: 180_000,
-      url: adminBaseUrl
-    }
-  ],
   workers: 1,
+  ...(isDeploySmokeSuite
+    ? {}
+    : {
+        globalSetup: "./support/global-setup.ts",
+        webServer: [
+          {
+            command: "node scripts/with-local-env.mjs pnpm --filter @blockchain-escrow/api start",
+            cwd: repoRoot,
+            env: {
+              ...process.env,
+              LOCAL_ENV_FILES: ".env.e2e"
+            },
+            reuseExistingServer,
+            timeout: 120_000,
+            url: `http://127.0.0.1:${apiPort}/health/ready`
+          },
+          {
+            command: `node scripts/with-local-env.mjs pnpm --filter @blockchain-escrow/web exec next dev --port ${platformPort}`,
+            cwd: repoRoot,
+            env: {
+              ...process.env,
+              LOCAL_ENV_FILES: ".env.e2e"
+            },
+            reuseExistingServer,
+            timeout: 180_000,
+            url: platformBaseUrl
+          },
+          {
+            command: `node scripts/with-local-env.mjs pnpm --filter @blockchain-escrow/admin exec next dev --port ${adminPort}`,
+            cwd: repoRoot,
+            env: {
+              ...process.env,
+              LOCAL_ENV_FILES: ".env.e2e"
+            },
+            reuseExistingServer,
+            timeout: 180_000,
+            url: adminBaseUrl
+          }
+        ]
+      }),
   projects: [
     {
       name: "chromium",

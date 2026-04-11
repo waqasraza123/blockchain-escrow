@@ -1,0 +1,105 @@
+name: browser-deploy-smoke
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment_name:
+        description: Environment label for artifacts and summary
+        required: true
+        type: string
+      platform_base_url:
+        description: Platform workspace base url
+        required: true
+        type: string
+      tenant_base_url:
+        description: Tenant entrypoint base url
+        required: true
+        type: string
+      admin_base_url:
+        description: Admin console base url
+        required: true
+        type: string
+      tenant_display_name:
+        description: Expected tenant display name on the entrypoint
+        required: false
+        type: string
+      hosted_launch_url:
+        description: Optional hosted launch canary url
+        required: false
+        type: string
+      hosted_display_name:
+        description: Optional expected hosted launch heading
+        required: false
+        type: string
+  workflow_call:
+    inputs:
+      environment_name:
+        required: true
+        type: string
+      platform_base_url:
+        required: true
+        type: string
+      tenant_base_url:
+        required: true
+        type: string
+      admin_base_url:
+        required: true
+        type: string
+      tenant_display_name:
+        required: false
+        type: string
+      hosted_launch_url:
+        required: false
+        type: string
+      hosted_display_name:
+        required: false
+        type: string
+
+concurrency:
+  group: browser-deploy-smoke-${{ inputs.environment_name }}
+  cancel-in-progress: true
+
+jobs:
+  browser-deploy-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      E2E_ADMIN_BASE_URL: ${{ inputs.admin_base_url }}
+      E2E_DEPLOY_HOSTED_DISPLAY_NAME: ${{ inputs.hosted_display_name }}
+      E2E_DEPLOY_HOSTED_LAUNCH_URL: ${{ inputs.hosted_launch_url }}
+      E2E_DEPLOY_TENANT_DISPLAY_NAME: ${{ inputs.tenant_display_name }}
+      E2E_PLATFORM_BASE_URL: ${{ inputs.platform_base_url }}
+      E2E_TENANT_BASE_URL: ${{ inputs.tenant_base_url }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.6.2
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile=false
+
+      - name: Install Playwright Chromium
+        run: pnpm e2e:install
+
+      - name: Run deploy smoke
+        run: pnpm e2e:deploy-smoke
+
+      - name: Upload deploy smoke artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-deploy-smoke-${{ inputs.environment_name }}
+          path: |
+            apps/e2e/playwright-report
+            apps/e2e/test-results
+          retention-days: 14
