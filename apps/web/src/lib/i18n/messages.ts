@@ -335,6 +335,10 @@ export const enMessages = {
     approvalNoteTemplate: "Approval note template",
     connectedWalletMismatch:
       "The connected wallet does not match the authenticated session wallet.",
+    confirmedFundingReconciliationPending:
+      "A funding transaction is already confirmed. Wait for agreement reconciliation before submitting another one.",
+    confirmedSettlementReconciliationPending:
+      "A settlement transaction is already confirmed. Wait for settlement reconciliation before submitting another one.",
     createPolicy: "Create gas policy",
     defaultGasPolicy: "Default gas policy",
     defaultGasPolicyId: "Default gas policy id",
@@ -361,6 +365,8 @@ export const enMessages = {
     policyLimits: "Limits",
     policyName: "Policy name",
     primaryWallet: "Primary wallet",
+    pendingExecutionReplacementWarning:
+      "A tracked transaction is still pending. Submit a replacement only if you intend to replace it.",
     quickApprove: "Quick approve",
     quickReject: "Quick reject",
     reason: "Reason",
@@ -369,6 +375,14 @@ export const enMessages = {
     requestRelease: "Request release",
     requestSponsoredFunding: "Request sponsored funding",
     requestSponsoredSettlement: "Request sponsored settlement",
+    replaceFunding: "Submit replacement funding",
+    replaceRefund: "Submit replacement refund",
+    replaceRelease: "Submit replacement release",
+    retryExecutionAvailable:
+      "The latest tracked transaction is no longer actionable. You can submit a new transaction.",
+    retryFunding: "Retry funding",
+    retryRefund: "Retry refund",
+    retryRelease: "Retry release",
     retryTracking: "Retry tracking",
     reviewNoteTemplate: "Review note template",
     reviewPending: "Review pending",
@@ -799,6 +813,10 @@ export const arMessages = {
     approvalNoteTemplate: "قالب ملاحظة الموافقة",
     connectedWalletMismatch:
       "المحفظة المتصلة لا تطابق محفظة جلسة المستخدم الحالية.",
+    confirmedFundingReconciliationPending:
+      "تم تأكيد معاملة التمويل بالفعل. انتظر تسوية الاتفاقية قبل إرسال معاملة أخرى.",
+    confirmedSettlementReconciliationPending:
+      "تم تأكيد معاملة التسوية بالفعل. انتظر تسوية الدفعة قبل إرسال معاملة أخرى.",
     createPolicy: "إنشاء سياسة غاز",
     defaultGasPolicy: "سياسة الغاز الافتراضية",
     defaultGasPolicyId: "معرف سياسة الغاز الافتراضية",
@@ -825,6 +843,8 @@ export const arMessages = {
     policyLimits: "الحدود",
     policyName: "اسم السياسة",
     primaryWallet: "المحفظة الأساسية",
+    pendingExecutionReplacementWarning:
+      "لا تزال هناك معاملة متتبعة قيد الانتظار. أرسل معاملة بديلة فقط إذا كنت تنوي استبدالها.",
     quickApprove: "اعتماد سريع",
     quickReject: "رفض سريع",
     reason: "السبب",
@@ -833,6 +853,14 @@ export const arMessages = {
     requestRelease: "طلب إفراج",
     requestSponsoredFunding: "طلب تمويل مدعوم",
     requestSponsoredSettlement: "طلب تسوية مدعومة",
+    replaceFunding: "إرسال تمويل بديل",
+    replaceRefund: "إرسال استرداد بديل",
+    replaceRelease: "إرسال إفراج بديل",
+    retryExecutionAvailable:
+      "لم تعد آخر معاملة متتبعة قابلة للتنفيذ. يمكنك إرسال معاملة جديدة.",
+    retryFunding: "إعادة تمويل",
+    retryRefund: "إعادة الاسترداد",
+    retryRelease: "إعادة الإفراج",
     retryTracking: "إعادة محاولة التتبع",
     reviewNoteTemplate: "قالب ملاحظة المراجعة",
     reviewPending: "المراجعة معلقة",

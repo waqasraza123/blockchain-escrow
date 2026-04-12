@@ -23,6 +23,11 @@ export interface SeedResult {
     operatorAccountId: string;
     walletId: string;
   };
+  settlementPending: {
+    dealMilestoneSettlementRequestId: string;
+    dealVersionId: string;
+    draftDealId: string;
+  };
   settlementReady: {
     dealMilestoneSettlementRequestId: string;
     dealVersionId: string;
@@ -60,6 +65,19 @@ export const seedIds = {
   partnerAccountId: "e2e-partner-account",
   partnerOrganizationLinkId: "e2e-partner-organization-link",
   settlementAgreementProjectionId: "e2e-settlement-agreement-projection",
+  settlementPendingAgreementProjectionId: "e2e-settlement-pending-agreement-projection",
+  settlementPendingExecutionTransactionId: "e2e-settlement-pending-execution-transaction",
+  settlementPendingReviewId: "e2e-settlement-pending-review",
+  settlementPendingSettlementPreparationId: "e2e-settlement-pending-preparation",
+  settlementPendingSettlementRequestId: "e2e-settlement-pending-request",
+  settlementPendingSubmissionId: "e2e-settlement-pending-submission",
+  settlementPendingVersionId: "e2e-settlement-pending-deal-version",
+  settlementPendingVersionMilestoneId: "e2e-settlement-pending-deal-version-milestone",
+  settlementPendingVersionPartyBuyerId: "e2e-settlement-pending-deal-version-party-buyer",
+  settlementPendingVersionPartySellerId: "e2e-settlement-pending-deal-version-party-seller",
+  settlementPendingDraftBuyerPartyId: "e2e-settlement-pending-draft-deal-party-buyer",
+  settlementPendingDraftDealId: "e2e-settlement-pending-draft-deal",
+  settlementPendingDraftSellerPartyId: "e2e-settlement-pending-draft-deal-party-seller",
   settlementDealMilestoneReviewId: "e2e-settlement-review",
   settlementDealMilestoneSettlementPreparationId: "e2e-settlement-preparation",
   settlementDealMilestoneSettlementRequestId: "e2e-settlement-request",
@@ -484,6 +502,245 @@ export async function seedScenarios(prisma: PrismaClient): Promise<SeedResult> {
     }
   });
 
+  await prisma.draftDeal.create({
+    data: {
+      createdAt,
+      createdByUserId: seedIds.customerUserId,
+      id: seedIds.settlementPendingDraftDealId,
+      organizationId: seedIds.organizationId,
+      settlementCurrency: "USDC",
+      state: "ACTIVE",
+      summary: "Settlement-pending seeded draft",
+      title: "Settlement Pending Escrow",
+      updatedAt
+    }
+  });
+
+  await prisma.draftDealParty.createMany({
+    data: [
+      {
+        createdAt,
+        draftDealId: seedIds.settlementPendingDraftDealId,
+        id: seedIds.settlementPendingDraftBuyerPartyId,
+        organizationId: seedIds.organizationId,
+        role: "BUYER",
+        subjectType: "ORGANIZATION",
+        updatedAt
+      },
+      {
+        counterpartyId: seedIds.counterpartyId,
+        createdAt,
+        draftDealId: seedIds.settlementPendingDraftDealId,
+        id: seedIds.settlementPendingDraftSellerPartyId,
+        role: "SELLER",
+        subjectType: "COUNTERPARTY",
+        updatedAt,
+        walletAddress: "0x3333333333333333333333333333333333333333"
+      }
+    ]
+  });
+
+  await prisma.dealVersion.create({
+    data: {
+      bodyMarkdown: "Settlement-pending seeded e2e deal body.",
+      createdAt,
+      createdByUserId: seedIds.customerUserId,
+      draftDealId: seedIds.settlementPendingDraftDealId,
+      id: seedIds.settlementPendingVersionId,
+      organizationId: seedIds.organizationId,
+      settlementCurrency: "USDC",
+      summary: "Settlement-pending seeded e2e version",
+      title: "Settlement Pending Escrow v1",
+      versionNumber: 1
+    }
+  });
+
+  await prisma.dealVersionParty.createMany({
+    data: [
+      {
+        createdAt,
+        dealVersionId: seedIds.settlementPendingVersionId,
+        displayName: "E2E Customer Org",
+        id: seedIds.settlementPendingVersionPartyBuyerId,
+        organizationId: seedIds.organizationId,
+        role: "BUYER",
+        subjectType: "ORGANIZATION"
+      },
+      {
+        counterpartyId: seedIds.counterpartyId,
+        createdAt,
+        dealVersionId: seedIds.settlementPendingVersionId,
+        displayName: "Counterparty LLC",
+        id: seedIds.settlementPendingVersionPartySellerId,
+        role: "SELLER",
+        subjectType: "COUNTERPARTY"
+      }
+    ]
+  });
+
+  await prisma.dealVersionMilestone.create({
+    data: {
+      amountMinor: "1750000",
+      createdAt,
+      dealVersionId: seedIds.settlementPendingVersionId,
+      description: "Pending settlement execution milestone",
+      dueAt: plusHours(createdAt, 108),
+      id: seedIds.settlementPendingVersionMilestoneId,
+      position: 1,
+      title: "Pending settlement milestone"
+    }
+  });
+
+  await prisma.dealMilestoneSubmission.create({
+    data: {
+      dealVersionId: seedIds.settlementPendingVersionId,
+      dealVersionMilestoneId: seedIds.settlementPendingVersionMilestoneId,
+      draftDealId: seedIds.settlementPendingDraftDealId,
+      id: seedIds.settlementPendingSubmissionId,
+      organizationId: seedIds.organizationId,
+      reviewDeadlineAt: plusHours(createdAt, 132),
+      scheme: null,
+      signature: null,
+      statementMarkdown: "Pending settlement milestone delivered.",
+      submissionNumber: 1,
+      submittedAt: plusHours(createdAt, 1),
+      submittedByCounterpartyId: seedIds.counterpartyId,
+      submittedByPartyRole: "SELLER",
+      submittedByPartySubjectType: "COUNTERPARTY",
+      submittedByUserId: null,
+      typedData: Prisma.JsonNull
+    }
+  });
+
+  await prisma.dealMilestoneReview.create({
+    data: {
+      decision: "APPROVED",
+      dealMilestoneSubmissionId: seedIds.settlementPendingSubmissionId,
+      dealVersionId: seedIds.settlementPendingVersionId,
+      dealVersionMilestoneId: seedIds.settlementPendingVersionMilestoneId,
+      draftDealId: seedIds.settlementPendingDraftDealId,
+      id: seedIds.settlementPendingReviewId,
+      organizationId: seedIds.organizationId,
+      reviewedAt: plusHours(createdAt, 2),
+      reviewedByUserId: seedIds.customerUserId,
+      statementMarkdown: "Release the pending milestone."
+    }
+  });
+
+  await prisma.dealMilestoneSettlementRequest.create({
+    data: {
+      dealMilestoneReviewId: seedIds.settlementPendingReviewId,
+      dealMilestoneSubmissionId: seedIds.settlementPendingSubmissionId,
+      dealVersionId: seedIds.settlementPendingVersionId,
+      dealVersionMilestoneId: seedIds.settlementPendingVersionMilestoneId,
+      draftDealId: seedIds.settlementPendingDraftDealId,
+      id: seedIds.settlementPendingSettlementRequestId,
+      kind: "RELEASE",
+      organizationId: seedIds.organizationId,
+      requestedAt: plusHours(createdAt, 3),
+      requestedByArbitratorAddress: null,
+      requestedByUserId: seedIds.customerUserId,
+      source: "BUYER_REVIEW",
+      statementMarkdown: "Release the pending milestone payout."
+    }
+  });
+
+  await prisma.dealMilestoneSettlementPreparation.create({
+    data: {
+      agreementAddress: "0x9999999999999999999999999999999999999998",
+      chainId: 84532,
+      dealId: "e2e-settlement-pending-deal",
+      dealMilestoneReviewId: seedIds.settlementPendingReviewId,
+      dealMilestoneSettlementRequestId: seedIds.settlementPendingSettlementRequestId,
+      dealMilestoneSubmissionId: seedIds.settlementPendingSubmissionId,
+      dealVersionHash:
+        "0x3333333333333333333333333333333333333333333333333333333333333333",
+      dealVersionId: seedIds.settlementPendingVersionId,
+      dealVersionMilestoneId: seedIds.settlementPendingVersionMilestoneId,
+      draftDealId: seedIds.settlementPendingDraftDealId,
+      id: seedIds.settlementPendingSettlementPreparationId,
+      kind: "RELEASE",
+      milestoneAmountMinor: "1750000",
+      milestonePosition: 1,
+      organizationId: seedIds.organizationId,
+      preparedAt: plusHours(createdAt, 4),
+      settlementTokenAddress: "0x1111111111111111111111111111111111111111",
+      totalAmount: "1750000"
+    }
+  });
+
+  await prisma.escrowAgreementProjection.create({
+    data: {
+      agreementAddress: "0x9999999999999999999999999999999999999998",
+      arbitratorAddress: null,
+      buyerAddress: customerAddress,
+      chainId: 84532,
+      createdBlockHash:
+        "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaab",
+      createdBlockNumber: 12n,
+      createdLogIndex: 0,
+      createdTransactionHash:
+        "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbc",
+      dealId: "e2e-settlement-pending-deal",
+      dealVersionHash:
+        "0x3333333333333333333333333333333333333333333333333333333333333333",
+      factoryAddress: "0x8888888888888888888888888888888888888888",
+      feeVaultAddress: "0x9999999999999999999999999999999999999999",
+      funded: true,
+      fundedBlockHash:
+        "0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccd",
+      fundedBlockNumber: 13n,
+      fundedLogIndex: 1,
+      fundedPayerAddress: customerAddress,
+      fundedTimestamp: plusHours(createdAt, 1),
+      fundedTransactionHash:
+        "0xddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddde",
+      id: seedIds.settlementPendingAgreementProjectionId,
+      initializedBlockHash:
+        "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaab",
+      initializedBlockNumber: 12n,
+      initializedLogIndex: 1,
+      initializedTimestamp: createdAt,
+      initializedTransactionHash:
+        "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbc",
+      milestoneCount: 1,
+      protocolConfigAddress: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      protocolFeeBps: 100,
+      sellerAddress: "0x3333333333333333333333333333333333333333",
+      settlementTokenAddress: "0x1111111111111111111111111111111111111111",
+      totalAmount: "1750000",
+      updatedAt
+    }
+  });
+
+  await prisma.dealMilestoneSettlementExecutionTransaction.create({
+    data: {
+      chainId: 84532,
+      dealMilestoneReviewId: seedIds.settlementPendingReviewId,
+      dealMilestoneSettlementRequestId: seedIds.settlementPendingSettlementRequestId,
+      dealMilestoneSubmissionId: seedIds.settlementPendingSubmissionId,
+      dealVersionId: seedIds.settlementPendingVersionId,
+      dealVersionMilestoneId: seedIds.settlementPendingVersionMilestoneId,
+      draftDealId: seedIds.settlementPendingDraftDealId,
+      id: seedIds.settlementPendingExecutionTransactionId,
+      organizationId: seedIds.organizationId,
+      reconciledAgreementAddress: null,
+      reconciledAt: null,
+      reconciledConfirmedAt: null,
+      reconciledMatchesTrackedAgreement: null,
+      reconciledStatus: null,
+      stalePendingEscalatedAt: null,
+      submittedAt: plusHours(createdAt, 5),
+      submittedByUserId: seedIds.customerUserId,
+      submittedWalletAddress: customerAddress,
+      submittedWalletId: seedIds.customerWalletId,
+      supersededAt: null,
+      supersededByDealMilestoneSettlementExecutionTransactionId: null,
+      transactionHash:
+        "0x5555555555555555555555555555555555555555555555555555555555555555"
+    }
+  });
+
   await prisma.partnerAccount.create({
     data: {
       createdAt,
@@ -642,6 +899,11 @@ export async function seedScenarios(prisma: PrismaClient): Promise<SeedResult> {
     operator: {
       operatorAccountId: seedIds.operatorAccountId,
       walletId: seedIds.operatorWalletId
+    },
+    settlementPending: {
+      dealMilestoneSettlementRequestId: seedIds.settlementPendingSettlementRequestId,
+      dealVersionId: seedIds.settlementPendingVersionId,
+      draftDealId: seedIds.settlementPendingDraftDealId
     },
     settlementReady: {
       dealMilestoneSettlementRequestId:

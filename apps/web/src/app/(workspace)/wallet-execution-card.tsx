@@ -39,6 +39,7 @@ type WalletExecutionCardLabels = {
 };
 
 type WalletExecutionCardProps = {
+  contextMessage?: string | null;
   ctaLabel: string;
   expectedWalletAddress: string;
   labels: WalletExecutionCardLabels;
@@ -185,6 +186,7 @@ export function WalletExecutionCard(props: WalletExecutionCardProps) {
 
   return (
     <div className="stack compact">
+      {props.contextMessage ? <p className="empty-state">{props.contextMessage}</p> : null}
       <div className="detail-grid">
         <div className="detail-item">
           <span className="muted">{props.labels.chain}</span>

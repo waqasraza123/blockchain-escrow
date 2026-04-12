@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import type { FundingTransactionStatus } from "@blockchain-escrow/shared";
 
 import {
   getMilestoneSettlementExecutionPlan,
@@ -46,6 +47,45 @@ type VersionDetailPageProps = {
 
 function sortBySubmittedAtDescending<T extends { submittedAt: string }>(left: T, right: T): number {
   return right.submittedAt.localeCompare(left.submittedAt);
+}
+
+function buildExecutionUiState(input: {
+  confirmedMessage: string;
+  executeLabel: string;
+  latestStatus: FundingTransactionStatus | null;
+  pendingMessage: string;
+  replaceLabel: string;
+  retryLabel: string;
+  retryMessage: string;
+}) {
+  switch (input.latestStatus) {
+    case "CONFIRMED":
+      return {
+        canRequestSponsorship: false,
+        contextMessage: input.confirmedMessage,
+        ctaLabel: null
+      };
+    case "PENDING":
+      return {
+        canRequestSponsorship: false,
+        contextMessage: input.pendingMessage,
+        ctaLabel: input.replaceLabel
+      };
+    case "FAILED":
+    case "MISMATCHED":
+    case "SUPERSEDED":
+      return {
+        canRequestSponsorship: true,
+        contextMessage: input.retryMessage,
+        ctaLabel: input.retryLabel
+      };
+    default:
+      return {
+        canRequestSponsorship: true,
+        contextMessage: null,
+        ctaLabel: input.executeLabel
+      };
+  }
 }
 
 export default async function VersionDetailPage(props: VersionDetailPageProps) {
@@ -126,6 +166,15 @@ export default async function VersionDetailPage(props: VersionDetailPageProps) {
     sortBySubmittedAtDescending
   );
   const latestFundingTransaction = fundingTransactions[0] ?? null;
+  const fundingExecutionUi = buildExecutionUiState({
+    confirmedMessage: messages.wallets.confirmedFundingReconciliationPending,
+    executeLabel: messages.wallets.executeFunding,
+    latestStatus: latestFundingTransaction?.status ?? null,
+    pendingMessage: messages.wallets.pendingExecutionReplacementWarning,
+    replaceLabel: messages.wallets.replaceFunding,
+    retryLabel: messages.wallets.retryFunding,
+    retryMessage: messages.wallets.retryExecutionAvailable
+  });
   const settlementExecutionEntries = await Promise.all(
     milestoneWorkflows.milestones
       .map((workflow) => workflow.submissions[0]?.review?.settlementRequest?.id ?? null)
@@ -230,9 +279,11 @@ export default async function VersionDetailPage(props: VersionDetailPageProps) {
           {fundingPreparation.preparation.ready &&
           fundingPreparation.preparation.createAgreementTransaction &&
           sessionWallet &&
-          canExecuteCustodyTransactions ? (
+          canExecuteCustodyTransactions &&
+          fundingExecutionUi.ctaLabel ? (
             <WalletExecutionCard
-              ctaLabel={messages.wallets.executeFunding}
+              contextMessage={fundingExecutionUi.contextMessage}
+              ctaLabel={fundingExecutionUi.ctaLabel}
               expectedWalletAddress={sessionWallet.address}
               labels={{
                 chain: messages.wallets.executionChain,
@@ -260,7 +311,14 @@ export default async function VersionDetailPage(props: VersionDetailPageProps) {
               transaction={fundingPreparation.preparation.createAgreementTransaction}
             />
           ) : null}
-          {fundingPreparation.preparation.ready && defaultGasPolicyId ? (
+          {fundingPreparation.preparation.ready &&
+          !fundingExecutionUi.ctaLabel &&
+          fundingExecutionUi.contextMessage ? (
+            <p className="empty-state">{fundingExecutionUi.contextMessage}</p>
+          ) : null}
+          {fundingPreparation.preparation.ready &&
+          defaultGasPolicyId &&
+          fundingExecutionUi.canRequestSponsorship ? (
             <form action={createSponsoredFundingRequestAction} className="actions-row">
               <input name="organizationId" type="hidden" value={organizationId} />
               <input name="draftDealId" type="hidden" value={draftDealId} />
@@ -405,6 +463,25 @@ export default async function VersionDetailPage(props: VersionDetailPageProps) {
                 : null;
               const latestExecutionTransaction =
                 settlementExecution?.executionTransactions[0] ?? null;
+              const settlementExecutionUi = buildExecutionUiState({
+                confirmedMessage:
+                  messages.wallets.confirmedSettlementReconciliationPending,
+                executeLabel:
+                  latestSettlementRequest?.kind === "RELEASE"
+                    ? messages.wallets.executeRelease
+                    : messages.wallets.executeRefund,
+                latestStatus: latestExecutionTransaction?.status ?? null,
+                pendingMessage: messages.wallets.pendingExecutionReplacementWarning,
+                replaceLabel:
+                  latestSettlementRequest?.kind === "RELEASE"
+                    ? messages.wallets.replaceRelease
+                    : messages.wallets.replaceRefund,
+                retryLabel:
+                  latestSettlementRequest?.kind === "RELEASE"
+                    ? messages.wallets.retryRelease
+                    : messages.wallets.retryRefund,
+                retryMessage: messages.wallets.retryExecutionAvailable
+              });
 
               return (
                 <div className="workspace-card inset-card" key={workflow.milestone.id}>
@@ -521,13 +598,11 @@ export default async function VersionDetailPage(props: VersionDetailPageProps) {
                   settlementExecution?.plan.ready &&
                   settlementExecution.plan.executionTransaction &&
                   sessionWallet &&
-                  canExecuteCustodyTransactions ? (
+                  canExecuteCustodyTransactions &&
+                  settlementExecutionUi.ctaLabel ? (
                     <WalletExecutionCard
-                      ctaLabel={
-                        latestSettlementRequest.kind === "RELEASE"
-                          ? messages.wallets.executeRelease
-                          : messages.wallets.executeRefund
-                      }
+                      contextMessage={settlementExecutionUi.contextMessage}
+                      ctaLabel={settlementExecutionUi.ctaLabel}
                       expectedWalletAddress={sessionWallet.address}
                       labels={{
                         chain: messages.wallets.executionChain,
@@ -561,7 +636,14 @@ export default async function VersionDetailPage(props: VersionDetailPageProps) {
                   ) : null}
                   {latestSettlementRequest &&
                   settlementExecution?.plan.ready &&
-                  defaultGasPolicyId ? (
+                  !settlementExecutionUi.ctaLabel &&
+                  settlementExecutionUi.contextMessage ? (
+                    <p className="empty-state">{settlementExecutionUi.contextMessage}</p>
+                  ) : null}
+                  {latestSettlementRequest &&
+                  settlementExecution?.plan.ready &&
+                  defaultGasPolicyId &&
+                  settlementExecutionUi.canRequestSponsorship ? (
                     <form
                       action={createSponsoredSettlementExecutionRequestAction}
                       className="actions-row"

@@ -7,6 +7,7 @@ export async function installInjectedWallet(
   chainId: number,
   options?: {
     activeChainId?: number;
+    rejectSendTransaction?: boolean;
     switchChainFails?: boolean;
   }
 ): Promise<void> {
@@ -16,7 +17,13 @@ export async function installInjectedWallet(
   );
 
   await page.addInitScript(
-    ({ activeChainIdHex, chainIdHex, switchChainFails, walletAddress }) => {
+    ({
+      activeChainIdHex,
+      chainIdHex,
+      rejectSendTransaction,
+      switchChainFails,
+      walletAddress
+    }) => {
       const signMessage = async (message: string) => {
         const signer = (window as unknown as Window & {
           __e2eSignMessage: (message: string) => Promise<string>;
@@ -76,6 +83,14 @@ export async function installInjectedWallet(
               throw new Error("Expected eth_sendTransaction to receive a transaction object.");
             }
 
+            if (rejectSendTransaction) {
+              const error = new Error("Wallet rejected transaction submission.") as Error & {
+                code?: number;
+              };
+              error.code = 4001;
+              throw error;
+            }
+
             transactionSequence += 1;
             const hash = `0x${transactionSequence.toString(16).padStart(64, "0")}`;
             const walletWindow = window as unknown as Window & {
@@ -107,6 +122,7 @@ export async function installInjectedWallet(
     {
       activeChainIdHex: `0x${(options?.activeChainId ?? chainId).toString(16)}`,
       chainIdHex: `0x${chainId.toString(16)}`,
+      rejectSendTransaction: options?.rejectSendTransaction ?? false,
       switchChainFails: options?.switchChainFails ?? false,
       walletAddress: account.address.toLowerCase()
     }
