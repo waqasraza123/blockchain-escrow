@@ -537,6 +537,7 @@ export interface SponsoredTransactionRequestRecord {
   chainId: ChainId;
   createdAt: IsoTimestamp;
   data: HexString;
+  decidedByOperatorAccountId: EntityId | null;
   dealMilestoneSettlementRequestId: EntityId | null;
   dealVersionId: EntityId | null;
   draftDealId: EntityId | null;

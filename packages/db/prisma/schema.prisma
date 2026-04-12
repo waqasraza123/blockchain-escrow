@@ -97,8 +97,10 @@ enum AuditAction {
   OPERATOR_ALERT_ACKNOWLEDGED
   OPERATOR_ALERT_RESOLVED
   PROTOCOL_PROPOSAL_DRAFT_CREATED
+  SPONSORED_TRANSACTION_REQUEST_APPROVED
   SPONSORED_TRANSACTION_REQUEST_CREATED
   SPONSORED_TRANSACTION_REQUEST_EXPIRED
+  SPONSORED_TRANSACTION_REQUEST_REJECTED
   FINANCE_EXPORT_CREATED
   FINANCE_EXPORT_COMPLETED
   FINANCE_EXPORT_FAILED
@@ -298,6 +300,7 @@ enum SponsoredTransactionKind {
 }
 
 enum SponsoredTransactionStatus {
+  PENDING
   APPROVED
   REJECTED
   SUBMITTED
@@ -636,6 +639,7 @@ model OperatorAccount {
   createdComplianceCheckpoints ComplianceCheckpoint[] @relation("ComplianceCheckpointCreatedByOperator")
   decidedComplianceCheckpoints ComplianceCheckpoint[] @relation("ComplianceCheckpointDecidedByOperator")
   createdProtocolProposalDrafts ProtocolProposalDraft[]
+  decidedSponsoredTransactionRequests SponsoredTransactionRequest[] @relation("SponsoredTransactionRequestDecidedByOperator")
 
   @@unique([walletId], map: "operator_accounts_wallet_id_key")
   @@index([userId], map: "operator_accounts_user_id_idx")
@@ -720,6 +724,7 @@ model SponsoredTransactionRequest {
   gasPolicyId                     String?                    @db.Text
   requestedByUserId               String                     @db.Text
   walletId                        String                     @db.Text
+  decidedByOperatorAccountId      String?                    @db.Text
   walletAddress                   String                     @db.Text
   kind                            SponsoredTransactionKind
   status                          SponsoredTransactionStatus
@@ -745,11 +750,13 @@ model SponsoredTransactionRequest {
   gasPolicy                       GasPolicy?                 @relation(fields: [gasPolicyId], references: [id], onDelete: SetNull)
   requestedByUser                 User                       @relation("SponsoredTransactionRequestRequestedByUser", fields: [requestedByUserId], references: [id], onDelete: Restrict)
   wallet                          Wallet                     @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  decidedByOperator               OperatorAccount?           @relation("SponsoredTransactionRequestDecidedByOperator", fields: [decidedByOperatorAccountId], references: [id], onDelete: SetNull)
 
   @@index([organizationId], map: "sponsored_transaction_requests_organization_id_idx")
   @@index([gasPolicyId], map: "sponsored_transaction_requests_gas_policy_id_idx")
   @@index([requestedByUserId], map: "sponsored_transaction_requests_requested_by_user_id_idx")
   @@index([walletId], map: "sponsored_transaction_requests_wallet_id_idx")
+  @@index([decidedByOperatorAccountId], map: "sponsored_tx_requests_decided_by_operator_idx")
   @@index([status], map: "sponsored_transaction_requests_status_idx")
   @@index([status, submittedAt, expiresAt], map: "sponsored_transaction_requests_lifecycle_idx")
   @@index([subjectType, subjectId], map: "sponsored_transaction_requests_subject_idx")

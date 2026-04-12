@@ -91,6 +91,7 @@ function mapSponsoredTransactionRequestRecord(record: {
   chainId: number;
   createdAt: Date;
   data: string;
+  decidedByOperatorAccountId?: string | null;
   dealMilestoneSettlementRequestId: string | null;
   dealVersionId: string | null;
   draftDealId: string | null;
@@ -119,6 +120,7 @@ function mapSponsoredTransactionRequestRecord(record: {
     chainId: record.chainId,
     createdAt: toRequiredIsoTimestamp(record.createdAt),
     data: record.data as SponsoredTransactionRequestRecord["data"],
+    decidedByOperatorAccountId: record.decidedByOperatorAccountId ?? null,
     dealMilestoneSettlementRequestId: record.dealMilestoneSettlementRequestId,
     dealVersionId: record.dealVersionId,
     draftDealId: record.draftDealId,
@@ -263,8 +265,7 @@ export function createRelease12Repositories(prisma: DatabaseClient): Release12Re
     countApprovedCreatedSince: async (input) =>
       prisma.sponsoredTransactionRequest.count({
         where: {
-          approvedAt: { not: null },
-          createdAt: { gte: toDate(input.since) },
+          approvedAt: { gte: toDate(input.since) },
           gasPolicyId: input.gasPolicyId,
           organizationId: input.organizationId
         }
@@ -278,6 +279,7 @@ export function createRelease12Repositories(prisma: DatabaseClient): Release12Re
             chainId: record.chainId,
             createdAt: toDate(record.createdAt),
             data: record.data,
+            decidedByOperatorAccountId: record.decidedByOperatorAccountId,
             dealMilestoneSettlementRequestId: record.dealMilestoneSettlementRequestId,
             dealVersionId: record.dealVersionId,
             draftDealId: record.draftDealId,
@@ -331,6 +333,25 @@ export function createRelease12Repositories(prisma: DatabaseClient): Release12Re
       const record = await prisma.sponsoredTransactionRequest.findUnique({ where: { id } });
       return record ? mapSponsoredTransactionRequestRecord(record) : null;
     },
+    findLatestOpenBySubjectAndWallet: async (input) => {
+      const record = await prisma.sponsoredTransactionRequest.findFirst({
+        orderBy: { createdAt: "desc" },
+        where: {
+          kind: input.kind,
+          OR: [
+            { status: "PENDING" },
+            {
+              expiresAt: { gt: new Date() },
+              status: "APPROVED",
+              submittedAt: null
+            }
+          ],
+          subjectId: input.subjectId,
+          walletId: input.walletId
+        }
+      });
+      return record ? mapSponsoredTransactionRequestRecord(record) : null;
+    },
     findLatestApprovedBySubjectAndWallet: async (input) => {
       const record = await prisma.sponsoredTransactionRequest.findFirst({
         orderBy: { createdAt: "desc" },
@@ -345,6 +366,12 @@ export function createRelease12Repositories(prisma: DatabaseClient): Release12Re
       });
       return record ? mapSponsoredTransactionRequestRecord(record) : null;
     },
+    listAll: async () =>
+      (
+        await prisma.sponsoredTransactionRequest.findMany({
+          orderBy: { createdAt: "desc" }
+        })
+      ).map(mapSponsoredTransactionRequestRecord),
     listApprovedPendingByExpiresAt: async (expiresAt) =>
       (
         await prisma.sponsoredTransactionRequest.findMany({
@@ -373,13 +400,15 @@ export function createRelease12Repositories(prisma: DatabaseClient): Release12Re
               : { approvedAt: updates.approvedAt ? toDate(updates.approvedAt) : null }),
             ...(updates.chainId === undefined ? {} : { chainId: updates.chainId }),
             ...(updates.data === undefined ? {} : { data: updates.data }),
+            ...(updates.decidedByOperatorAccountId === undefined
+              ? {}
+              : { decidedByOperatorAccountId: updates.decidedByOperatorAccountId }),
             ...(updates.dealMilestoneSettlementRequestId === undefined
               ? {}
               : { dealMilestoneSettlementRequestId: updates.dealMilestoneSettlementRequestId }),
             ...(updates.dealVersionId === undefined ? {} : { dealVersionId: updates.dealVersionId }),
             ...(updates.draftDealId === undefined ? {} : { draftDealId: updates.draftDealId }),
             ...(updates.expiresAt === undefined ? {} : { expiresAt: toDate(updates.expiresAt) }),
-            ...(updates.gasPolicyId === undefined ? {} : { gasPolicyId: updates.gasPolicyId }),
             ...(updates.kind === undefined ? {} : { kind: updates.kind }),
             ...(updates.reason === undefined ? {} : { reason: updates.reason }),
             ...(updates.rejectedAt === undefined

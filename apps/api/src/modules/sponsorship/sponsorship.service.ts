@@ -381,8 +381,8 @@ export class SponsorshipService {
       input.walletId,
       input.gasPolicyId
     );
-    const existingApprovedRequest =
-      await this.release12Repositories.sponsoredTransactionRequests.findLatestApprovedBySubjectAndWallet(
+    const existingOpenRequest =
+      await this.release12Repositories.sponsoredTransactionRequests.findLatestOpenBySubjectAndWallet(
         {
           kind: input.kind,
           subjectId: input.subjectId,
@@ -390,9 +390,9 @@ export class SponsorshipService {
         }
       );
 
-    if (existingApprovedRequest) {
+    if (existingOpenRequest) {
       throw new ConflictException(
-        "a sponsored transaction request is already approved and awaiting submission"
+        "a sponsored transaction request is already pending review or awaiting submission"
       );
     }
 
@@ -405,17 +405,19 @@ export class SponsorshipService {
       amountMinor: input.amountMinor,
       chainId: input.chainId,
       kind: input.kind,
-      organizationId: input.organizationId
+      organizationId: input.organizationId,
+      enforceDailyBudget: false
     });
-    const approved = evaluation.reason === null;
+    const requiresOperatorDecision = evaluation.reason === null;
 
     const request =
       await this.release12Repositories.sponsoredTransactionRequests.create({
         amountMinor: input.amountMinor,
-        approvedAt: approved ? now : null,
+        approvedAt: null,
         chainId: input.chainId,
         createdAt: now,
         data: input.data,
+        decidedByOperatorAccountId: null,
         dealMilestoneSettlementRequestId: input.dealMilestoneSettlementRequestId,
         dealVersionId: input.dealVersionId,
         draftDealId: input.draftDealId,
@@ -426,8 +428,8 @@ export class SponsorshipService {
         organizationId: input.organizationId,
         reason: evaluation.reason,
         requestedByUserId: input.requestedByUserId,
-        rejectedAt: approved ? null : now,
-        status: approved ? "APPROVED" : "REJECTED",
+        rejectedAt: requiresOperatorDecision ? null : now,
+        status: requiresOperatorDecision ? "PENDING" : "REJECTED",
         subjectId: input.subjectId,
         subjectType: input.subjectType,
         submittedAt: null,
@@ -447,7 +449,6 @@ export class SponsorshipService {
       ipAddress: input.requestMetadata.ipAddress,
       metadata: {
         amountMinor: request.amountMinor,
-        approved: approved,
         chainId: request.chainId,
         dealMilestoneSettlementRequestId: request.dealMilestoneSettlementRequestId,
         dealVersionId: request.dealVersionId,
@@ -456,6 +457,7 @@ export class SponsorshipService {
         gasPolicyId: request.gasPolicyId,
         kind: request.kind,
         reason: request.reason,
+        requiresOperatorDecision,
         status: request.status,
         subjectId: request.subjectId,
         subjectType: request.subjectType,
@@ -467,7 +469,7 @@ export class SponsorshipService {
     });
 
     return {
-      sponsoredTransactionRequest: request as SponsoredTransactionRequestSummary
+      sponsoredTransactionRequest: toSponsoredTransactionRequestSummary(request, now)
     };
   }
 
@@ -477,6 +479,7 @@ export class SponsorshipService {
       actionKind: string;
       amountMinor: string;
       chainId: number;
+      enforceDailyBudget?: boolean;
       kind: SponsoredTransactionKind;
       organizationId: string;
     }
@@ -509,17 +512,19 @@ export class SponsorshipService {
       return { reason: "requested amount exceeds gas policy limit" };
     }
 
-    const dayStart = new Date();
-    dayStart.setUTCHours(0, 0, 0, 0);
-    const approvedToday =
-      await this.release12Repositories.sponsoredTransactionRequests.countApprovedCreatedSince({
-        gasPolicyId: gasPolicy.id,
-        organizationId: input.organizationId,
-        since: dayStart.toISOString()
-      });
+    if (input.enforceDailyBudget ?? true) {
+      const dayStart = new Date();
+      dayStart.setUTCHours(0, 0, 0, 0);
+      const approvedToday =
+        await this.release12Repositories.sponsoredTransactionRequests.countApprovedCreatedSince({
+          gasPolicyId: gasPolicy.id,
+          organizationId: input.organizationId,
+          since: dayStart.toISOString()
+        });
 
-    if (approvedToday >= gasPolicy.maxRequestsPerDay) {
-      return { reason: "gas policy daily request budget has been exhausted" };
+      if (approvedToday >= gasPolicy.maxRequestsPerDay) {
+        return { reason: "gas policy daily request budget has been exhausted" };
+      }
     }
 
     return { reason: null };

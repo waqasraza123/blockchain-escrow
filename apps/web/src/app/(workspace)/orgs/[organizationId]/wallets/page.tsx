@@ -398,7 +398,9 @@ export default async function WalletsPage(props: WalletsPageProps) {
                 </td>
                 <td className="mono">{request.walletAddress}</td>
                 <td>{request.amountMinor}</td>
-                <td className="mono">{request.expiresAt}</td>
+                <td className="mono">
+                  {request.status === "PENDING" ? messages.common.none : request.expiresAt}
+                </td>
                 <td>{request.reason ?? messages.common.none}</td>
               </tr>
             ))}

@@ -19,6 +19,7 @@ import {
   createCase,
   createCheckpoint,
   createProtocolProposal,
+  decideSponsoredTransactionRequest,
   decideCheckpoint,
   disableTenantDomain,
   registerPartnerBrandAsset,
@@ -69,6 +70,21 @@ export async function resolveAlertAction(formData: FormData): Promise<void> {
   await resolveAlert(requiredString(formData, "alertId"), requiredString(formData, "note"));
   revalidatePath("/alerts");
   redirect("/alerts");
+}
+
+export async function decideSponsoredTransactionRequestAction(
+  formData: FormData
+): Promise<void> {
+  await decideSponsoredTransactionRequest(
+    requiredString(formData, "sponsoredTransactionRequestId"),
+    {
+      note: optionalString(formData, "note") ?? undefined,
+      status: requiredString(formData, "status") as "APPROVED" | "REJECTED"
+    }
+  );
+
+  revalidatePath("/sponsorship");
+  redirect("/sponsorship");
 }
 
 export async function createCheckpointAction(formData: FormData): Promise<void> {

@@ -374,6 +374,8 @@ export const enMessages = {
     primaryWallet: "Primary wallet",
     pendingExecutionReplacementWarning:
       "A tracked transaction is still pending. Submit a replacement only if you intend to replace it.",
+    pendingSponsoredRequestReview:
+      "A sponsored request is pending operator review before sponsorship can be used.",
     quickApprove: "Quick approve",
     quickReject: "Quick reject",
     reason: "Reason",
@@ -864,6 +866,8 @@ export const arMessages = {
     primaryWallet: "المحفظة الأساسية",
     pendingExecutionReplacementWarning:
       "لا تزال هناك معاملة متتبعة قيد الانتظار. أرسل معاملة بديلة فقط إذا كنت تنوي استبدالها.",
+    pendingSponsoredRequestReview:
+      "طلب الرعاية قيد مراجعة المشغّل قبل السماح باستخدام الرعاية.",
     quickApprove: "اعتماد سريع",
     quickReject: "رفض سريع",
     reason: "السبب",

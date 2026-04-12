@@ -21,6 +21,7 @@ import type {
   CreateProtocolProposalDraftInput,
   CreateTenantDomainInput,
   CreateTenantDomainResponse,
+  DecideSponsoredTransactionRequestInput,
   InvoiceDetailResponse,
   ListBillingPlansResponse,
   ListBillingFeeSchedulesResponse,
@@ -28,6 +29,7 @@ import type {
   ListComplianceCasesResponse,
   ListComplianceCheckpointsResponse,
   ListOperatorAlertsResponse,
+  ListOperatorSponsoredTransactionRequestsResponse,
   ListPartnerAccountsResponse,
   ListProtocolProposalDraftsResponse,
   OperatorDashboardResponse,
@@ -367,6 +369,24 @@ export function listAlerts(params?: {
   return apiRequest(`/operator/alerts${suffix}`);
 }
 
+export function listSponsoredTransactionRequests(params?: {
+  kind?: string;
+  status?: string;
+}): Promise<ListOperatorSponsoredTransactionRequestsResponse> {
+  const query = new URLSearchParams();
+
+  if (params?.kind) {
+    query.set("kind", params.kind);
+  }
+
+  if (params?.status) {
+    query.set("status", params.status);
+  }
+
+  const suffix = query.size > 0 ? `?${query.toString()}` : "";
+  return apiRequest(`/operator/sponsored-transaction-requests${suffix}`);
+}
+
 export async function acknowledgeAlert(
   alertId: string,
   note: string | null
@@ -382,6 +402,19 @@ export async function resolveAlert(alertId: string, note: string): Promise<void>
     body: JSON.stringify({ note }),
     method: "POST"
   });
+}
+
+export async function decideSponsoredTransactionRequest(
+  sponsoredTransactionRequestId: string,
+  input: DecideSponsoredTransactionRequestInput
+): Promise<void> {
+  await apiRequest(
+    `/operator/sponsored-transaction-requests/${sponsoredTransactionRequestId}/decision`,
+    {
+      body: JSON.stringify(input),
+      method: "POST"
+    }
+  );
 }
 
 export function listCheckpoints(): Promise<ListComplianceCheckpointsResponse> {

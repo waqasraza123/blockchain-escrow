@@ -47,8 +47,18 @@ export function createRelease12RepositoriesStub() {
       }
     },
     sponsoredTransactionRequests: {
-      countApprovedCreatedSince: async () =>
-        [...sponsoredRequestStore.values()].filter((record) => record.approvedAt !== null).length,
+      countApprovedCreatedSince: async (input: {
+        gasPolicyId: string;
+        organizationId: string;
+        since: string;
+      }) =>
+        [...sponsoredRequestStore.values()].filter(
+          (record) =>
+            record.gasPolicyId === input.gasPolicyId &&
+            record.organizationId === input.organizationId &&
+            record.approvedAt !== null &&
+            new Date(record.approvedAt).getTime() >= new Date(input.since).getTime()
+        ).length,
       create: async (record: SponsoredTransactionRequestRecord) => {
         sponsoredRequestStore.set(record.id, record);
         return record;
@@ -74,6 +84,23 @@ export function createRelease12RepositoriesStub() {
         return next;
       },
       findById: async (id: string) => sponsoredRequestStore.get(id) ?? null,
+      findLatestOpenBySubjectAndWallet: async (input: {
+        kind: SponsoredTransactionRequestRecord["kind"];
+        subjectId: string;
+        walletId: string;
+      }) =>
+        [...sponsoredRequestStore.values()]
+          .filter(
+            (record) =>
+              record.kind === input.kind &&
+              record.subjectId === input.subjectId &&
+              record.walletId === input.walletId &&
+              (record.status === "PENDING" ||
+                (record.status === "APPROVED" &&
+                  record.submittedAt === null &&
+                  new Date(record.expiresAt).getTime() > Date.now()))
+          )
+          .sort((left, right) => right.createdAt.localeCompare(left.createdAt))[0] ?? null,
       findLatestApprovedBySubjectAndWallet: async (input: {
         kind: SponsoredTransactionRequestRecord["kind"];
         subjectId: string;
@@ -90,6 +117,10 @@ export function createRelease12RepositoriesStub() {
               new Date(record.expiresAt).getTime() > Date.now()
           )
           .sort((left, right) => right.createdAt.localeCompare(left.createdAt))[0] ?? null,
+      listAll: async () =>
+        [...sponsoredRequestStore.values()].sort((left, right) =>
+          right.createdAt.localeCompare(left.createdAt)
+        ),
       listApprovedPendingByExpiresAt: async (expiresAt: string) =>
         [...sponsoredRequestStore.values()]
           .filter(

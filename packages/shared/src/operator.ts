@@ -8,6 +8,14 @@ import type {
   JsonObject,
   WalletAddress
 } from "./primitives";
+import {
+  sponsoredTransactionKindSchema,
+  sponsoredTransactionStatusSchema
+} from "./sponsorship";
+import type {
+  SponsoredTransactionKind,
+  SponsoredTransactionStatus
+} from "./sponsorship";
 
 export const operatorRoleSchema = z.enum([
   "VIEWER",
@@ -140,6 +148,39 @@ export type ResolveOperatorAlertInput = z.infer<
   typeof resolveOperatorAlertSchema
 >;
 
+export const listOperatorSponsoredTransactionRequestsParamsSchema = z.object({
+  kind: sponsoredTransactionKindSchema.optional(),
+  status: sponsoredTransactionStatusSchema.optional()
+});
+export type ListOperatorSponsoredTransactionRequestsParams = z.infer<
+  typeof listOperatorSponsoredTransactionRequestsParamsSchema
+>;
+
+export const operatorSponsoredTransactionRequestParamsSchema = z.object({
+  sponsoredTransactionRequestId: z.string().trim().min(1)
+});
+export type OperatorSponsoredTransactionRequestParams = z.infer<
+  typeof operatorSponsoredTransactionRequestParamsSchema
+>;
+
+export const decideSponsoredTransactionRequestSchema = z
+  .object({
+    note: z.string().trim().max(4000).optional(),
+    status: sponsoredTransactionStatusSchema.extract(["APPROVED", "REJECTED"])
+  })
+  .superRefine((value, context) => {
+    if (value.status === "REJECTED" && (!value.note || value.note.trim().length === 0)) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "a rejection note is required",
+        path: ["note"]
+      });
+    }
+  });
+export type DecideSponsoredTransactionRequestInput = z.infer<
+  typeof decideSponsoredTransactionRequestSchema
+>;
+
 export const createComplianceCheckpointSchema = z.object({
   kind: complianceCheckpointKindSchema,
   note: z.string().trim().min(1).max(4000),
@@ -243,6 +284,7 @@ export interface OperatorPermissionSet {
   canManageCases: boolean;
   canManageCheckpoints: boolean;
   canManageProtocolProposals: boolean;
+  canManageSponsoredTransactions: boolean;
   canResolveAlerts: boolean;
   canViewOperatorConsole: boolean;
 }
@@ -347,6 +389,31 @@ export interface ListOperatorAlertsResponse {
   alerts: OperatorAlertSummary[];
 }
 
+export interface OperatorSponsoredTransactionRequestSummary {
+  amountMinor: string;
+  approvedAt: IsoTimestamp | null;
+  chainId: ChainId;
+  createdAt: IsoTimestamp;
+  decidedByOperatorAccountId: EntityId | null;
+  expiresAt: IsoTimestamp;
+  gasPolicyId: EntityId | null;
+  id: EntityId;
+  kind: SponsoredTransactionKind;
+  organizationId: EntityId;
+  reason: string | null;
+  rejectedAt: IsoTimestamp | null;
+  requestedByUserId: EntityId;
+  status: SponsoredTransactionStatus;
+  subject: OperatorSubjectSummary;
+  submittedAt: IsoTimestamp | null;
+  submittedTransactionHash: HexString | null;
+  walletAddress: WalletAddress;
+}
+
+export interface ListOperatorSponsoredTransactionRequestsResponse {
+  sponsoredTransactionRequests: OperatorSponsoredTransactionRequestSummary[];
+}
+
 export interface ComplianceCheckpointSummary {
   createdAt: IsoTimestamp;
   createdByOperatorAccountId: EntityId;
@@ -422,6 +489,7 @@ export interface OperatorDashboardCard {
   key:
     | "open_alerts"
     | "open_cases"
+    | "pending_sponsorship_requests"
     | "pending_checkpoints"
     | "stale_funding"
     | "stale_settlement"

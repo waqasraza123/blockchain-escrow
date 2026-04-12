@@ -536,11 +536,17 @@ export interface SponsoredTransactionRequestRepository {
     id: EntityId;
   }): Promise<SponsoredTransactionRequestRecord | null>;
   findById(id: EntityId): Promise<SponsoredTransactionRequestRecord | null>;
+  findLatestOpenBySubjectAndWallet(input: {
+    kind: SponsoredTransactionRequestRecord["kind"];
+    subjectId: EntityId;
+    walletId: EntityId;
+  }): Promise<SponsoredTransactionRequestRecord | null>;
   findLatestApprovedBySubjectAndWallet(input: {
     kind: SponsoredTransactionRequestRecord["kind"];
     subjectId: EntityId;
     walletId: EntityId;
   }): Promise<SponsoredTransactionRequestRecord | null>;
+  listAll(): Promise<SponsoredTransactionRequestRecord[]>;
   listApprovedPendingByExpiresAt(
     expiresAt: IsoTimestamp
   ): Promise<SponsoredTransactionRequestRecord[]>;

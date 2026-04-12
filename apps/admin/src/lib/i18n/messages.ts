@@ -37,7 +37,8 @@ export const enMessages = {
     partners: "Partners",
     protocolProposals: "Protocol proposals",
     reconciliation: "Reconciliation",
-    search: "Search"
+    search: "Search",
+    sponsorship: "Sponsorship"
   },
   publicTopbar: {
     subtitle: "Bilingual operator controls and oversight",
@@ -157,6 +158,26 @@ export const enMessages = {
       "Deterministic worker alerts for transaction drift, stale queues, disputes, delivery failures, and service signals.",
     title: "Operator alerts",
     updated: "Updated"
+  },
+  sponsorship: {
+    actions: "Actions",
+    approve: "Approve",
+    created: "Created",
+    decisionNote: "Decision note",
+    empty: "No sponsored transaction requests match the current filters.",
+    kind: "Kind",
+    pendingQueue: "Pending review",
+    queue: "Sponsorship queue",
+    reject: "Reject",
+    requestedBy: "Requested by",
+    reviewNote: "review note",
+    status: "Status",
+    subject: "Subject",
+    submittedHash: "Submitted hash",
+    subtitle:
+      "Review pending sponsorship requests before funding and settlement transactions are allowed to use sponsor capacity.",
+    title: "Sponsored transaction requests",
+    wallet: "Wallet"
   },
   billing: {
     addSchedule: "Add schedule",
@@ -481,7 +502,8 @@ export const arMessages = {
     partners: "الشركاء",
     protocolProposals: "مقترحات البروتوكول",
     reconciliation: "التسوية",
-    search: "البحث"
+    search: "البحث",
+    sponsorship: "الرعاية"
   },
   publicTopbar: {
     subtitle: "ضوابط ومراقبة تشغيلية ثنائية اللغة",
@@ -599,6 +621,26 @@ export const arMessages = {
       "تنبيهات حتمية من العامل لانجراف المعاملات والقوائم المتأخرة والنزاعات وفشل التسليم وإشارات الخدمات.",
     title: "تنبيهات المشغّل",
     updated: "محدّث"
+  },
+  sponsorship: {
+    actions: "الإجراءات",
+    approve: "موافقة",
+    created: "تم الإنشاء",
+    decisionNote: "ملاحظة القرار",
+    empty: "لا توجد طلبات معاملات مدعومة تطابق عوامل التصفية الحالية.",
+    kind: "النوع",
+    pendingQueue: "قيد المراجعة",
+    queue: "قائمة الرعاية",
+    reject: "رفض",
+    requestedBy: "مقدم الطلب",
+    reviewNote: "ملاحظة المراجعة",
+    status: "الحالة",
+    subject: "الموضوع",
+    submittedHash: "الهاش المرسل",
+    subtitle:
+      "راجع طلبات الرعاية المعلقة قبل السماح لاستخدام سعة الرعاية لعمليات التمويل والتسوية.",
+    title: "طلبات المعاملات المدعومة",
+    wallet: "المحفظة"
   },
   billing: {
     addSchedule: "إضافة جدول",

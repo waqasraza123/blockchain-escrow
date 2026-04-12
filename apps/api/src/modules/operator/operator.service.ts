@@ -7,12 +7,15 @@ import {
 import type {
   ComplianceCaseRecord,
   ComplianceCheckpointRecord,
+  GasPolicyRecord,
   OperatorAccountRecord,
   OperatorAlertRecord,
   Release1Repositories,
+  Release12Repositories,
   Release4Repositories,
   Release10Repositories,
   Release8Repositories,
+  SponsoredTransactionRequestRecord,
   WalletRecord,
   DraftDealRecord
 } from "@blockchain-escrow/db";
@@ -34,12 +37,15 @@ import {
   createComplianceCheckpointSchema,
   createProtocolProposalDraftSchema,
   createTenantDomainSchema,
+  decideSponsoredTransactionRequestSchema,
   decideComplianceCheckpointSchema,
   invoiceParamsSchema,
   invoiceActionSchema,
   listComplianceCasesParamsSchema,
   listOperatorAlertsParamsSchema,
+  listOperatorSponsoredTransactionRequestsParamsSchema,
   operatorAlertActionParamsSchema,
+  operatorSponsoredTransactionRequestParamsSchema,
   operatorSearchParamsSchema,
   partnerAccountParamsSchema,
   partnerApiKeyParamsSchema,
@@ -96,6 +102,7 @@ import type {
   ListInvoicesResponse,
   ListOperatorAlertsParams,
   ListOperatorAlertsResponse,
+  ListOperatorSponsoredTransactionRequestsResponse,
   ListPartnerAccountsResponse,
   ListProtocolProposalDraftsResponse,
   ListTenantDomainsResponse,
@@ -154,6 +161,7 @@ import {
   RELEASE1_REPOSITORIES,
   RELEASE4_REPOSITORIES,
   RELEASE10_REPOSITORIES,
+  RELEASE12_REPOSITORIES,
   RELEASE8_REPOSITORIES
 } from "../../infrastructure/tokens";
 import type { RequestMetadata } from "../auth/auth.http";
@@ -194,12 +202,23 @@ function lowerCaseIncludes(value: string | null | undefined, query: string): boo
   return Boolean(value && value.toLowerCase().includes(query));
 }
 
+function addMinutes(timestamp: string, minutes: number): string {
+  return new Date(Date.parse(timestamp) + minutes * 60_000).toISOString();
+}
+
+function startOfUtcDayIso(timestamp: string): string {
+  const value = new Date(timestamp);
+  value.setUTCHours(0, 0, 0, 0);
+  return value.toISOString();
+}
+
 function buildPermissions(role: OperatorAccountRecord["role"]): OperatorPermissionSet {
   return {
     canManageCases: role === "COMPLIANCE" || role === "SUPER_ADMIN",
     canManageCheckpoints: role === "COMPLIANCE" || role === "SUPER_ADMIN",
     canManageProtocolProposals:
       role === "PROTOCOL_ADMIN" || role === "SUPER_ADMIN",
+    canManageSponsoredTransactions: role === "COMPLIANCE" || role === "SUPER_ADMIN",
     canResolveAlerts: role === "COMPLIANCE" || role === "SUPER_ADMIN",
     canViewOperatorConsole: true
   };
@@ -526,6 +545,8 @@ export class OperatorService {
     private readonly release4Repositories: Release4Repositories,
     @Inject(RELEASE10_REPOSITORIES)
     private readonly release10Repositories: Release10Repositories,
+    @Inject(RELEASE12_REPOSITORIES)
+    private readonly release12Repositories: Release12Repositories,
     @Inject(RELEASE8_REPOSITORIES)
     private readonly release8Repositories: Release8Repositories,
     private readonly authenticatedSessionService: AuthenticatedSessionService,
@@ -1318,17 +1339,22 @@ export class OperatorService {
     requestMetadata: RequestMetadata
   ): Promise<OperatorDashboardResponse> {
     await this.requireOperatorContext(requestMetadata);
-    const [health, reconciliation, alerts, checkpoints, cases] = await Promise.all([
+    const [health, reconciliation, alerts, checkpoints, cases, sponsorshipRequests] = await Promise.all([
       this.getHealth(requestMetadata),
       this.getReconciliation(requestMetadata),
       this.listAlerts({}, requestMetadata),
       this.listCheckpoints(requestMetadata),
-      this.listCases({}, requestMetadata)
+      this.listCases({}, requestMetadata),
+      this.listSponsoredTransactionRequests({ status: "PENDING" }, requestMetadata)
     ]);
 
     const cards: OperatorDashboardCard[] = [
       { key: "open_alerts", value: alerts.alerts.filter((alert) => alert.status !== "RESOLVED").length },
       { key: "open_cases", value: cases.cases.filter((entry) => entry.status !== "RESOLVED").length },
+      {
+        key: "pending_sponsorship_requests",
+        value: sponsorshipRequests.sponsoredTransactionRequests.length
+      },
       {
         key: "pending_checkpoints",
         value: checkpoints.checkpoints.filter((entry) => entry.status === "PENDING").length
@@ -1395,7 +1421,15 @@ export class OperatorService {
     requestMetadata: RequestMetadata
   ): Promise<OperatorReconciliationResponse> {
     await this.requireOperatorContext(requestMetadata);
-    const [fundingTransactions, settlementTransactions, disputes, alerts, checkpoints, cases] =
+    const [
+      fundingTransactions,
+      settlementTransactions,
+      disputes,
+      alerts,
+      checkpoints,
+      cases,
+      sponsorshipRequests
+    ] =
       await Promise.all([
         this.release1Repositories.fundingTransactions.listByChainId(this.configuration.chainId),
         this.release1Repositories.dealMilestoneSettlementExecutionTransactions.listByChainId(
@@ -1404,7 +1438,8 @@ export class OperatorService {
         this.release1Repositories.dealMilestoneDisputes.listAll(),
         this.release8Repositories.operatorAlerts.listAll(),
         this.release8Repositories.complianceCheckpoints.listAll(),
-        this.release8Repositories.complianceCases.listAll()
+        this.release8Repositories.complianceCases.listAll(),
+        this.release12Repositories.sponsoredTransactionRequests.listAll()
       ]);
 
     const staleFunding = fundingTransactions.filter(
@@ -1547,7 +1582,8 @@ export class OperatorService {
       unresolvedOperatorReviewCount:
         alerts.filter((entry) => entry.status !== "RESOLVED").length +
         checkpoints.filter((entry) => entry.status === "PENDING").length +
-        cases.filter((entry) => entry.status !== "RESOLVED").length
+        cases.filter((entry) => entry.status !== "RESOLVED").length +
+        sponsorshipRequests.filter((entry) => entry.status === "PENDING").length
     };
   }
 
@@ -1565,6 +1601,106 @@ export class OperatorService {
         .filter((entry) => !params.status || entry.status === params.status)
         .map(toAlertSummary)
     };
+  }
+
+  async listSponsoredTransactionRequests(
+    input: unknown,
+    requestMetadata: RequestMetadata
+  ): Promise<ListOperatorSponsoredTransactionRequestsResponse> {
+    const params = parseInput(listOperatorSponsoredTransactionRequestsParamsSchema, input);
+    await this.requireOperatorContext(requestMetadata);
+    const requests = await this.release12Repositories.sponsoredTransactionRequests.listAll();
+    const filtered = requests
+      .filter((entry) => !params.kind || entry.kind === params.kind)
+      .filter((entry) => !params.status || entry.status === params.status);
+
+    return {
+      sponsoredTransactionRequests: await Promise.all(
+        filtered.map((entry) => this.toOperatorSponsoredTransactionRequestSummary(entry))
+      )
+    };
+  }
+
+  async decideSponsoredTransactionRequest(
+    paramsInput: unknown,
+    input: unknown,
+    requestMetadata: RequestMetadata
+  ): Promise<ListOperatorSponsoredTransactionRequestsResponse["sponsoredTransactionRequests"][number]> {
+    const params = parseInput(operatorSponsoredTransactionRequestParamsSchema, paramsInput);
+    const parsedInput = parseInput(decideSponsoredTransactionRequestSchema, input);
+    const context = await this.requireOperatorContext(requestMetadata);
+    this.requireSponsoredTransactionPermission(context.permissions);
+    const request = await this.requireSponsoredTransactionRequest(
+      params.sponsoredTransactionRequestId
+    );
+
+    if (request.status !== "PENDING") {
+      throw new ConflictException("sponsored transaction request is already decided");
+    }
+
+    const now = new Date().toISOString();
+    let reason: string | null = request.reason;
+    let expiresAt = request.expiresAt;
+
+    if (parsedInput.status === "APPROVED") {
+      const gasPolicyId = request.gasPolicyId;
+      if (!gasPolicyId) {
+        throw new ConflictException("sponsored transaction request has no gas policy");
+      }
+
+      const gasPolicy = await this.release12Repositories.gasPolicies.findById(gasPolicyId);
+      if (!gasPolicy || gasPolicy.organizationId !== request.organizationId || !gasPolicy.active) {
+        throw new ConflictException("linked gas policy is not active");
+      }
+
+      const policyReason = await this.evaluateSponsoredTransactionRequestAgainstGasPolicy(
+        request,
+        gasPolicy,
+        now
+      );
+      if (policyReason) {
+        throw new ConflictException(policyReason);
+      }
+
+      reason = null;
+      expiresAt = addMinutes(now, gasPolicy.sponsorWindowMinutes);
+    } else {
+      reason = parsedInput.note?.trim() ?? null;
+    }
+
+    const updated = await this.release12Repositories.sponsoredTransactionRequests.update(
+      request.id,
+      {
+        approvedAt: parsedInput.status === "APPROVED" ? now : null,
+        decidedByOperatorAccountId: context.operatorAccount.id,
+        expiresAt,
+        reason,
+        rejectedAt: parsedInput.status === "REJECTED" ? now : null,
+        status: parsedInput.status,
+        updatedAt: now
+      }
+    );
+
+    await this.release1Repositories.auditLogs.append({
+      action:
+        parsedInput.status === "APPROVED"
+          ? "SPONSORED_TRANSACTION_REQUEST_APPROVED"
+          : "SPONSORED_TRANSACTION_REQUEST_REJECTED",
+      actorUserId: context.operatorAccount.userId,
+      entityId: updated.id,
+      entityType: "SPONSORED_TRANSACTION_REQUEST",
+      id: randomUUID(),
+      ipAddress: context.requestMetadata.ipAddress,
+      metadata: {
+        note: parsedInput.note?.trim() ?? null,
+        status: updated.status
+      },
+      occurredAt: now,
+      organizationId: updated.organizationId,
+      userAgent: context.requestMetadata.userAgent
+    });
+
+    return this.toOperatorSponsoredTransactionRequestSummary(updated);
   }
 
   async acknowledgeAlert(
@@ -2338,6 +2474,20 @@ export class OperatorService {
     return alert;
   }
 
+  private async requireSponsoredTransactionRequest(
+    sponsoredTransactionRequestId: string
+  ): Promise<SponsoredTransactionRequestRecord> {
+    const request =
+      await this.release12Repositories.sponsoredTransactionRequests.findById(
+        sponsoredTransactionRequestId
+      );
+    if (!request) {
+      throw new NotFoundException("sponsored transaction request not found");
+    }
+
+    return request;
+  }
+
   private async requireCheckpoint(
     checkpointId: string
   ): Promise<ComplianceCheckpointRecord> {
@@ -2357,6 +2507,109 @@ export class OperatorService {
     }
 
     return record;
+  }
+
+  private async toOperatorSponsoredTransactionRequestSummary(
+    record: SponsoredTransactionRequestRecord
+  ): Promise<ListOperatorSponsoredTransactionRequestsResponse["sponsoredTransactionRequests"][number]> {
+    const subject = await this.loadSponsoredTransactionRequestSubjectSummary(record);
+
+    return {
+      amountMinor: record.amountMinor,
+      approvedAt: record.approvedAt,
+      chainId: record.chainId,
+      createdAt: record.createdAt,
+      decidedByOperatorAccountId: record.decidedByOperatorAccountId,
+      expiresAt: record.expiresAt,
+      gasPolicyId: record.gasPolicyId,
+      id: record.id,
+      kind: record.kind,
+      organizationId: record.organizationId,
+      reason: record.reason,
+      rejectedAt: record.rejectedAt,
+      requestedByUserId: record.requestedByUserId,
+      status: record.status,
+      subject,
+      submittedAt: record.submittedAt,
+      submittedTransactionHash: record.submittedTransactionHash,
+      walletAddress: record.walletAddress
+    };
+  }
+
+  private async loadSponsoredTransactionRequestSubjectSummary(
+    record: SponsoredTransactionRequestRecord
+  ): Promise<OperatorSubjectSummary> {
+    if (record.subjectType === "DEAL_VERSION") {
+      const version = await this.release1Repositories.dealVersions.findById(record.subjectId);
+      if (version) {
+        return buildSubjectSummary({
+          dealVersionId: version.id,
+          draftDealId: version.draftDealId,
+          label: version.title,
+          organizationId: version.organizationId,
+          subjectId: version.draftDealId,
+          subjectType: "DRAFT_DEAL"
+        });
+      }
+    }
+
+    const settlementRequest =
+      await this.release1Repositories.dealMilestoneSettlementRequests.findById(record.subjectId);
+    if (settlementRequest) {
+      return buildSubjectSummary({
+        dealVersionId: settlementRequest.dealVersionId,
+        draftDealId: settlementRequest.draftDealId,
+        label: settlementRequest.statementMarkdown,
+        organizationId: settlementRequest.organizationId,
+        subjectId: settlementRequest.draftDealId,
+        subjectType: "DRAFT_DEAL"
+      });
+    }
+
+    return buildSubjectSummary({
+      dealVersionId: record.dealVersionId,
+      draftDealId: record.draftDealId,
+      organizationId: record.organizationId,
+      subjectId: record.draftDealId ?? record.subjectId,
+      subjectType: "DRAFT_DEAL"
+    });
+  }
+
+  private async evaluateSponsoredTransactionRequestAgainstGasPolicy(
+    request: SponsoredTransactionRequestRecord,
+    gasPolicy: GasPolicyRecord,
+    evaluatedAt: string
+  ): Promise<string | null> {
+    if (!gasPolicy.allowedTransactionKinds.includes(request.kind)) {
+      return "transaction kind is not allowed by gas policy";
+    }
+
+    if (
+      gasPolicy.allowedApprovalPolicyKinds.length > 0 &&
+      !gasPolicy.allowedApprovalPolicyKinds.includes(request.kind)
+    ) {
+      return "approval action is not allowed by gas policy";
+    }
+
+    if (!gasPolicy.allowedChainIds.includes(request.chainId)) {
+      return "chain is not allowed by gas policy";
+    }
+
+    if (gasPolicy.maxAmountMinor && BigInt(request.amountMinor) > BigInt(gasPolicy.maxAmountMinor)) {
+      return "requested amount exceeds gas policy limit";
+    }
+
+    const approvedToday =
+      await this.release12Repositories.sponsoredTransactionRequests.countApprovedCreatedSince({
+        gasPolicyId: gasPolicy.id,
+        organizationId: request.organizationId,
+        since: startOfUtcDayIso(evaluatedAt)
+      });
+    if (approvedToday >= gasPolicy.maxRequestsPerDay) {
+      return "gas policy daily request budget has been exhausted";
+    }
+
+    return null;
   }
 
   private async buildPartnerDeliverySummary(deliveryId: string) {
@@ -2450,6 +2703,14 @@ export class OperatorService {
 
   private requireCasePermission(permissions: OperatorPermissionSet): void {
     if (!permissions.canManageCases) {
+      throw new ForbiddenException("operator permissions are insufficient");
+    }
+  }
+
+  private requireSponsoredTransactionPermission(
+    permissions: OperatorPermissionSet
+  ): void {
+    if (!permissions.canManageSponsoredTransactions) {
       throw new ForbiddenException("operator permissions are insufficient");
     }
   }

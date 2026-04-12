@@ -906,6 +906,7 @@ test("audit service lists sponsored transaction request logs for organization me
     chainId: 84532,
     createdAt: now,
     data: "0x1234",
+    decidedByOperatorAccountId: null,
     dealMilestoneSettlementRequestId: null,
     dealVersionId: "version-1",
     draftDealId: "draft-1",

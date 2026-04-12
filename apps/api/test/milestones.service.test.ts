@@ -1995,6 +1995,7 @@ test("sponsorship service reuses settlement execution calldata from the executio
       sponsored.sponsoredTransactionRequest.value,
       plan.plan.executionTransaction.value
     );
+    assert.equal(sponsored.sponsoredTransactionRequest.status, "PENDING");
     const sponsoredRequestAuditLogs = await services.auditService.listByEntity(
       {
         entityId: sponsored.sponsoredTransactionRequest.id,
@@ -2633,6 +2634,7 @@ test("milestones service marks approved settlement sponsorship requests as submi
     chainId: 84532,
     createdAt: sponsoredRequestCreatedAt,
     data: "0x1234",
+    decidedByOperatorAccountId: null,
     dealMilestoneSettlementRequestId: "settlement-request-sponsored",
     dealVersionId: seeded.version.version.id,
     draftDealId: seeded.draft.draft.id,
@@ -2743,6 +2745,7 @@ test("milestones service does not match expired settlement sponsorship requests 
     chainId: 84532,
     createdAt: sponsoredRequestCreatedAt,
     data: "0x1234",
+    decidedByOperatorAccountId: null,
     dealMilestoneSettlementRequestId: "settlement-request-sponsored-expired",
     dealVersionId: seeded.version.version.id,
     draftDealId: seeded.draft.draft.id,

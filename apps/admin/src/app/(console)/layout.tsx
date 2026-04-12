@@ -27,6 +27,7 @@ export default async function ConsoleLayout({
     { href: "/health", label: messages.navigation.health },
     { href: "/reconciliation", label: messages.navigation.reconciliation },
     { href: "/alerts", label: messages.navigation.alerts },
+    { href: "/sponsorship", label: messages.navigation.sponsorship },
     { href: "/checkpoints", label: messages.navigation.checkpoints },
     { href: "/cases", label: messages.navigation.cases },
     { href: "/partners", label: messages.navigation.partners },

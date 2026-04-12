@@ -20,6 +20,7 @@ export type SponsoredTransactionKind = z.infer<
 >;
 
 export const sponsoredTransactionStatusSchema = z.enum([
+  "PENDING",
   "APPROVED",
   "REJECTED",
   "SUBMITTED",
@@ -137,6 +138,7 @@ export interface SponsoredTransactionRequestSummary {
   chainId: ChainId;
   createdAt: IsoTimestamp;
   data: HexString;
+  decidedByOperatorAccountId: EntityId | null;
   dealMilestoneSettlementRequestId: EntityId | null;
   dealVersionId: EntityId | null;
   draftDealId: EntityId | null;

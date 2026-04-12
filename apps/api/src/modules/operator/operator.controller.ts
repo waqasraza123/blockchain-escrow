@@ -30,6 +30,7 @@ import type {
   CreateProtocolProposalDraftInput,
   CreateTenantDomainInput,
   CreateTenantDomainResponse,
+  DecideSponsoredTransactionRequestInput,
   DecideComplianceCheckpointInput,
   InvoiceActionInput,
   InvoiceDetailResponse,
@@ -42,6 +43,8 @@ import type {
   ListInvoicesResponse,
   ListOperatorAlertsParams,
   ListOperatorAlertsResponse,
+  ListOperatorSponsoredTransactionRequestsParams,
+  ListOperatorSponsoredTransactionRequestsResponse,
   ListPartnerAccountsResponse,
   ListProtocolProposalDraftsResponse,
   ListTenantDomainsResponse,
@@ -49,6 +52,7 @@ import type {
   OperatorDashboardResponse,
   OperatorHealthResponse,
   OperatorReconciliationResponse,
+  OperatorSponsoredTransactionRequestParams,
   OperatorSearchParams,
   OperatorSearchResponse,
   OperatorSessionResponse,
@@ -428,6 +432,17 @@ export class OperatorController {
     return this.operatorService.listAlerts(query, readRequestMetadata(request));
   }
 
+  @Get("sponsored-transaction-requests")
+  async listSponsoredTransactionRequests(
+    @Query() query: ListOperatorSponsoredTransactionRequestsParams,
+    @Req() request: HttpRequestLike
+  ): Promise<ListOperatorSponsoredTransactionRequestsResponse> {
+    return this.operatorService.listSponsoredTransactionRequests(
+      query,
+      readRequestMetadata(request)
+    );
+  }
+
   @Post("alerts/:alertId/acknowledge")
   async acknowledgeAlert(
     @Param() params: OperatorAlertActionParams,
@@ -448,6 +463,19 @@ export class OperatorController {
     @Req() request: HttpRequestLike
   ) {
     return this.operatorService.resolveAlert(params, body, readRequestMetadata(request));
+  }
+
+  @Post("sponsored-transaction-requests/:sponsoredTransactionRequestId/decision")
+  async decideSponsoredTransactionRequest(
+    @Param() params: OperatorSponsoredTransactionRequestParams,
+    @Body() body: DecideSponsoredTransactionRequestInput,
+    @Req() request: HttpRequestLike
+  ) {
+    return this.operatorService.decideSponsoredTransactionRequest(
+      params,
+      body,
+      readRequestMetadata(request)
+    );
   }
 
   @Get("checkpoints")

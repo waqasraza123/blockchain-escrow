@@ -18,6 +18,7 @@ import { InMemoryRelease1Repositories } from "./helpers/in-memory-release1-repos
 import { InMemoryRelease11Repositories } from "./helpers/in-memory-release11-repositories";
 import { InMemoryRelease4Repositories } from "./helpers/in-memory-release4-repositories";
 import { InMemoryRelease8Repositories } from "./helpers/in-memory-release8-repositories";
+import { createRelease12RepositoriesStub } from "./helpers/release12-test-stub";
 
 const configuration: OperatorConfiguration = {
   chainId: 84532,
@@ -34,6 +35,8 @@ function createServices() {
   const release4Repositories = new InMemoryRelease4Repositories();
   const release8Repositories = new InMemoryRelease8Repositories();
   const release10Repositories = new InMemoryRelease11Repositories();
+  const { gasPolicyStore, release12Repositories, sponsoredRequestStore } =
+    createRelease12RepositoriesStub();
   const sessionTokenService = new FakeSessionTokenService();
   const authenticatedSessionService = new AuthenticatedSessionService(
     release1Repositories,
@@ -48,16 +51,20 @@ function createServices() {
       release1Repositories,
       release4Repositories,
       release10Repositories,
+      release12Repositories,
       release8Repositories,
       authenticatedSessionService,
       tenantService,
       configuration
     ),
+    gasPolicyStore,
     release1Repositories,
     release10Repositories,
+    release12Repositories,
     release4Repositories,
     release8Repositories,
-    sessionTokenService
+    sessionTokenService,
+    sponsoredRequestStore
   };
 }
 
@@ -442,4 +449,151 @@ test("operator health aggregates remote readiness and protocol proposal drafts e
   } finally {
     globalThis.fetch = originalFetch;
   }
+});
+
+test("compliance operators can review pending sponsored transaction requests", async () => {
+  const services = createServices();
+  const actor = await seedOperatorActor(services, "COMPLIANCE");
+  const now = new Date().toISOString();
+
+  await services.release1Repositories.organizations.create({
+    createdAt: now,
+    createdByUserId: actor.userId,
+    id: "org-1",
+    name: "Acme Procurement",
+    slug: "acme-procurement",
+    updatedAt: now
+  });
+  await services.release1Repositories.draftDeals.create({
+    createdAt: now,
+    createdByUserId: actor.userId,
+    id: "draft-1",
+    organizationId: "org-1",
+    settlementCurrency: "USDC",
+    state: "ACTIVE",
+    summary: "Sponsored funding review",
+    templateId: null,
+    title: "Sponsored Deal",
+    updatedAt: now
+  });
+  await services.release1Repositories.dealVersions.create({
+    bodyMarkdown: "# Sponsored",
+    createdAt: now,
+    createdByUserId: actor.userId,
+    draftDealId: "draft-1",
+    id: "version-1",
+    organizationId: "org-1",
+    settlementCurrency: "USDC",
+    summary: "Sponsored version",
+    templateId: null,
+    title: "Sponsored Deal v1",
+    versionNumber: 1
+  });
+
+  services.gasPolicyStore.set("gas-policy-1", {
+    active: true,
+    allowedApprovalPolicyKinds: [],
+    allowedChainIds: [84532],
+    allowedTransactionKinds: ["FUNDING_TRANSACTION_CREATE"],
+    createdAt: now,
+    createdByUserId: actor.userId,
+    description: null,
+    id: "gas-policy-1",
+    maxAmountMinor: "1000000",
+    maxRequestsPerDay: 5,
+    name: "Funding sponsor",
+    organizationId: "org-1",
+    sponsorWindowMinutes: 30,
+    updatedAt: now
+  });
+  services.sponsoredRequestStore.set("sponsored-request-1", {
+    amountMinor: "500000",
+    approvedAt: null,
+    chainId: 84532,
+    createdAt: now,
+    data: "0x1234",
+    decidedByOperatorAccountId: null,
+    dealMilestoneSettlementRequestId: null,
+    dealVersionId: "version-1",
+    draftDealId: "draft-1",
+    expiresAt: now,
+    gasPolicyId: "gas-policy-1",
+    id: "sponsored-request-1",
+    kind: "FUNDING_TRANSACTION_CREATE",
+    organizationId: "org-1",
+    reason: null,
+    requestedByUserId: actor.userId,
+    rejectedAt: null,
+    status: "PENDING",
+    subjectId: "version-1",
+    subjectType: "DEAL_VERSION",
+    submittedAt: null,
+    submittedTransactionHash: null,
+    toAddress: "0x1111111111111111111111111111111111111111",
+    updatedAt: now,
+    value: "0",
+    walletAddress: "0x1111111111111111111111111111111111111111",
+    walletId: actor.walletId
+  });
+
+  const listed = await services.operatorService.listSponsoredTransactionRequests(
+    { status: "PENDING" },
+    requestMetadata(actor.cookieHeader)
+  );
+  const approved = await services.operatorService.decideSponsoredTransactionRequest(
+    { sponsoredTransactionRequestId: "sponsored-request-1" },
+    { status: "APPROVED" },
+    requestMetadata(actor.cookieHeader)
+  );
+
+  assert.equal(listed.sponsoredTransactionRequests.length, 1);
+  assert.equal(listed.sponsoredTransactionRequests[0]?.subject.label, "Sponsored Deal v1");
+  assert.equal(approved.status, "APPROVED");
+  assert.equal(approved.decidedByOperatorAccountId, "operator-1");
+  assert.ok(approved.approvedAt);
+});
+
+test("viewer operators cannot decide sponsored transaction requests", async () => {
+  const services = createServices();
+  const actor = await seedOperatorActor(services, "VIEWER");
+  const now = new Date().toISOString();
+
+  services.sponsoredRequestStore.set("sponsored-request-1", {
+    amountMinor: "500000",
+    approvedAt: null,
+    chainId: 84532,
+    createdAt: now,
+    data: "0x1234",
+    decidedByOperatorAccountId: null,
+    dealMilestoneSettlementRequestId: null,
+    dealVersionId: "version-1",
+    draftDealId: "draft-1",
+    expiresAt: now,
+    gasPolicyId: "gas-policy-1",
+    id: "sponsored-request-1",
+    kind: "FUNDING_TRANSACTION_CREATE",
+    organizationId: "org-1",
+    reason: null,
+    requestedByUserId: actor.userId,
+    rejectedAt: null,
+    status: "PENDING",
+    subjectId: "version-1",
+    subjectType: "DEAL_VERSION",
+    submittedAt: null,
+    submittedTransactionHash: null,
+    toAddress: "0x1111111111111111111111111111111111111111",
+    updatedAt: now,
+    value: "0",
+    walletAddress: "0x1111111111111111111111111111111111111111",
+    walletId: actor.walletId
+  });
+
+  await assert.rejects(
+    services.operatorService.decideSponsoredTransactionRequest(
+      { sponsoredTransactionRequestId: "sponsored-request-1" },
+      { note: "no", status: "REJECTED" },
+      requestMetadata(actor.cookieHeader)
+    ),
+    /operator permissions are insufficient/
+  );
 });

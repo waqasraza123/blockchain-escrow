@@ -107,10 +107,16 @@ function buildSponsoredRequestUiState(input: {
   approvedMessage: string;
   expiredMessage: string;
   latestRequest: SponsoredTransactionRequestSummary | null;
+  pendingMessage: string;
   rejectedMessage: string;
   submittedMessage: string;
 }) {
   switch (input.latestRequest?.status) {
+    case "PENDING":
+      return {
+        canRequest: false,
+        contextMessage: input.pendingMessage
+      };
     case "APPROVED":
       return {
         canRequest: false,
@@ -244,6 +250,7 @@ export default async function VersionDetailPage(props: VersionDetailPageProps) {
     approvedMessage: messages.wallets.approvedSponsoredRequestPending,
     expiredMessage: messages.wallets.expiredSponsoredRequestMessage,
     latestRequest: latestFundingSponsoredRequest,
+    pendingMessage: messages.wallets.pendingSponsoredRequestReview,
     rejectedMessage: messages.wallets.rejectedSponsoredRequestMessage,
     submittedMessage: messages.wallets.submittedSponsoredRequestPending
   });
@@ -436,10 +443,12 @@ export default async function VersionDetailPage(props: VersionDetailPageProps) {
                   )}
                 />
               </div>
-              <div className="detail-item">
-                <span className="muted">{messages.wallets.expires}</span>
-                <strong>{latestFundingSponsoredRequest.expiresAt}</strong>
-              </div>
+              {latestFundingSponsoredRequest.status !== "PENDING" ? (
+                <div className="detail-item">
+                  <span className="muted">{messages.wallets.expires}</span>
+                  <strong>{latestFundingSponsoredRequest.expiresAt}</strong>
+                </div>
+              ) : null}
               {latestFundingSponsoredRequest.submittedTransactionHash ? (
                 <div className="detail-item">
                   <span className="muted">{messages.wallets.submittedHash}</span>
@@ -621,6 +630,7 @@ export default async function VersionDetailPage(props: VersionDetailPageProps) {
                 approvedMessage: messages.wallets.approvedSponsoredRequestPending,
                 expiredMessage: messages.wallets.expiredSponsoredRequestMessage,
                 latestRequest: latestSettlementSponsoredRequest,
+                pendingMessage: messages.wallets.pendingSponsoredRequestReview,
                 rejectedMessage: messages.wallets.rejectedSponsoredRequestMessage,
                 submittedMessage: messages.wallets.submittedSponsoredRequestPending
               });
@@ -850,10 +860,12 @@ export default async function VersionDetailPage(props: VersionDetailPageProps) {
                           )}
                         />
                       </div>
-                      <div className="detail-item">
-                        <span className="muted">{messages.wallets.expires}</span>
-                        <strong>{latestSettlementSponsoredRequest.expiresAt}</strong>
-                      </div>
+                      {latestSettlementSponsoredRequest.status !== "PENDING" ? (
+                        <div className="detail-item">
+                          <span className="muted">{messages.wallets.expires}</span>
+                          <strong>{latestSettlementSponsoredRequest.expiresAt}</strong>
+                        </div>
+                      ) : null}
                       {latestSettlementSponsoredRequest.submittedTransactionHash ? (
                         <div className="detail-item">
                           <span className="muted">{messages.wallets.submittedHash}</span>
