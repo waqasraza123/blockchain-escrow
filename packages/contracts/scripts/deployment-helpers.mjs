@@ -221,6 +221,19 @@ export async function loadBroadcastDeployment(broadcastFile) {
   const contents = await readFile(broadcastFile, "utf8");
   const parsed = JSON.parse(contents);
   const transactions = Array.isArray(parsed.transactions) ? parsed.transactions : [];
+  const receipts = Array.isArray(parsed.receipts) ? parsed.receipts : [];
+  const receiptBlockNumbersByHash = new Map(
+    receipts
+      .filter(
+        (item) =>
+          item &&
+          typeof item.transactionHash === "string" &&
+          item.transactionHash.length > 0 &&
+          typeof item.blockNumber === "string" &&
+          item.blockNumber.length > 0
+      )
+      .map((item) => [item.transactionHash.toLowerCase(), item.blockNumber])
+  );
 
   const contracts = {};
 
@@ -250,7 +263,12 @@ export async function loadBroadcastDeployment(broadcastFile) {
         item.transaction.from.length > 0
     )?.transaction.from ?? null;
   const deploymentStartBlock = transactions.reduce((lowestBlock, item) => {
-    const blockNumber = item?.receipt?.blockNumber ?? item?.transaction?.blockNumber;
+    const transactionHash =
+      typeof item?.hash === "string" && item.hash.length > 0 ? item.hash.toLowerCase() : null;
+    const blockNumber =
+      item?.receipt?.blockNumber ??
+      (transactionHash ? receiptBlockNumbersByHash.get(transactionHash) : null) ??
+      item?.transaction?.blockNumber;
 
     if (typeof blockNumber !== "string" || blockNumber.length === 0) {
       return lowestBlock;

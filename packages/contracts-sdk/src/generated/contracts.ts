@@ -2876,10 +2876,10 @@ export const deploymentManifests: Record<string, DeploymentManifest> = {
   "base-sepolia": {
     "chainId": 84532,
     "network": "base-sepolia",
-    "contractVersion": 1,
+    "contractVersion": 2,
     "explorerUrl": "https://sepolia.basescan.org",
-    "deployedAt": "2026-04-05T06:17:49.519Z",
-    "deploymentStartBlock": "39797620",
+    "deployedAt": "2026-04-11T06:13:58.078Z",
+    "deploymentStartBlock": "40059815",
     "deployer": "0x00e5e8d73a66588ab7fb63383f8f558ba59c929d",
     "owner": "0x00e5e8d73a66588ab7fb63383f8f558ba59c929d",
     "pendingOwner": "0x573b6f6F84cdf764Ee25cCeEA673a4cd259abFDb",
@@ -2887,12 +2887,12 @@ export const deploymentManifests: Record<string, DeploymentManifest> = {
     "usdcToken": "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
     "protocolFeeBps": 0,
     "contracts": {
-      "TokenAllowlist": "0xa46bb7cc73f292d77e27b27fac6863601ce1d49b",
-      "ArbitratorRegistry": "0x968f65ff5627b3581d82c86ab78826e010bdc583",
-      "ProtocolConfig": "0x0f133ac8d69a16efab20709479a521880b509613",
-      "FeeVault": "0xeca4953857048466bd2958273c9b470c28ecab2e",
-      "EscrowAgreement": "0x43292d7fac721139157c69effd18afc6739815f6",
-      "EscrowFactory": "0x47ca3d3f2f6a62240c1e1197dabdf45f05534d83"
+      "TokenAllowlist": "0x9bcf5a5b5e1dd0599ee72175f65fa6cbbb71de8c",
+      "ArbitratorRegistry": "0x05d7e4a9580af50da81ec464b5001cc32c3df05b",
+      "ProtocolConfig": "0x462440c98eb9280986ba407eb03b9fb1c386ff8c",
+      "FeeVault": "0xb11586a31e73335a66d5b962225de82ea9fe91b0",
+      "EscrowAgreement": "0x9588c5a0bc4a65ec95ec21eb0fee5cb662912b41",
+      "EscrowFactory": "0xd3fb68579662c948484f955c343338747ceb2ffa"
     }
   }
 };
