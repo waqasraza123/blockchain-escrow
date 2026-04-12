@@ -5,8 +5,10 @@ import type {
   FundingTransactionRecord,
   OperatorAlertRecord,
   Release1Repositories,
+  Release12Repositories,
   Release4Repositories,
   Release8Repositories,
+  SponsoredTransactionRequestRecord,
   DealMilestoneSettlementExecutionTransactionRecord
 } from "@blockchain-escrow/db";
 import type { JsonObject, OperatorAlertKind } from "@blockchain-escrow/shared";
@@ -42,6 +44,7 @@ const managedAlertKinds: readonly OperatorAlertKind[] = [
   "INDEXER_CURSOR_STALE",
   "INDEXER_DRIFT_FAILURE",
   "SERVICE_UNHEALTHY",
+  "SPONSORED_TRANSACTION_REQUEST_STALE_PENDING_REVIEW",
   "SETTLEMENT_EXECUTION_FAILED",
   "SETTLEMENT_EXECUTION_MISMATCHED",
   "SETTLEMENT_EXECUTION_STALE_PENDING"
@@ -166,6 +169,45 @@ function buildDisputeAlertDetection(
   };
 }
 
+function buildSponsoredTransactionRequestAlertDetection(
+  request: SponsoredTransactionRequestRecord,
+  ageSeconds: number,
+  subjectLabel: string
+): ManagedAlertDetection {
+  const subjectId =
+    request.draftDealId ?? `sponsored-transaction-request:${request.id}`;
+  const subjectType: ManagedAlertDetection["subjectType"] = request.draftDealId
+    ? "DRAFT_DEAL"
+    : "SYSTEM";
+
+  return {
+    agreementAddress: null,
+    dealVersionId: request.dealVersionId,
+    description:
+      "Sponsored transaction request remains pending operator review beyond the configured threshold.",
+    draftDealId: request.draftDealId,
+    fingerprint: `SPONSORED_TRANSACTION_REQUEST_STALE_PENDING_REVIEW:${request.id}`,
+    kind: "SPONSORED_TRANSACTION_REQUEST_STALE_PENDING_REVIEW",
+    metadata: {
+      chainId: request.chainId,
+      createdAt: request.createdAt,
+      dealMilestoneSettlementRequestId: request.dealMilestoneSettlementRequestId,
+      gasPolicyId: request.gasPolicyId,
+      kind: request.kind,
+      pendingAgeSeconds: ageSeconds,
+      requestId: request.id,
+      subjectId: request.subjectId,
+      subjectType: request.subjectType,
+      walletId: request.walletId
+    },
+    organizationId: request.organizationId,
+    severity: "MEDIUM",
+    subjectId,
+    subjectLabel,
+    subjectType
+  };
+}
+
 function buildSystemAlertDetection(input: {
   chainId: number;
   cursorKey?: string;
@@ -210,6 +252,7 @@ export interface OperatorAlertReconciliationResult {
 export class OperatorAlertReconciler {
   constructor(
     private readonly release1Repositories: Release1Repositories,
+    private readonly release12Repositories: Release12Repositories,
     private readonly release4Repositories: Release4Repositories,
     private readonly release8Repositories: Release8Repositories,
     private readonly chainId: number,
@@ -219,9 +262,15 @@ export class OperatorAlertReconciler {
   ) {}
 
   async reconcileOnce(): Promise<OperatorAlertReconciliationResult> {
+    const evaluatedAt = this.now();
+    const pendingSponsoredTransactionReviewCutoff = new Date(
+      toTimestampMs(evaluatedAt) -
+        this.configuration.pendingSponsoredTransactionReviewAfterSeconds * 1000
+    ).toISOString();
     const [
       fundingTransactions,
       settlementTransactions,
+      pendingSponsoredTransactionRequests,
       disputes,
       existingAlerts,
       chainCursor,
@@ -230,6 +279,9 @@ export class OperatorAlertReconciler {
       this.release1Repositories.fundingTransactions.listByChainId(this.chainId),
       this.release1Repositories.dealMilestoneSettlementExecutionTransactions.listByChainId(
         this.chainId
+      ),
+      this.release12Repositories.sponsoredTransactionRequests.listPendingReviewCreatedBefore(
+        pendingSponsoredTransactionReviewCutoff
       ),
       this.release1Repositories.dealMilestoneDisputes.listAll(),
       this.release8Repositories.operatorAlerts.listAll(),
@@ -241,7 +293,6 @@ export class OperatorAlertReconciler {
     ]);
 
     const detections: ManagedAlertDetection[] = [];
-    const evaluatedAt = this.now();
 
     for (const transaction of fundingTransactions) {
       if (
@@ -312,6 +363,29 @@ export class OperatorAlertReconciler {
       if (ageSeconds >= this.configuration.unresolvedDisputeAfterSeconds) {
         detections.push(buildDisputeAlertDetection(dispute, ageSeconds));
       }
+    }
+
+    for (const request of pendingSponsoredTransactionRequests) {
+      const ageSeconds = Math.floor(
+        (toTimestampMs(evaluatedAt) - toTimestampMs(request.createdAt)) / 1000
+      );
+
+      if (
+        ageSeconds < this.configuration.pendingSponsoredTransactionReviewAfterSeconds
+      ) {
+        continue;
+      }
+
+      const subjectLabel = await this.resolveSponsoredTransactionRequestSubjectLabel(
+        request
+      );
+      detections.push(
+        buildSponsoredTransactionRequestAlertDetection(
+          request,
+          ageSeconds,
+          subjectLabel
+        )
+      );
     }
 
     const cursorFresh =
@@ -483,8 +557,27 @@ export class OperatorAlertReconciler {
       autoResolvedOperatorAlertCount,
       reopenedOperatorAlertCount,
       scannedOperatorAlertSourceCount:
-        fundingTransactions.length + settlementTransactions.length + disputes.length
+        fundingTransactions.length +
+        settlementTransactions.length +
+        pendingSponsoredTransactionRequests.length +
+        disputes.length
     };
+  }
+
+  private async resolveSponsoredTransactionRequestSubjectLabel(
+    request: SponsoredTransactionRequestRecord
+  ): Promise<string> {
+    if (request.draftDealId) {
+      const draft = await this.release1Repositories.draftDeals.findById(
+        request.draftDealId
+      );
+
+      if (draft) {
+        return draft.title;
+      }
+    }
+
+    return request.id;
   }
 
   private async probeIndexerHealth(): Promise<RemoteHealthProbe> {

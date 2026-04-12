@@ -138,6 +138,15 @@ export function createRelease12RepositoriesStub() {
         [...sponsoredRequestStore.values()].filter(
           (record) => record.organizationId === organizationId
         ),
+      listPendingReviewCreatedBefore: async (createdBefore: string) =>
+        [...sponsoredRequestStore.values()]
+          .filter(
+            (record) =>
+              record.status === "PENDING" &&
+              new Date(record.createdAt).getTime() <=
+                new Date(createdBefore).getTime()
+          )
+          .sort((left, right) => left.createdAt.localeCompare(right.createdAt)),
       update: async (
         id: string,
         updates: Partial<

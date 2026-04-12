@@ -41,6 +41,7 @@ export const operatorAlertStatusSchema = z.enum([
 export type OperatorAlertStatus = z.infer<typeof operatorAlertStatusSchema>;
 
 export const operatorAlertKindSchema = z.enum([
+  "SPONSORED_TRANSACTION_REQUEST_STALE_PENDING_REVIEW",
   "FUNDING_TRANSACTION_STALE_PENDING",
   "FUNDING_TRANSACTION_FAILED",
   "FUNDING_TRANSACTION_MISMATCHED",

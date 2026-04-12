@@ -131,6 +131,7 @@ enum MilestoneSettlementRequestSource {
 }
 
 enum OperatorAlertKind {
+  SPONSORED_TRANSACTION_REQUEST_STALE_PENDING_REVIEW
   FUNDING_TRANSACTION_STALE_PENDING
   FUNDING_TRANSACTION_FAILED
   FUNDING_TRANSACTION_MISMATCHED
@@ -759,6 +760,7 @@ model SponsoredTransactionRequest {
   @@index([decidedByOperatorAccountId], map: "sponsored_tx_requests_decided_by_operator_idx")
   @@index([status], map: "sponsored_transaction_requests_status_idx")
   @@index([status, submittedAt, expiresAt], map: "sponsored_transaction_requests_lifecycle_idx")
+  @@index([status, createdAt], map: "sponsored_transaction_requests_pending_review_idx")
   @@index([subjectType, subjectId], map: "sponsored_transaction_requests_subject_idx")
   @@index([createdAt], map: "sponsored_transaction_requests_created_at_idx")
   @@map("sponsored_transaction_requests")

@@ -553,6 +553,9 @@ export interface SponsoredTransactionRequestRepository {
   listByOrganizationId(
     organizationId: EntityId
   ): Promise<SponsoredTransactionRequestRecord[]>;
+  listPendingReviewCreatedBefore(
+    createdBefore: IsoTimestamp
+  ): Promise<SponsoredTransactionRequestRecord[]>;
   update(
     id: EntityId,
     updates: Partial<

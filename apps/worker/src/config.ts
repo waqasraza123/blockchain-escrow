@@ -57,6 +57,7 @@ export interface WorkerMilestoneSettlementExecutionReconciliationConfiguration {
 export interface WorkerOperatorAlertConfiguration {
   readonly indexerBaseUrl: string;
   readonly indexerFreshnessTtlSeconds: number;
+  readonly pendingSponsoredTransactionReviewAfterSeconds: number;
   readonly release4CursorKey: string;
   readonly requestTimeoutMs: number;
   readonly unresolvedDisputeAfterSeconds: number;
@@ -129,6 +130,10 @@ export function loadWorkerConfig(): WorkerConfig {
       indexerFreshnessTtlSeconds: parsePositiveInteger(
         "WORKER_OPERATOR_ALERT_INDEXER_FRESHNESS_TTL_SECONDS",
         parsePositiveInteger("FUNDING_INDEXER_FRESHNESS_TTL_SECONDS", 300)
+      ),
+      pendingSponsoredTransactionReviewAfterSeconds: parsePositiveInteger(
+        "WORKER_OPERATOR_ALERT_PENDING_SPONSORED_TRANSACTION_REVIEW_AFTER_SECONDS",
+        3600
       ),
       release4CursorKey:
         parseOptionalString(process.env.WORKER_OPERATOR_ALERT_RELEASE4_CURSOR_KEY) ??

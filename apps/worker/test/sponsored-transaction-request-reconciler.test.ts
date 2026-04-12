@@ -19,6 +19,7 @@ function createRequest(
     chainId: 84532,
     createdAt: "2026-04-12T09:00:00.000Z",
     data: "0x1234",
+    decidedByOperatorAccountId: null,
     dealMilestoneSettlementRequestId: null,
     dealVersionId: "version-1",
     draftDealId: "draft-1",

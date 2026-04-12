@@ -254,6 +254,14 @@ function normalizeAgreementAddress(
   return address.toLowerCase() as `0x${string}`;
 }
 
+function readStringMetadataValue(
+  metadata: JsonObject | null,
+  key: string
+): string | null {
+  const value = metadata?.[key];
+  return typeof value === "string" && value.length > 0 ? value : null;
+}
+
 function findDraftByCanonicalDealId(
   drafts: readonly DraftDealRecord[],
   canonicalDealId: string
@@ -1475,6 +1483,29 @@ export class OperatorService {
     }
 
     const queue = [
+      ...alerts
+        .filter(
+          (entry) =>
+            entry.kind === "SPONSORED_TRANSACTION_REQUEST_STALE_PENDING_REVIEW" &&
+            entry.status !== "RESOLVED"
+        )
+        .map((entry) => ({
+          agreementAddress: entry.agreementAddress,
+          entityId: readStringMetadataValue(entry.metadata, "requestId") ?? entry.subjectId,
+          kind: entry.kind,
+          organizationId: entry.organizationId,
+          status: entry.status === "ACKNOWLEDGED" ? "ACKNOWLEDGED" : "STALE_PENDING_REVIEW",
+          subject: buildSubjectSummary({
+            agreementAddress: entry.agreementAddress,
+            dealVersionId: entry.dealVersionId,
+            draftDealId: entry.draftDealId,
+            label: entry.subjectLabel,
+            organizationId: entry.organizationId,
+            subjectId: entry.subjectId,
+            subjectType: entry.subjectType
+          }),
+          updatedAt: entry.lastDetectedAt
+        })),
       ...staleFunding.map((entry) => ({
         agreementAddress: entry.reconciledAgreementAddress,
         entityId: entry.id,
@@ -1580,7 +1611,11 @@ export class OperatorService {
       staleFundingCount: staleFunding.length,
       staleSettlementExecutionCount: staleSettlement.length,
       unresolvedOperatorReviewCount:
-        alerts.filter((entry) => entry.status !== "RESOLVED").length +
+        alerts.filter(
+          (entry) =>
+            entry.status !== "RESOLVED" &&
+            entry.kind !== "SPONSORED_TRANSACTION_REQUEST_STALE_PENDING_REVIEW"
+        ).length +
         checkpoints.filter((entry) => entry.status === "PENDING").length +
         cases.filter((entry) => entry.status !== "RESOLVED").length +
         sponsorshipRequests.filter((entry) => entry.status === "PENDING").length

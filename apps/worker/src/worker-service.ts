@@ -87,6 +87,7 @@ export class WorkerService {
       );
     this.operatorAlertReconciler = new OperatorAlertReconciler(
       this.release1Repositories,
+      this.release12Repositories,
       this.release4Repositories,
       this.release8Repositories,
       this.config.chainId,

@@ -597,3 +597,99 @@ test("viewer operators cannot decide sponsored transaction requests", async () =
     /operator permissions are insufficient/
   );
 });
+
+test("operator reconciliation queues stale sponsorship review alerts without double counting pending reviews", async () => {
+  const services = createServices();
+  const actor = await seedOperatorActor(services, "COMPLIANCE");
+  const now = new Date().toISOString();
+
+  await services.release1Repositories.organizations.create({
+    createdAt: now,
+    createdByUserId: actor.userId,
+    id: "org-1",
+    name: "Acme Procurement",
+    slug: "acme-procurement",
+    updatedAt: now
+  });
+  await services.release1Repositories.draftDeals.create({
+    createdAt: now,
+    createdByUserId: actor.userId,
+    id: "draft-1",
+    organizationId: "org-1",
+    settlementCurrency: "USDC",
+    state: "ACTIVE",
+    summary: "Escalated sponsorship review",
+    templateId: null,
+    title: "Escalated Sponsorship Deal",
+    updatedAt: now
+  });
+  services.sponsoredRequestStore.set("sponsored-request-1", {
+    amountMinor: "500000",
+    approvedAt: null,
+    chainId: 84532,
+    createdAt: "2026-04-08T09:00:00.000Z",
+    data: "0x1234",
+    decidedByOperatorAccountId: null,
+    dealMilestoneSettlementRequestId: null,
+    dealVersionId: "version-1",
+    draftDealId: "draft-1",
+    expiresAt: "2026-04-08T10:00:00.000Z",
+    gasPolicyId: "gas-policy-1",
+    id: "sponsored-request-1",
+    kind: "FUNDING_TRANSACTION_CREATE",
+    organizationId: "org-1",
+    reason: null,
+    requestedByUserId: actor.userId,
+    rejectedAt: null,
+    status: "PENDING",
+    subjectId: "version-1",
+    subjectType: "DEAL_VERSION",
+    submittedAt: null,
+    submittedTransactionHash: null,
+    toAddress: "0x1111111111111111111111111111111111111111",
+    updatedAt: "2026-04-08T09:00:00.000Z",
+    value: "0",
+    walletAddress: "0x1111111111111111111111111111111111111111",
+    walletId: actor.walletId
+  });
+  await services.release8Repositories.operatorAlerts.create({
+    acknowledgedAt: null,
+    acknowledgedByOperatorAccountId: null,
+    agreementAddress: null,
+    assignedOperatorAccountId: null,
+    dealVersionId: "version-1",
+    description:
+      "Sponsored transaction request remains pending operator review beyond the configured threshold.",
+    draftDealId: "draft-1",
+    fingerprint:
+      "SPONSORED_TRANSACTION_REQUEST_STALE_PENDING_REVIEW:sponsored-request-1",
+    firstDetectedAt: "2026-04-09T12:00:00.000Z",
+    id: "alert-sponsored-1",
+    kind: "SPONSORED_TRANSACTION_REQUEST_STALE_PENDING_REVIEW",
+    lastDetectedAt: "2026-04-09T12:00:00.000Z",
+    linkedComplianceCaseId: null,
+    metadata: { requestId: "sponsored-request-1" },
+    organizationId: "org-1",
+    resolvedAt: null,
+    resolvedByOperatorAccountId: null,
+    severity: "MEDIUM",
+    status: "OPEN",
+    subjectId: "draft-1",
+    subjectLabel: "Escalated Sponsorship Deal",
+    subjectType: "DRAFT_DEAL"
+  });
+
+  const reconciliation = await services.operatorService.getReconciliation(
+    requestMetadata(actor.cookieHeader)
+  );
+
+  assert.equal(reconciliation.unresolvedOperatorReviewCount, 1);
+  assert.equal(reconciliation.queue.length, 1);
+  assert.equal(
+    reconciliation.queue[0]?.kind,
+    "SPONSORED_TRANSACTION_REQUEST_STALE_PENDING_REVIEW"
+  );
+  assert.equal(reconciliation.queue[0]?.entityId, "sponsored-request-1");
+  assert.equal(reconciliation.queue[0]?.status, "STALE_PENDING_REVIEW");
+  assert.equal(reconciliation.queue[0]?.subject.label, "Escalated Sponsorship Deal");
+});

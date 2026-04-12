@@ -390,6 +390,16 @@ export function createRelease12Repositories(prisma: DatabaseClient): Release12Re
           where: { organizationId }
         })
       ).map(mapSponsoredTransactionRequestRecord),
+    listPendingReviewCreatedBefore: async (createdBefore) =>
+      (
+        await prisma.sponsoredTransactionRequest.findMany({
+          orderBy: { createdAt: "asc" },
+          where: {
+            createdAt: { lte: toDate(createdBefore) },
+            status: "PENDING"
+          }
+        })
+      ).map(mapSponsoredTransactionRequestRecord),
     update: async (id, updates) =>
       mapSponsoredTransactionRequestRecord(
         await prisma.sponsoredTransactionRequest.update({
