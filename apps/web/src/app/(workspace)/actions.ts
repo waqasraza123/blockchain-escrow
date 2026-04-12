@@ -30,12 +30,6 @@ export type TransactionRecordActionState = {
   transactionHash: string | null;
 };
 
-export const initialTransactionRecordActionState: TransactionRecordActionState = {
-  error: null,
-  ok: false,
-  transactionHash: null
-};
-
 function formatActionError(caught: unknown): string {
   return caught instanceof Error && caught.message.trim().length > 0
     ? caught.message

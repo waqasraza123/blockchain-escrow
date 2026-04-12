@@ -10,7 +10,6 @@ import {
 } from "react";
 
 import {
-  initialTransactionRecordActionState,
   recordFundingTransactionAction,
   recordSettlementExecutionTransactionAction
 } from "./actions";
@@ -49,6 +48,12 @@ type WalletExecutionCardProps = {
   returnPath: string;
   trackingFields: Record<string, string>;
   transaction: PreparedTransaction;
+};
+
+const initialTransactionRecordActionState = {
+  error: null,
+  ok: false,
+  transactionHash: null
 };
 
 function normalizeAddress(address: string): string {
