@@ -24,6 +24,17 @@ function redirectBack(returnPath: string) {
   redirect(returnPath);
 }
 
+function parseCommaSeparatedStrings(value: FormDataEntryValue | null): string[] {
+  return String(value ?? "")
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+}
+
+function parseCommaSeparatedNumbers(value: FormDataEntryValue | null): number[] {
+  return parseCommaSeparatedStrings(value).map((entry) => Number(entry));
+}
+
 export type TransactionRecordActionState = {
   error: string | null;
   ok: boolean;
@@ -146,18 +157,16 @@ export async function upsertWalletProfileAction(formData: FormData) {
 export async function createGasPolicyAction(formData: FormData) {
   const organizationId = String(formData.get("organizationId"));
   const returnPath = String(formData.get("returnPath"));
-  const approvalKindsValue = String(formData.get("allowedApprovalPolicyKinds") ?? "").trim();
 
   await createGasPolicy(organizationId, {
     active: String(formData.get("active") ?? "") === "on",
-    allowedApprovalPolicyKinds: approvalKindsValue
-      ? approvalKindsValue.split(",").map((value) => value.trim()).filter(Boolean)
-      : [],
-    allowedChainIds: [Number(String(formData.get("allowedChainId") ?? "84532"))],
-    allowedTransactionKinds: String(formData.get("allowedTransactionKinds"))
-      .split(",")
-      .map((value) => value.trim())
-      .filter(Boolean),
+    allowedApprovalPolicyKinds: parseCommaSeparatedStrings(
+      formData.get("allowedApprovalPolicyKinds")
+    ),
+    allowedChainIds: parseCommaSeparatedNumbers(formData.get("allowedChainIds")),
+    allowedTransactionKinds: parseCommaSeparatedStrings(
+      formData.get("allowedTransactionKinds")
+    ),
     description: String(formData.get("description") ?? "").trim() || undefined,
     maxAmountMinor: String(formData.get("maxAmountMinor") ?? "").trim() || undefined,
     maxRequestsPerDay: Number(String(formData.get("maxRequestsPerDay"))),
@@ -172,9 +181,23 @@ export async function updateGasPolicyAction(formData: FormData) {
   const organizationId = String(formData.get("organizationId"));
   const gasPolicyId = String(formData.get("gasPolicyId"));
   const returnPath = String(formData.get("returnPath"));
+  const description = String(formData.get("description") ?? "").trim();
+  const maxAmountMinor = String(formData.get("maxAmountMinor") ?? "").trim();
 
   await updateGasPolicy(organizationId, gasPolicyId, {
-    active: String(formData.get("active") ?? "") === "on"
+    active: String(formData.get("active") ?? "") === "on",
+    allowedApprovalPolicyKinds: parseCommaSeparatedStrings(
+      formData.get("allowedApprovalPolicyKinds")
+    ),
+    allowedChainIds: parseCommaSeparatedNumbers(formData.get("allowedChainIds")),
+    allowedTransactionKinds: parseCommaSeparatedStrings(
+      formData.get("allowedTransactionKinds")
+    ),
+    description: description || null,
+    maxAmountMinor: maxAmountMinor || null,
+    maxRequestsPerDay: Number(String(formData.get("maxRequestsPerDay"))),
+    name: String(formData.get("name")),
+    sponsorWindowMinutes: Number(String(formData.get("sponsorWindowMinutes")))
   });
   revalidatePath(returnPath);
   redirectBack(returnPath);

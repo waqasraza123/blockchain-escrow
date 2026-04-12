@@ -8,10 +8,13 @@ import {
   FakeSessionTokenService,
   seedAuthenticatedActor
 } from "./helpers/auth-test-context";
+import { createRelease12RepositoriesStub } from "./helpers/release12-test-stub";
 import { InMemoryRelease1Repositories } from "./helpers/in-memory-release1-repositories";
 
 function createAuditService() {
   const repositories = new InMemoryRelease1Repositories();
+  const { gasPolicyStore, release12Repositories, sponsoredRequestStore } =
+    createRelease12RepositoriesStub();
   const sessionTokenService = new FakeSessionTokenService();
   const authenticatedSessionService = new AuthenticatedSessionService(
     repositories,
@@ -20,9 +23,15 @@ function createAuditService() {
   );
 
   return {
-    auditService: new AuditService(repositories, authenticatedSessionService),
+    auditService: new AuditService(
+      repositories,
+      release12Repositories,
+      authenticatedSessionService
+    ),
+    gasPolicyStore,
     repositories,
-    sessionTokenService
+    sessionTokenService,
+    sponsoredRequestStore
   };
 }
 
@@ -797,5 +806,158 @@ test("audit service lists counterparty deal version acceptance logs for organiza
   assert.equal(
     response.auditLogs[0]?.action,
     "DEAL_VERSION_COUNTERPARTY_ACCEPTANCE_CREATED"
+  );
+});
+
+test("audit service lists gas policy logs for organization members", async () => {
+  const { auditService, gasPolicyStore, repositories, sessionTokenService } =
+    createAuditService();
+  const actor = await seedAuthenticatedActor(repositories, sessionTokenService);
+  const now = new Date().toISOString();
+
+  await repositories.organizations.create({
+    createdAt: now,
+    createdByUserId: actor.userId,
+    id: "org-1",
+    name: "Acme",
+    slug: "acme",
+    updatedAt: now
+  });
+  await repositories.organizationMembers.add({
+    createdAt: now,
+    id: "member-1",
+    organizationId: "org-1",
+    role: "OWNER",
+    updatedAt: now,
+    userId: actor.userId
+  });
+  gasPolicyStore.set("gas-policy-1", {
+    active: true,
+    allowedApprovalPolicyKinds: [],
+    allowedChainIds: [84532],
+    allowedTransactionKinds: ["FUNDING_TRANSACTION_CREATE"],
+    createdAt: now,
+    createdByUserId: actor.userId,
+    description: null,
+    id: "gas-policy-1",
+    maxAmountMinor: null,
+    maxRequestsPerDay: 10,
+    name: "Operations",
+    organizationId: "org-1",
+    sponsorWindowMinutes: 30,
+    updatedAt: now
+  });
+  await repositories.auditLogs.append({
+    action: "GAS_POLICY_CREATED",
+    actorUserId: actor.userId,
+    entityId: "gas-policy-1",
+    entityType: "GAS_POLICY",
+    id: "audit-gas-policy-1",
+    ipAddress: "127.0.0.1",
+    metadata: {
+      name: "Operations"
+    },
+    occurredAt: now,
+    organizationId: "org-1",
+    userAgent: "test-agent"
+  });
+
+  const response = await auditService.listByEntity(
+    {
+      entityId: "gas-policy-1",
+      entityType: "GAS_POLICY"
+    },
+    {
+      cookieHeader: actor.cookieHeader,
+      ipAddress: "127.0.0.1",
+      userAgent: "test-agent"
+    }
+  );
+
+  assert.equal(response.auditLogs.length, 1);
+  assert.equal(response.auditLogs[0]?.action, "GAS_POLICY_CREATED");
+});
+
+test("audit service lists sponsored transaction request logs for organization members", async () => {
+  const { auditService, repositories, sessionTokenService, sponsoredRequestStore } =
+    createAuditService();
+  const actor = await seedAuthenticatedActor(repositories, sessionTokenService);
+  const now = new Date().toISOString();
+
+  await repositories.organizations.create({
+    createdAt: now,
+    createdByUserId: actor.userId,
+    id: "org-1",
+    name: "Acme",
+    slug: "acme",
+    updatedAt: now
+  });
+  await repositories.organizationMembers.add({
+    createdAt: now,
+    id: "member-1",
+    organizationId: "org-1",
+    role: "OWNER",
+    updatedAt: now,
+    userId: actor.userId
+  });
+  sponsoredRequestStore.set("sponsored-request-1", {
+    amountMinor: "1000000",
+    approvedAt: now,
+    chainId: 84532,
+    createdAt: now,
+    data: "0x1234",
+    dealMilestoneSettlementRequestId: null,
+    dealVersionId: "version-1",
+    draftDealId: "draft-1",
+    expiresAt: new Date(Date.now() + 60_000).toISOString(),
+    gasPolicyId: "gas-policy-1",
+    id: "sponsored-request-1",
+    kind: "FUNDING_TRANSACTION_CREATE",
+    organizationId: "org-1",
+    reason: null,
+    requestedByUserId: actor.userId,
+    rejectedAt: null,
+    status: "APPROVED",
+    subjectId: "version-1",
+    subjectType: "DEAL_VERSION",
+    submittedAt: null,
+    submittedTransactionHash: null,
+    toAddress: "0x1111111111111111111111111111111111111111",
+    updatedAt: now,
+    value: "0",
+    walletAddress: actor.walletAddress,
+    walletId: actor.walletId
+  });
+  await repositories.auditLogs.append({
+    action: "SPONSORED_TRANSACTION_REQUEST_CREATED",
+    actorUserId: actor.userId,
+    entityId: "sponsored-request-1",
+    entityType: "SPONSORED_TRANSACTION_REQUEST",
+    id: "audit-sponsored-request-1",
+    ipAddress: "127.0.0.1",
+    metadata: {
+      kind: "FUNDING_TRANSACTION_CREATE"
+    },
+    occurredAt: now,
+    organizationId: "org-1",
+    userAgent: "test-agent"
+  });
+
+  const response = await auditService.listByEntity(
+    {
+      entityId: "sponsored-request-1",
+      entityType: "SPONSORED_TRANSACTION_REQUEST"
+    },
+    {
+      cookieHeader: actor.cookieHeader,
+      ipAddress: "127.0.0.1",
+      userAgent: "test-agent"
+    }
+  );
+
+  assert.equal(response.auditLogs.length, 1);
+  assert.equal(
+    response.auditLogs[0]?.action,
+    "SPONSORED_TRANSACTION_REQUEST_CREATED"
   );
 });

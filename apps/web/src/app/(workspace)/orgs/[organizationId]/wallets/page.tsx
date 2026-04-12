@@ -23,6 +23,10 @@ type WalletsPageProps = {
   params: Promise<{ organizationId: string }>;
 };
 
+function formatCsv(values: Array<number | string>): string {
+  return values.join(", ");
+}
+
 export default async function WalletsPage(props: WalletsPageProps) {
   const { organizationId } = await props.params;
   const { messages } = await getI18n();
@@ -196,17 +200,101 @@ export default async function WalletsPage(props: WalletsPageProps) {
                         <input name="organizationId" type="hidden" value={organizationId} />
                         <input name="gasPolicyId" type="hidden" value={gasPolicy.id} />
                         <input name="returnPath" type="hidden" value={returnPath} />
-                        <label className="checkbox-row">
-                          <input
-                            defaultChecked={gasPolicy.active}
-                            name="active"
-                            type="checkbox"
-                          />
-                          <span>{messages.wallets.policyActive}</span>
-                        </label>
-                        <button className="button-ghost" type="submit">
-                          {messages.wallets.updatePolicy}
-                        </button>
+                        <div className="stack compact">
+                          <div className="field">
+                            <label htmlFor={`gas-policy-name-${gasPolicy.id}`}>
+                              {messages.wallets.policyName}
+                            </label>
+                            <input
+                              defaultValue={gasPolicy.name}
+                              id={`gas-policy-name-${gasPolicy.id}`}
+                              name="name"
+                            />
+                          </div>
+                          <div className="field">
+                            <label htmlFor={`gas-policy-description-${gasPolicy.id}`}>
+                              {messages.wallets.policyDescription}
+                            </label>
+                            <input
+                              defaultValue={gasPolicy.description ?? ""}
+                              id={`gas-policy-description-${gasPolicy.id}`}
+                              name="description"
+                            />
+                          </div>
+                          <div className="field">
+                            <label htmlFor={`gas-policy-chain-ids-${gasPolicy.id}`}>
+                              {messages.wallets.allowedChainIds}
+                            </label>
+                            <input
+                              defaultValue={formatCsv(gasPolicy.allowedChainIds)}
+                              id={`gas-policy-chain-ids-${gasPolicy.id}`}
+                              name="allowedChainIds"
+                            />
+                          </div>
+                          <div className="field">
+                            <label htmlFor={`gas-policy-transaction-kinds-${gasPolicy.id}`}>
+                              {messages.wallets.allowedTransactionKinds}
+                            </label>
+                            <input
+                              defaultValue={formatCsv(gasPolicy.allowedTransactionKinds)}
+                              id={`gas-policy-transaction-kinds-${gasPolicy.id}`}
+                              name="allowedTransactionKinds"
+                            />
+                          </div>
+                          <div className="field">
+                            <label htmlFor={`gas-policy-approval-kinds-${gasPolicy.id}`}>
+                              {messages.wallets.allowedApprovalPolicyKinds}
+                            </label>
+                            <input
+                              defaultValue={formatCsv(gasPolicy.allowedApprovalPolicyKinds)}
+                              id={`gas-policy-approval-kinds-${gasPolicy.id}`}
+                              name="allowedApprovalPolicyKinds"
+                            />
+                          </div>
+                          <div className="form-grid columns-3">
+                            <div className="field">
+                              <label htmlFor={`gas-policy-max-amount-${gasPolicy.id}`}>
+                                {messages.wallets.maxAmountMinor}
+                              </label>
+                              <input
+                                defaultValue={gasPolicy.maxAmountMinor ?? ""}
+                                id={`gas-policy-max-amount-${gasPolicy.id}`}
+                                name="maxAmountMinor"
+                              />
+                            </div>
+                            <div className="field">
+                              <label htmlFor={`gas-policy-max-requests-${gasPolicy.id}`}>
+                                {messages.wallets.maxRequestsPerDay}
+                              </label>
+                              <input
+                                defaultValue={String(gasPolicy.maxRequestsPerDay)}
+                                id={`gas-policy-max-requests-${gasPolicy.id}`}
+                                name="maxRequestsPerDay"
+                              />
+                            </div>
+                            <div className="field">
+                              <label htmlFor={`gas-policy-window-${gasPolicy.id}`}>
+                                {messages.wallets.sponsorWindowMinutes}
+                              </label>
+                              <input
+                                defaultValue={String(gasPolicy.sponsorWindowMinutes)}
+                                id={`gas-policy-window-${gasPolicy.id}`}
+                                name="sponsorWindowMinutes"
+                              />
+                            </div>
+                          </div>
+                          <label className="checkbox-row">
+                            <input
+                              defaultChecked={gasPolicy.active}
+                              name="active"
+                              type="checkbox"
+                            />
+                            <span>{messages.wallets.policyActive}</span>
+                          </label>
+                          <button className="button-ghost" type="submit">
+                            {messages.wallets.savePolicy}
+                          </button>
+                        </div>
                       </form>
                     </td>
                   </tr>
@@ -217,12 +305,6 @@ export default async function WalletsPage(props: WalletsPageProps) {
             <form action={createGasPolicyAction} className="form-grid">
               <input name="organizationId" type="hidden" value={organizationId} />
               <input name="returnPath" type="hidden" value={returnPath} />
-              <input
-                name="allowedTransactionKinds"
-                type="hidden"
-                value="FUNDING_TRANSACTION_CREATE,DEAL_MILESTONE_SETTLEMENT_EXECUTION_TRANSACTION_CREATE"
-              />
-              <input name="allowedChainId" type="hidden" value="84532" />
               <div className="form-grid columns-2">
                 <div className="field">
                   <label htmlFor="policy-name">{messages.wallets.policyName}</label>
@@ -254,6 +336,22 @@ export default async function WalletsPage(props: WalletsPageProps) {
                   {messages.wallets.allowedApprovalPolicyKinds}
                 </label>
                 <input id="allowedApprovalPolicyKinds" name="allowedApprovalPolicyKinds" />
+              </div>
+              <div className="form-grid columns-2">
+                <div className="field">
+                  <label htmlFor="allowedChainIds">{messages.wallets.allowedChainIds}</label>
+                  <input defaultValue="84532" id="allowedChainIds" name="allowedChainIds" />
+                </div>
+                <div className="field">
+                  <label htmlFor="allowedTransactionKinds">
+                    {messages.wallets.allowedTransactionKinds}
+                  </label>
+                  <input
+                    defaultValue="FUNDING_TRANSACTION_CREATE, DEAL_MILESTONE_SETTLEMENT_EXECUTION_TRANSACTION_CREATE"
+                    id="allowedTransactionKinds"
+                    name="allowedTransactionKinds"
+                  />
+                </div>
               </div>
               <label className="checkbox-row">
                 <input defaultChecked name="active" type="checkbox" />

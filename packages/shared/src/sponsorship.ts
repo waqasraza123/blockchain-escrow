@@ -56,16 +56,26 @@ export const createGasPolicySchema = z.object({
 });
 export type CreateGasPolicyInput = z.infer<typeof createGasPolicySchema>;
 
-export const updateGasPolicySchema = createGasPolicySchema.partial().superRefine(
-  (value, context) => {
+export const updateGasPolicySchema = z
+  .object({
+    active: z.boolean().optional(),
+    allowedApprovalPolicyKinds: z.array(approvalPolicyKindSchema).max(50).optional(),
+    allowedChainIds: z.array(z.number().int().positive()).min(1).max(10).optional(),
+    allowedTransactionKinds: z.array(sponsoredTransactionKindSchema).min(1).max(10).optional(),
+    description: z.string().trim().min(1).max(2000).nullable().optional(),
+    maxAmountMinor: amountMinorSchema.nullable().optional(),
+    maxRequestsPerDay: z.number().int().positive().max(500).optional(),
+    name: z.string().trim().min(1).max(160).optional(),
+    sponsorWindowMinutes: z.number().int().positive().max(24 * 60).optional()
+  })
+  .superRefine((value, context) => {
     if (Object.keys(value).length === 0) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
         message: "at least one field must be provided"
       });
     }
-  }
-);
+  });
 export type UpdateGasPolicyInput = z.infer<typeof updateGasPolicySchema>;
 
 export const upsertWalletProfileSchema = z.object({

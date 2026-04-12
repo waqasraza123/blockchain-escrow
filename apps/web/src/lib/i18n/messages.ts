@@ -330,7 +330,9 @@ export const enMessages = {
   },
   wallets: {
     actions: "Actions",
+    allowedChainIds: "Allowed chain ids",
     allowedApprovalPolicyKinds: "Allowed approval kinds",
+    allowedTransactionKinds: "Allowed transaction kinds",
     amount: "Amount",
     approvedSponsoredRequestPending:
       "A sponsored request is approved and awaiting transaction submission.",
@@ -393,6 +395,7 @@ export const enMessages = {
     retryTracking: "Retry tracking",
     reviewNoteTemplate: "Review note template",
     reviewPending: "Review pending",
+    savePolicy: "Save policy",
     saveProfile: "Save wallet profile",
     secondaryWallet: "Wallet",
     sendingTransaction: "Sending transaction...",
@@ -817,7 +820,9 @@ export const arMessages = {
   },
   wallets: {
     actions: "الإجراءات",
+    allowedChainIds: "معرفات السلاسل المسموح بها",
     allowedApprovalPolicyKinds: "أنواع الموافقات المسموح بها",
+    allowedTransactionKinds: "أنواع المعاملات المسموح بها",
     amount: "المبلغ",
     approvedSponsoredRequestPending:
       "تم اعتماد طلب الرعاية وهو بانتظار إرسال المعاملة.",
@@ -880,6 +885,7 @@ export const arMessages = {
     retryTracking: "إعادة محاولة التتبع",
     reviewNoteTemplate: "قالب ملاحظة المراجعة",
     reviewPending: "المراجعة معلقة",
+    savePolicy: "حفظ السياسة",
     saveProfile: "حفظ ملف المحفظة",
     secondaryWallet: "محفظة",
     sendingTransaction: "جارٍ إرسال المعاملة...",

@@ -1,15 +1,18 @@
 import type {
   GasPolicyRecord,
   Release12Repositories,
-  SponsoredTransactionRequestRecord
+  SponsoredTransactionRequestRecord,
+  WalletProfileRecord
 } from "@blockchain-escrow/db";
 
 type SponsoredRequestStore = Map<string, SponsoredTransactionRequestRecord>;
 type GasPolicyStore = Map<string, GasPolicyRecord>;
+type WalletProfileStore = Map<string, WalletProfileRecord>;
 
 export function createRelease12RepositoriesStub() {
   const sponsoredRequestStore: SponsoredRequestStore = new Map();
   const gasPolicyStore: GasPolicyStore = new Map();
+  const walletProfileStore: WalletProfileStore = new Map();
 
   const release12Repositories = {
     gasPolicies: {
@@ -125,12 +128,22 @@ export function createRelease12RepositoriesStub() {
       }
     },
     walletProfiles: {
-      findByWalletId: async () => null
+      findByWalletId: async (walletId: string) => walletProfileStore.get(walletId) ?? null,
+      listByWalletIds: async (walletIds: string[]) =>
+        walletIds
+          .map((walletId) => walletProfileStore.get(walletId) ?? null)
+          .filter((record): record is WalletProfileRecord => record !== null),
+      upsert: async (record: WalletProfileRecord) => {
+        walletProfileStore.set(record.walletId, record);
+        return record;
+      }
     }
   } as unknown as Release12Repositories;
 
   return {
+    gasPolicyStore,
     release12Repositories,
-    sponsoredRequestStore
+    sponsoredRequestStore,
+    walletProfileStore
   };
 }

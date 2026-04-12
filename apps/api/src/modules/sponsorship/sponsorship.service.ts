@@ -70,6 +70,20 @@ function toGasPolicySummary(record: GasPolicyRecord): GasPolicySummary {
   return record;
 }
 
+function serializeGasPolicy(record: GasPolicyRecord) {
+  return {
+    active: record.active,
+    allowedApprovalPolicyKinds: record.allowedApprovalPolicyKinds,
+    allowedChainIds: record.allowedChainIds,
+    allowedTransactionKinds: record.allowedTransactionKinds,
+    description: record.description,
+    maxAmountMinor: record.maxAmountMinor,
+    maxRequestsPerDay: record.maxRequestsPerDay,
+    name: record.name,
+    sponsorWindowMinutes: record.sponsorWindowMinutes
+  };
+}
+
 function toSponsoredTransactionRequestSummary(
   record: SponsoredTransactionRequestRecord,
   evaluatedAt: string
@@ -142,6 +156,18 @@ export class SponsorshipService {
       sponsorWindowMinutes: body.sponsorWindowMinutes,
       updatedAt: now
     });
+    await this.release1Repositories.auditLogs.append({
+      action: "GAS_POLICY_CREATED",
+      actorUserId: actor.user.id,
+      entityId: gasPolicy.id,
+      entityType: "GAS_POLICY",
+      id: randomUUID(),
+      ipAddress: requestMetadata.ipAddress,
+      metadata: serializeGasPolicy(gasPolicy),
+      occurredAt: now,
+      organizationId,
+      userAgent: requestMetadata.userAgent
+    });
 
     return {
       gasPolicy: toGasPolicySummary(gasPolicy)
@@ -156,7 +182,7 @@ export class SponsorshipService {
     const parsedParams = parseInput(gasPolicyIdParamsSchema, params);
     const body = parseInput(updateGasPolicySchema, input);
 
-    await this.requireOrganizationMembership(
+    const actor = await this.requireOrganizationMembership(
       parsedParams.organizationId,
       requestMetadata,
       "ADMIN"
@@ -169,6 +195,7 @@ export class SponsorshipService {
       throw new NotFoundException("gas policy not found");
     }
 
+    const previousPolicy = { ...gasPolicy };
     const updated = await this.release12Repositories.gasPolicies.update(gasPolicy.id, {
       ...(body.active === undefined ? {} : { active: body.active }),
       ...(body.allowedApprovalPolicyKinds === undefined
@@ -190,6 +217,21 @@ export class SponsorshipService {
         ? {}
         : { sponsorWindowMinutes: body.sponsorWindowMinutes }),
       updatedAt: nowIso()
+    });
+    await this.release1Repositories.auditLogs.append({
+      action: "GAS_POLICY_UPDATED",
+      actorUserId: actor.user.id,
+      entityId: updated.id,
+      entityType: "GAS_POLICY",
+      id: randomUUID(),
+      ipAddress: requestMetadata.ipAddress,
+      metadata: {
+        nextPolicy: serializeGasPolicy(updated),
+        previousPolicy: serializeGasPolicy(previousPolicy)
+      },
+      occurredAt: updated.updatedAt,
+      organizationId: parsedParams.organizationId,
+      userAgent: requestMetadata.userAgent
     });
 
     return {
@@ -396,6 +438,33 @@ export class SponsorshipService {
         walletAddress: input.walletAddress,
         walletId: input.walletId
       });
+    await this.release1Repositories.auditLogs.append({
+      action: "SPONSORED_TRANSACTION_REQUEST_CREATED",
+      actorUserId: input.requestedByUserId,
+      entityId: request.id,
+      entityType: "SPONSORED_TRANSACTION_REQUEST",
+      id: randomUUID(),
+      ipAddress: input.requestMetadata.ipAddress,
+      metadata: {
+        amountMinor: request.amountMinor,
+        approved: approved,
+        chainId: request.chainId,
+        dealMilestoneSettlementRequestId: request.dealMilestoneSettlementRequestId,
+        dealVersionId: request.dealVersionId,
+        draftDealId: request.draftDealId,
+        expiresAt: request.expiresAt,
+        gasPolicyId: request.gasPolicyId,
+        kind: request.kind,
+        reason: request.reason,
+        status: request.status,
+        subjectId: request.subjectId,
+        subjectType: request.subjectType,
+        walletId: request.walletId
+      },
+      occurredAt: now,
+      organizationId: input.organizationId,
+      userAgent: input.requestMetadata.userAgent
+    });
 
     return {
       sponsoredTransactionRequest: request as SponsoredTransactionRequestSummary

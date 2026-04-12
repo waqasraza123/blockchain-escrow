@@ -193,16 +193,20 @@ export default async function VersionDetailPage(props: VersionDetailPageProps) {
     return notFound();
   }
 
+  const sessionWallet =
+    wallets.wallets.find((wallet) => wallet.id === session.session.walletId) ??
+    wallets.wallets.find((wallet) => wallet.id === session.wallets[0]?.id) ??
+    null;
   const primaryWallet =
     wallets.wallets.find((wallet) => wallet.isPrimary) ?? wallets.wallets[0] ?? null;
+  const actingWallet = sessionWallet ?? primaryWallet;
+  const actingWalletProfile = actingWallet?.profile ?? null;
   const defaultGasPolicyId =
-    primaryWallet?.profile?.defaultGasPolicyId ??
+    actingWalletProfile?.defaultGasPolicyId ??
     gasPolicies.gasPolicies.find((gasPolicy) => gasPolicy.active)?.id ??
     "";
-  const sessionWallet =
-    session.wallets.find((wallet) => wallet.id === session.session.walletId) ??
-    session.wallets[0] ??
-    null;
+  const preferSponsorshipByDefault =
+    actingWalletProfile?.sponsorTransactionsByDefault ?? false;
   const organizationMembership =
     session.organizations.find((membership) => membership.organizationId === organizationId) ?? null;
   const isBuyerOrganization = draft.parties.some(
@@ -306,7 +310,7 @@ export default async function VersionDetailPage(props: VersionDetailPageProps) {
               <div className="field">
                 <label htmlFor="funding-approval-note">{messages.draftForms.approvalNote}</label>
                 <textarea
-                  defaultValue={primaryWallet?.profile?.approvalNoteTemplate ?? ""}
+                  defaultValue={actingWalletProfile?.approvalNoteTemplate ?? ""}
                   id="funding-approval-note"
                   name="note"
                 />
@@ -344,6 +348,22 @@ export default async function VersionDetailPage(props: VersionDetailPageProps) {
               <strong>{fundingPreparation.preparation.blockers.length}</strong>
             </div>
           </div>
+          {preferSponsorshipByDefault &&
+          fundingPreparation.preparation.ready &&
+          defaultGasPolicyId &&
+          fundingExecutionUi.canRequestSponsorship &&
+          fundingSponsoredRequestUi.canRequest ? (
+            <form action={createSponsoredFundingRequestAction} className="actions-row">
+              <input name="organizationId" type="hidden" value={organizationId} />
+              <input name="draftDealId" type="hidden" value={draftDealId} />
+              <input name="dealVersionId" type="hidden" value={dealVersionId} />
+              <input name="gasPolicyId" type="hidden" value={defaultGasPolicyId} />
+              <input name="returnPath" type="hidden" value={returnPath} />
+              <button className="button-ghost" type="submit">
+                {messages.wallets.requestSponsoredFunding}
+              </button>
+            </form>
+          ) : null}
           {fundingPreparation.preparation.ready &&
           fundingPreparation.preparation.createAgreementTransaction &&
           sessionWallet &&
@@ -387,7 +407,8 @@ export default async function VersionDetailPage(props: VersionDetailPageProps) {
           {fundingPreparation.preparation.ready &&
           defaultGasPolicyId &&
           fundingExecutionUi.canRequestSponsorship &&
-          fundingSponsoredRequestUi.canRequest ? (
+          fundingSponsoredRequestUi.canRequest &&
+          !preferSponsorshipByDefault ? (
             <form action={createSponsoredFundingRequestAction} className="actions-row">
               <input name="organizationId" type="hidden" value={organizationId} />
               <input name="draftDealId" type="hidden" value={draftDealId} />
@@ -487,7 +508,7 @@ export default async function VersionDetailPage(props: VersionDetailPageProps) {
                   {messages.draftForms.snapshotApprovalNote}
                 </label>
                 <textarea
-                  defaultValue={primaryWallet?.profile?.approvalNoteTemplate ?? ""}
+                  defaultValue={actingWalletProfile?.approvalNoteTemplate ?? ""}
                   id="snapshot-approval-note"
                   name="note"
                 />
@@ -652,7 +673,7 @@ export default async function VersionDetailPage(props: VersionDetailPageProps) {
                           {messages.wallets.reviewNoteTemplate}
                         </label>
                         <textarea
-                          defaultValue={primaryWallet?.profile?.reviewNoteTemplate ?? ""}
+                          defaultValue={actingWalletProfile?.reviewNoteTemplate ?? ""}
                           id={`review-note-${workflow.milestone.id}`}
                           name="statementMarkdown"
                         />
@@ -698,7 +719,7 @@ export default async function VersionDetailPage(props: VersionDetailPageProps) {
                           {messages.wallets.reviewNoteTemplate}
                         </label>
                         <textarea
-                          defaultValue={primaryWallet?.profile?.reviewNoteTemplate ?? ""}
+                          defaultValue={actingWalletProfile?.reviewNoteTemplate ?? ""}
                           id={`settlement-note-${workflow.milestone.id}`}
                           name="statementMarkdown"
                         />
@@ -712,6 +733,31 @@ export default async function VersionDetailPage(props: VersionDetailPageProps) {
                         {latestReview.decision === "APPROVED"
                           ? messages.wallets.requestRelease
                           : messages.wallets.requestRefund}
+                      </button>
+                    </form>
+                  ) : null}
+                  {preferSponsorshipByDefault &&
+                  latestSettlementRequest &&
+                  settlementExecution?.plan.ready &&
+                  defaultGasPolicyId &&
+                  settlementExecutionUi.canRequestSponsorship &&
+                  settlementSponsoredRequestUi.canRequest ? (
+                    <form
+                      action={createSponsoredSettlementExecutionRequestAction}
+                      className="actions-row"
+                    >
+                      <input name="organizationId" type="hidden" value={organizationId} />
+                      <input name="draftDealId" type="hidden" value={draftDealId} />
+                      <input name="dealVersionId" type="hidden" value={dealVersionId} />
+                      <input
+                        name="dealMilestoneSettlementRequestId"
+                        type="hidden"
+                        value={latestSettlementRequest.id}
+                      />
+                      <input name="gasPolicyId" type="hidden" value={defaultGasPolicyId} />
+                      <input name="returnPath" type="hidden" value={returnPath} />
+                      <button className="button-ghost" type="submit">
+                        {messages.wallets.requestSponsoredSettlement}
                       </button>
                     </form>
                   ) : null}
@@ -765,7 +811,8 @@ export default async function VersionDetailPage(props: VersionDetailPageProps) {
                   settlementExecution?.plan.ready &&
                   defaultGasPolicyId &&
                   settlementExecutionUi.canRequestSponsorship &&
-                  settlementSponsoredRequestUi.canRequest ? (
+                  settlementSponsoredRequestUi.canRequest &&
+                  !preferSponsorshipByDefault ? (
                     <form
                       action={createSponsoredSettlementExecutionRequestAction}
                       className="actions-row"

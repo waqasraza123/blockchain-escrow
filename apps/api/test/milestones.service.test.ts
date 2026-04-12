@@ -191,7 +191,11 @@ function createServices() {
   );
 
   return {
-    auditService: new AuditService(repositories, authenticatedSessionService),
+    auditService: new AuditService(
+      repositories,
+      release12Repositories,
+      authenticatedSessionService
+    ),
     draftsService: new DraftsService(
       repositories,
       release4Repositories,
@@ -1991,7 +1995,85 @@ test("sponsorship service reuses settlement execution calldata from the executio
       sponsored.sponsoredTransactionRequest.value,
       plan.plan.executionTransaction.value
     );
+    const sponsoredRequestAuditLogs = await services.auditService.listByEntity(
+      {
+        entityId: sponsored.sponsoredTransactionRequest.id,
+        entityType: "SPONSORED_TRANSACTION_REQUEST"
+      },
+      requestMetadata(actor.cookieHeader)
+    );
+
+    assert.equal(sponsoredRequestAuditLogs.auditLogs.length, 1);
+    assert.equal(
+      sponsoredRequestAuditLogs.auditLogs[0]?.action,
+      "SPONSORED_TRANSACTION_REQUEST_CREATED"
+    );
   });
+});
+
+test("sponsorship service audits gas policy create and update events", async () => {
+  const services = createServices();
+  const actor = await seedAuthenticatedActor(
+    services.release1Repositories,
+    services.sessionTokenService
+  );
+  const now = "2026-04-08T00:00:00.000Z";
+
+  await services.release1Repositories.organizations.create({
+    createdAt: now,
+    createdByUserId: actor.userId,
+    id: "org-1",
+    name: "Acme",
+    slug: "acme",
+    updatedAt: now
+  });
+  await services.release1Repositories.organizationMembers.add({
+    createdAt: now,
+    id: "member-1",
+    organizationId: "org-1",
+    role: "OWNER",
+    updatedAt: now,
+    userId: actor.userId
+  });
+
+  const created = await services.sponsorshipService.createGasPolicy(
+    "org-1",
+    {
+      active: true,
+      allowedApprovalPolicyKinds: [],
+      allowedChainIds: [84532],
+      allowedTransactionKinds: ["FUNDING_TRANSACTION_CREATE"],
+      description: "Operational funding policy",
+      maxRequestsPerDay: 10,
+      name: "Funding policy",
+      sponsorWindowMinutes: 30
+    },
+    requestMetadata(actor.cookieHeader)
+  );
+  await services.sponsorshipService.updateGasPolicy(
+    {
+      gasPolicyId: created.gasPolicy.id,
+      organizationId: "org-1"
+    },
+    {
+      description: "Updated operational funding policy",
+      maxRequestsPerDay: 25
+    },
+    requestMetadata(actor.cookieHeader)
+  );
+
+  const auditLogs = await services.auditService.listByEntity(
+    {
+      entityId: created.gasPolicy.id,
+      entityType: "GAS_POLICY"
+    },
+    requestMetadata(actor.cookieHeader)
+  );
+
+  assert.deepEqual(
+    auditLogs.auditLogs.map((record) => record.action),
+    ["GAS_POLICY_CREATED", "GAS_POLICY_UPDATED"]
+  );
 });
 
 test("milestones service reflects indexed settlements as executed milestone truth", async () => {

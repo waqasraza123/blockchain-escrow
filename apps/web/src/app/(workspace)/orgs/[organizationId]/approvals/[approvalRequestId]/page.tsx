@@ -1,5 +1,5 @@
 import { decideApprovalStepAction } from "../../../../actions";
-import { getApprovalRequest, listWallets } from "../../../../../../lib/api";
+import { getApprovalRequest, getSession, listWallets } from "../../../../../../lib/api";
 import { formatCode } from "../../../../../../lib/i18n/format";
 import { getI18n } from "../../../../../../lib/i18n/server";
 import {
@@ -18,14 +18,19 @@ type ApprovalDetailPageProps = {
 export default async function ApprovalDetailPage(props: ApprovalDetailPageProps) {
   const { approvalRequestId, organizationId } = await props.params;
   const { messages } = await getI18n();
-  const [detail, wallets] = await Promise.all([
+  const [detail, session, wallets] = await Promise.all([
     getApprovalRequest(organizationId, approvalRequestId),
+    getSession(),
     listWallets()
   ]);
   const request = detail.approvalRequest;
   const pendingStep = request.steps.find((step) => step.status === "PENDING") ?? null;
-  const primaryWallet =
-    wallets.wallets.find((wallet) => wallet.isPrimary) ?? wallets.wallets[0] ?? null;
+  const sessionWallet =
+    (session
+      ? wallets.wallets.find((wallet) => wallet.id === session.session.walletId) ?? null
+      : null) ??
+    wallets.wallets[0] ??
+    null;
   const returnPath = `/orgs/${organizationId}/approvals/${approvalRequestId}`;
 
   return (
@@ -67,7 +72,7 @@ export default async function ApprovalDetailPage(props: ApprovalDetailPageProps)
               <div className="field">
                 <label htmlFor="decision-note">{messages.approvals.decisionNote}</label>
                 <textarea
-                  defaultValue={primaryWallet?.profile?.approvalNoteTemplate ?? ""}
+                  defaultValue={sessionWallet?.profile?.approvalNoteTemplate ?? ""}
                   id="decision-note"
                   name="note"
                 />

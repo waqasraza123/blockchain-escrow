@@ -1,4 +1,7 @@
+import { randomUUID } from "node:crypto";
+
 import type {
+  GasPolicyRecord,
   Release1Repositories,
   Release12Repositories,
   WalletProfileRecord,
@@ -14,6 +17,7 @@ import {
 } from "@blockchain-escrow/shared";
 import {
   BadRequestException,
+  ConflictException,
   Inject,
   Injectable,
   NotFoundException
@@ -48,6 +52,19 @@ function toWalletSummary(
     updatedAt: wallet.updatedAt,
     userId: wallet.userId
   };
+}
+
+function serializeWalletProfile(profile: WalletProfileRecord | null) {
+  return profile
+    ? {
+        approvalNoteTemplate: profile.approvalNoteTemplate,
+        defaultGasPolicyId: profile.defaultGasPolicyId,
+        defaultOrganizationId: profile.defaultOrganizationId,
+        displayName: profile.displayName,
+        reviewNoteTemplate: profile.reviewNoteTemplate,
+        sponsorTransactionsByDefault: profile.sponsorTransactionsByDefault
+      }
+    : null;
 }
 
 @Injectable()
@@ -133,18 +150,74 @@ export class WalletsService {
       throw new NotFoundException("wallet not found");
     }
 
+    const existingProfile =
+      await this.release12Repositories.walletProfiles.findByWalletId(wallet.id);
+    const memberships =
+      await this.repositories.organizationMembers.listByUserId(user.id);
+    const memberOrganizationIds = new Set(
+      memberships.map((membership) => membership.organizationId)
+    );
+    const defaultOrganizationId = parsedBody.data.defaultOrganizationId ?? null;
+
+    if (defaultOrganizationId && !memberOrganizationIds.has(defaultOrganizationId)) {
+      throw new NotFoundException("default organization not found");
+    }
+
+    let defaultGasPolicy: GasPolicyRecord | null = null;
+
+    if (parsedBody.data.defaultGasPolicyId) {
+      defaultGasPolicy = await this.release12Repositories.gasPolicies.findById(
+        parsedBody.data.defaultGasPolicyId
+      );
+
+      if (
+        !defaultGasPolicy ||
+        !memberOrganizationIds.has(defaultGasPolicy.organizationId)
+      ) {
+        throw new NotFoundException("default gas policy not found");
+      }
+
+      if (!defaultGasPolicy.active) {
+        throw new ConflictException("default gas policy must be active");
+      }
+
+      if (
+        defaultOrganizationId &&
+        defaultGasPolicy.organizationId !== defaultOrganizationId
+      ) {
+        throw new BadRequestException(
+          "default gas policy must belong to the selected default organization"
+        );
+      }
+    }
+
     const now = new Date().toISOString();
     const profile = await this.release12Repositories.walletProfiles.upsert({
       approvalNoteTemplate: parsedBody.data.approvalNoteTemplate ?? null,
       createdAt: now,
-      defaultGasPolicyId: parsedBody.data.defaultGasPolicyId ?? null,
-      defaultOrganizationId: parsedBody.data.defaultOrganizationId ?? null,
+      defaultGasPolicyId: defaultGasPolicy?.id ?? null,
+      defaultOrganizationId,
       displayName: parsedBody.data.displayName,
       reviewNoteTemplate: parsedBody.data.reviewNoteTemplate ?? null,
       sponsorTransactionsByDefault:
         parsedBody.data.sponsorTransactionsByDefault ?? false,
       updatedAt: now,
       walletId: wallet.id
+    });
+    await this.repositories.auditLogs.append({
+      action: "WALLET_PROFILE_UPDATED",
+      actorUserId: user.id,
+      entityId: wallet.id,
+      entityType: "WALLET",
+      id: randomUUID(),
+      ipAddress: requestMetadata.ipAddress,
+      metadata: {
+        nextProfile: serializeWalletProfile(profile),
+        previousProfile: serializeWalletProfile(existingProfile)
+      },
+      occurredAt: now,
+      organizationId: defaultOrganizationId,
+      userAgent: requestMetadata.userAgent
     });
 
     return {

@@ -14,11 +14,14 @@ import type {
   DraftDealRecord,
   FileRecord,
   FundingTransactionRecord,
+  GasPolicyRecord,
   OrganizationInviteRecord,
   OrganizationMemberRecord,
   OrganizationRecord,
   Release1Repositories,
+  Release12Repositories,
   SessionRecord,
+  SponsoredTransactionRequestRecord,
   TemplateRecord,
   WalletRecord
 } from "@blockchain-escrow/db";
@@ -37,7 +40,10 @@ import {
   NotFoundException
 } from "@nestjs/common";
 
-import { RELEASE1_REPOSITORIES } from "../../infrastructure/tokens";
+import {
+  RELEASE1_REPOSITORIES,
+  RELEASE12_REPOSITORIES
+} from "../../infrastructure/tokens";
 import type { RequestMetadata } from "../auth/auth.http";
 import {
   AuthenticatedSessionService,
@@ -74,6 +80,8 @@ export class AuditService {
   constructor(
     @Inject(RELEASE1_REPOSITORIES)
     private readonly repositories: Release1Repositories,
+    @Inject(RELEASE12_REPOSITORIES)
+    private readonly release12Repositories: Release12Repositories,
     private readonly authenticatedSessionService: AuthenticatedSessionService
   ) {}
 
@@ -252,6 +260,18 @@ export class AuditService {
           fundingTransaction.id
         );
       }
+      case "GAS_POLICY": {
+        const gasPolicy = await this.requireGasPolicyAccess(actor, params.entityId);
+        return this.repositories.auditLogs.listByEntity("GAS_POLICY", gasPolicy.id);
+      }
+      case "SPONSORED_TRANSACTION_REQUEST": {
+        const sponsoredTransactionRequest =
+          await this.requireSponsoredTransactionRequestAccess(actor, params.entityId);
+        return this.repositories.auditLogs.listByEntity(
+          "SPONSORED_TRANSACTION_REQUEST",
+          sponsoredTransactionRequest.id
+        );
+      }
       case "TEMPLATE": {
         const template = await this.requireTemplateAccess(actor, params.entityId);
         return this.repositories.auditLogs.listByEntity("TEMPLATE", template.id);
@@ -298,7 +318,6 @@ export class AuditService {
       case "PARTNER_WEBHOOK_DELIVERY_ATTEMPT":
       case "PARTNER_WEBHOOK_EVENT":
       case "PARTNER_WEBHOOK_SUBSCRIPTION":
-      case "SPONSORED_TRANSACTION_REQUEST":
         throw new ForbiddenException(
           "audit logs for operator-only entities are not available on this surface"
         );
@@ -637,6 +656,37 @@ export class AuditService {
 
     await this.requireDraftDealAccess(actor, fundingTransaction.draftDealId);
     return fundingTransaction;
+  }
+
+  private async requireGasPolicyAccess(
+    actor: AuthenticatedSessionContext,
+    gasPolicyId: string
+  ): Promise<GasPolicyRecord> {
+    const gasPolicy = await this.release12Repositories.gasPolicies.findById(gasPolicyId);
+
+    if (!gasPolicy) {
+      throw new NotFoundException("gas policy not found");
+    }
+
+    await this.requireOrganizationAccess(actor, gasPolicy.organizationId);
+    return gasPolicy;
+  }
+
+  private async requireSponsoredTransactionRequestAccess(
+    actor: AuthenticatedSessionContext,
+    sponsoredTransactionRequestId: string
+  ): Promise<SponsoredTransactionRequestRecord> {
+    const sponsoredTransactionRequest =
+      await this.release12Repositories.sponsoredTransactionRequests.findById(
+        sponsoredTransactionRequestId
+      );
+
+    if (!sponsoredTransactionRequest) {
+      throw new NotFoundException("sponsored transaction request not found");
+    }
+
+    await this.requireOrganizationAccess(actor, sponsoredTransactionRequest.organizationId);
+    return sponsoredTransactionRequest;
   }
 
   private async requireTemplateAccess(
