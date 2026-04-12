@@ -1,10 +1,12 @@
 import type {
   ApprovalRequestDetailResponse,
   CreateApprovalRequestResponse,
+  CreateDealMilestoneSettlementExecutionTransactionResponse,
   CreateFinanceExportResponse,
   CreateCounterpartyDealVersionAcceptanceResponse,
   CreateCounterpartyDealMilestoneSubmissionResponse,
   CreateFileResponse,
+  CreateFundingTransactionResponse,
   CreateGasPolicyResponse,
   CreateDealMilestoneReviewResponse,
   CreateDealMilestoneSettlementRequestResponse,
@@ -22,11 +24,14 @@ import type {
   GetCurrentApprovalRequestResponse,
   GetDealVersionSettlementStatementResponse,
   GetFundingPreparationResponse,
+  GetMilestoneSettlementExecutionPlanResponse,
   ListApprovalPoliciesResponse,
   ListApprovalRequestsResponse,
   ListCostCentersResponse,
+  ListDealMilestoneSettlementExecutionTransactionsResponse,
   ListDraftDealsResponse,
   ListFinanceExportsResponse,
+  ListFundingTransactionsResponse,
   ListOrganizationMembershipsResponse,
   ListSponsoredTransactionRequestsResponse,
   ListStatementSnapshotsResponse,
@@ -131,6 +136,27 @@ export function getFundingPreparation(
 ): Promise<GetFundingPreparationResponse> {
   return apiRequest(
     `/organizations/${params.organizationId}/drafts/${params.draftDealId}/versions/${params.dealVersionId}/funding-preparation`
+  );
+}
+
+export function listFundingTransactions(
+  params: DealVersionApprovalRequestParams
+): Promise<ListFundingTransactionsResponse> {
+  return apiRequest(
+    `/organizations/${params.organizationId}/drafts/${params.draftDealId}/versions/${params.dealVersionId}/funding-transactions`
+  );
+}
+
+export function createFundingTransaction(
+  params: DealVersionApprovalRequestParams,
+  body: Record<string, unknown>
+): Promise<CreateFundingTransactionResponse> {
+  return apiRequest(
+    `/organizations/${params.organizationId}/drafts/${params.draftDealId}/versions/${params.dealVersionId}/funding-transactions`,
+    {
+      body: JSON.stringify(body),
+      method: "POST"
+    }
   );
 }
 
@@ -308,6 +334,50 @@ export function createMilestoneSettlementRequest(
 ): Promise<CreateDealMilestoneSettlementRequestResponse> {
   return apiRequest(
     `/organizations/${params.organizationId}/drafts/${params.draftDealId}/versions/${params.dealVersionId}/milestones/${params.dealVersionMilestoneId}/submissions/${params.dealMilestoneSubmissionId}/reviews/${params.dealMilestoneReviewId}/settlement-requests`,
+    {
+      body: JSON.stringify(body),
+      method: "POST"
+    }
+  );
+}
+
+export function getMilestoneSettlementExecutionPlan(
+  params: {
+    dealMilestoneSettlementRequestId: string;
+    dealVersionId: string;
+    draftDealId: string;
+    organizationId: string;
+  }
+): Promise<GetMilestoneSettlementExecutionPlanResponse> {
+  return apiRequest(
+    `/organizations/${params.organizationId}/drafts/${params.draftDealId}/versions/${params.dealVersionId}/milestones/settlements/${params.dealMilestoneSettlementRequestId}/execution`
+  );
+}
+
+export function listMilestoneSettlementExecutionTransactions(
+  params: {
+    dealMilestoneSettlementRequestId: string;
+    dealVersionId: string;
+    draftDealId: string;
+    organizationId: string;
+  }
+): Promise<ListDealMilestoneSettlementExecutionTransactionsResponse> {
+  return apiRequest(
+    `/organizations/${params.organizationId}/drafts/${params.draftDealId}/versions/${params.dealVersionId}/milestones/settlements/${params.dealMilestoneSettlementRequestId}/execution-transactions`
+  );
+}
+
+export function createMilestoneSettlementExecutionTransaction(
+  params: {
+    dealMilestoneSettlementRequestId: string;
+    dealVersionId: string;
+    draftDealId: string;
+    organizationId: string;
+  },
+  body: Record<string, unknown>
+): Promise<CreateDealMilestoneSettlementExecutionTransactionResponse> {
+  return apiRequest(
+    `/organizations/${params.organizationId}/drafts/${params.draftDealId}/versions/${params.dealVersionId}/milestones/settlements/${params.dealMilestoneSettlementRequestId}/execution-transactions`,
     {
       body: JSON.stringify(body),
       method: "POST"

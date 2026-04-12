@@ -140,6 +140,7 @@ import {
   type MilestoneReviewConfiguration,
   type MilestoneSettlementExecutionReconciliationConfiguration
 } from "./milestones.tokens";
+import { buildSettlementExecutionPreparedTransaction } from "./settlement-execution-transaction";
 
 interface MilestoneWorkflowAccessContext {
   actor: AuthenticatedSessionContext;
@@ -2567,6 +2568,18 @@ export class MilestonesService {
       blockers.push("SETTLEMENT_EXECUTION_METHOD_UNAVAILABLE");
     }
 
+    const executionTransaction =
+      blockers.length === 0 &&
+      executionPreparation &&
+      executionPreparation.agreementAddress
+        ? buildSettlementExecutionPreparedTransaction({
+            agreementAddress: executionPreparation.agreementAddress,
+            kind: settlementRequest.kind,
+            milestoneAmountMinor: executionPreparation.milestoneAmountMinor,
+            milestonePosition: executionPreparation.milestonePosition
+          })
+        : null;
+
     return {
       agreementAddress:
         executionPreparation?.agreementAddress ?? linkedAgreement?.agreementAddress ?? null,
@@ -2579,6 +2592,8 @@ export class MilestonesService {
       executionPreparation: executionPreparation
         ? this.toSettlementPreparationSummary(executionPreparation)
         : null,
+      executionTransaction: executionTransaction?.transaction ?? null,
+      executionTransactionMethod: executionTransaction?.method ?? null,
       indexedSettlement: indexedSettlement
         ? this.toIndexedSettlementSummary(indexedSettlement)
         : null,

@@ -21,6 +21,12 @@ export interface SeedMetadata {
     operatorAccountId: string;
     walletId: string;
   };
+  settlementReady: {
+    dealMilestoneSettlementRequestId: string;
+    dealVersionId: string;
+    dealVersionMilestoneId: string;
+    draftDealId: string;
+  };
   tenant: {
     displayName: string;
     entryHostname: string;

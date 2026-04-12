@@ -2,11 +2,15 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import {
+  getMilestoneSettlementExecutionPlan,
   getCurrentApproval,
   getDraft,
   getFundingPreparation,
+  getSession,
   getSettlementStatement,
   listGasPolicies,
+  listFundingTransactions,
+  listMilestoneSettlementExecutionTransactions,
   listMilestoneWorkflows,
   listWallets,
   previewApprovalRequirement
@@ -22,6 +26,7 @@ import {
   requestFundingApprovalAction,
   requestStatementSnapshotApprovalAction
 } from "../../../../../../actions";
+import { WalletExecutionCard } from "../../../../../../wallet-execution-card";
 import {
   Card,
   DataTable,
@@ -38,6 +43,10 @@ type VersionDetailPageProps = {
     organizationId: string;
   }>;
 };
+
+function sortBySubmittedAtDescending<T extends { submittedAt: string }>(left: T, right: T): number {
+  return right.submittedAt.localeCompare(left.submittedAt);
+}
 
 export default async function VersionDetailPage(props: VersionDetailPageProps) {
   const { dealVersionId, draftDealId, organizationId } = await props.params;
@@ -58,14 +67,17 @@ export default async function VersionDetailPage(props: VersionDetailPageProps) {
     settlementStatement,
     currentApproval,
     milestoneWorkflows,
+    fundingTransactionsResponse,
     wallets,
     gasPolicies,
-    snapshotApproval
+    snapshotApproval,
+    session
   ] = await Promise.all([
     getFundingPreparation({ dealVersionId, draftDealId, organizationId }),
     getSettlementStatement({ dealVersionId, draftDealId, organizationId }),
     getCurrentApproval({ dealVersionId, draftDealId, organizationId }),
     listMilestoneWorkflows({ dealVersionId, draftDealId, organizationId }),
+    listFundingTransactions({ dealVersionId, draftDealId, organizationId }),
     listWallets(),
     listGasPolicies(organizationId),
     previewApprovalRequirement(organizationId, {
@@ -79,15 +91,73 @@ export default async function VersionDetailPage(props: VersionDetailPageProps) {
       subjectType: "DEAL_VERSION",
       title: version.title,
       totalAmountMinor
-    })
+    }),
+    getSession()
   ]);
   const returnPath = `/orgs/${organizationId}/drafts/${draftDealId}/versions/${dealVersionId}`;
+
+  if (!session) {
+    return notFound();
+  }
+
   const primaryWallet =
     wallets.wallets.find((wallet) => wallet.isPrimary) ?? wallets.wallets[0] ?? null;
   const defaultGasPolicyId =
     primaryWallet?.profile?.defaultGasPolicyId ??
     gasPolicies.gasPolicies.find((gasPolicy) => gasPolicy.active)?.id ??
     "";
+  const sessionWallet =
+    session.wallets.find((wallet) => wallet.id === session.session.walletId) ??
+    session.wallets[0] ??
+    null;
+  const organizationMembership =
+    session.organizations.find((membership) => membership.organizationId === organizationId) ?? null;
+  const isBuyerOrganization = draft.parties.some(
+    (party) =>
+      party.organizationId === organizationId &&
+      party.role === "BUYER" &&
+      party.subjectType === "ORGANIZATION"
+  );
+  const canExecuteCustodyTransactions =
+    isBuyerOrganization &&
+    organizationMembership !== null &&
+    (organizationMembership.role === "ADMIN" || organizationMembership.role === "OWNER");
+  const fundingTransactions = [...fundingTransactionsResponse.fundingTransactions].sort(
+    sortBySubmittedAtDescending
+  );
+  const latestFundingTransaction = fundingTransactions[0] ?? null;
+  const settlementExecutionEntries = await Promise.all(
+    milestoneWorkflows.milestones
+      .map((workflow) => workflow.submissions[0]?.review?.settlementRequest?.id ?? null)
+      .filter((value): value is string => value !== null)
+      .map(async (dealMilestoneSettlementRequestId) => {
+        const [plan, executionTransactions] = await Promise.all([
+          getMilestoneSettlementExecutionPlan({
+            dealMilestoneSettlementRequestId,
+            dealVersionId,
+            draftDealId,
+            organizationId
+          }),
+          listMilestoneSettlementExecutionTransactions({
+            dealMilestoneSettlementRequestId,
+            dealVersionId,
+            draftDealId,
+            organizationId
+          })
+        ]);
+
+        return [
+          dealMilestoneSettlementRequestId,
+          {
+            executionTransactions: [...executionTransactions.executionTransactions].sort(
+              sortBySubmittedAtDescending
+            ),
+            plan: plan.plan
+          }
+        ] as const;
+      })
+  );
+  const settlementExecutionByRequestId = new Map(settlementExecutionEntries);
 
   return (
     <>
@@ -157,6 +227,39 @@ export default async function VersionDetailPage(props: VersionDetailPageProps) {
               <strong>{fundingPreparation.preparation.blockers.length}</strong>
             </div>
           </div>
+          {fundingPreparation.preparation.ready &&
+          fundingPreparation.preparation.createAgreementTransaction &&
+          sessionWallet &&
+          canExecuteCustodyTransactions ? (
+            <WalletExecutionCard
+              ctaLabel={messages.wallets.executeFunding}
+              expectedWalletAddress={sessionWallet.address}
+              labels={{
+                chain: messages.wallets.executionChain,
+                connectedWalletMismatch: messages.wallets.connectedWalletMismatch,
+                execute: messages.wallets.executeFunding,
+                executing: messages.wallets.recordingTransaction,
+                method: messages.wallets.executionMethod,
+                missingWallet: messages.wallets.missingWallet,
+                persistRetry: messages.wallets.retryTracking,
+                sending: messages.wallets.sendingTransaction,
+                submittedHash: messages.wallets.submittedHash,
+                switchChainFailed: messages.wallets.switchChainFailed,
+                trackingPending: messages.wallets.trackingPending,
+                userRejected: messages.wallets.userRejected
+              }}
+              methodLabel={fundingPreparation.preparation.createAgreementFunctionName}
+              recordKind="funding"
+              requiredChainId={fundingPreparation.preparation.chainId}
+              returnPath={returnPath}
+              trackingFields={{
+                dealVersionId,
+                draftDealId,
+                organizationId
+              }}
+              transaction={fundingPreparation.preparation.createAgreementTransaction}
+            />
+          ) : null}
           {fundingPreparation.preparation.ready && defaultGasPolicyId ? (
             <form action={createSponsoredFundingRequestAction} className="actions-row">
               <input name="organizationId" type="hidden" value={organizationId} />
@@ -168,6 +271,25 @@ export default async function VersionDetailPage(props: VersionDetailPageProps) {
                 {messages.wallets.requestSponsoredFunding}
               </button>
             </form>
+          ) : null}
+          {latestFundingTransaction ? (
+            <div className="detail-grid">
+              <div className="detail-item">
+                <span className="muted">{messages.wallets.latestTrackedTransaction}</span>
+                <strong className="mono">{latestFundingTransaction.transactionHash}</strong>
+              </div>
+              <div className="detail-item">
+                <span className="muted">{messages.wallets.status}</span>
+                <Pill
+                  tone={toneForStatus(latestFundingTransaction.status)}
+                  value={formatCode(
+                    latestFundingTransaction.status,
+                    messages.statuses,
+                    messages.common.none
+                  )}
+                />
+              </div>
+            </div>
           ) : null}
         </Card>
         <Card title={messages.drafts.statementSnapshot}>
@@ -278,6 +400,11 @@ export default async function VersionDetailPage(props: VersionDetailPageProps) {
               const latestSubmission = workflow.submissions[0] ?? null;
               const latestReview = latestSubmission?.review ?? null;
               const latestSettlementRequest = latestReview?.settlementRequest ?? null;
+              const settlementExecution = latestSettlementRequest
+                ? settlementExecutionByRequestId.get(latestSettlementRequest.id) ?? null
+                : null;
+              const latestExecutionTransaction =
+                settlementExecution?.executionTransactions[0] ?? null;
 
               return (
                 <div className="workspace-card inset-card" key={workflow.milestone.id}>
@@ -390,7 +517,51 @@ export default async function VersionDetailPage(props: VersionDetailPageProps) {
                       </button>
                     </form>
                   ) : null}
-                  {latestSettlementRequest && defaultGasPolicyId ? (
+                  {latestSettlementRequest &&
+                  settlementExecution?.plan.ready &&
+                  settlementExecution.plan.executionTransaction &&
+                  sessionWallet &&
+                  canExecuteCustodyTransactions ? (
+                    <WalletExecutionCard
+                      ctaLabel={
+                        latestSettlementRequest.kind === "RELEASE"
+                          ? messages.wallets.executeRelease
+                          : messages.wallets.executeRefund
+                      }
+                      expectedWalletAddress={sessionWallet.address}
+                      labels={{
+                        chain: messages.wallets.executionChain,
+                        connectedWalletMismatch: messages.wallets.connectedWalletMismatch,
+                        execute:
+                          latestSettlementRequest.kind === "RELEASE"
+                            ? messages.wallets.executeRelease
+                            : messages.wallets.executeRefund,
+                        executing: messages.wallets.recordingTransaction,
+                        method: messages.wallets.executionMethod,
+                        missingWallet: messages.wallets.missingWallet,
+                        persistRetry: messages.wallets.retryTracking,
+                        sending: messages.wallets.sendingTransaction,
+                        submittedHash: messages.wallets.submittedHash,
+                        switchChainFailed: messages.wallets.switchChainFailed,
+                        trackingPending: messages.wallets.trackingPending,
+                        userRejected: messages.wallets.userRejected
+                      }}
+                      methodLabel={settlementExecution.plan.executionTransactionMethod}
+                      recordKind="settlement"
+                      requiredChainId={settlementExecution.plan.chainId}
+                      returnPath={returnPath}
+                      trackingFields={{
+                        dealMilestoneSettlementRequestId: latestSettlementRequest.id,
+                        dealVersionId,
+                        draftDealId,
+                        organizationId
+                      }}
+                      transaction={settlementExecution.plan.executionTransaction}
+                    />
+                  ) : null}
+                  {latestSettlementRequest &&
+                  settlementExecution?.plan.ready &&
+                  defaultGasPolicyId ? (
                     <form
                       action={createSponsoredSettlementExecutionRequestAction}
                       className="actions-row"
@@ -409,6 +580,27 @@ export default async function VersionDetailPage(props: VersionDetailPageProps) {
                         {messages.wallets.requestSponsoredSettlement}
                       </button>
                     </form>
+                  ) : null}
+                  {latestExecutionTransaction ? (
+                    <div className="detail-grid">
+                      <div className="detail-item">
+                        <span className="muted">{messages.wallets.latestTrackedTransaction}</span>
+                        <strong className="mono">
+                          {latestExecutionTransaction.transactionHash}
+                        </strong>
+                      </div>
+                      <div className="detail-item">
+                        <span className="muted">{messages.wallets.status}</span>
+                        <Pill
+                          tone={toneForStatus(latestExecutionTransaction.status)}
+                          value={formatCode(
+                            latestExecutionTransaction.status,
+                            messages.statuses,
+                            messages.common.none
+                          )}
+                        />
+                      </div>
+                    </div>
                   ) : null}
                 </div>
               );

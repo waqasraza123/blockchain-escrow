@@ -38,6 +38,7 @@ import type { RequestMetadata } from "../auth/auth.http";
 import { AuthenticatedSessionService } from "../auth/authenticated-session.service";
 import { FundingService } from "../funding/funding.service";
 import { MilestonesService } from "../milestones/milestones.service";
+import { buildSettlementExecutionPreparedTransaction } from "../milestones/settlement-execution-transaction";
 
 function parseInput<T>(
   schema: {
@@ -263,46 +264,26 @@ export class SponsorshipService {
       throw new ConflictException("settlement execution is not ready for sponsorship");
     }
 
-    const functionName =
-      plan.plan.executionPreparation.kind === "RELEASE"
-        ? "releaseMilestone(uint32,uint256[])"
-        : "refundMilestone(uint32,uint256[])";
-
-    const viem = await import("viem");
-    const data = viem.encodeFunctionData({
-      abi: [
-        {
-          inputs: [
-            { name: "milestonePosition", type: "uint32" },
-            { name: "milestoneAmounts", type: "uint256[]" }
-          ],
-          name: functionName.startsWith("release") ? "releaseMilestone" : "refundMilestone",
-          outputs: [],
-          stateMutability: "nonpayable",
-          type: "function"
-        }
-      ],
-      args: [
-        plan.plan.executionPreparation.milestonePosition,
-        [BigInt(plan.plan.executionPreparation.milestoneAmountMinor)]
-      ],
-      functionName:
-        functionName.startsWith("release") ? "releaseMilestone" : "refundMilestone"
+    const executionTransaction = buildSettlementExecutionPreparedTransaction({
+      agreementAddress: plan.plan.agreementAddress,
+      kind: plan.plan.executionPreparation.kind,
+      milestoneAmountMinor: plan.plan.executionPreparation.milestoneAmountMinor,
+      milestonePosition: plan.plan.executionPreparation.milestonePosition
     });
 
     return this.createSponsoredRequestFromPolicy({
       actionKind: "DEAL_MILESTONE_SETTLEMENT_EXECUTION_TRANSACTION_CREATE",
       amountMinor: plan.plan.executionPreparation.milestoneAmountMinor,
       chainId: plan.plan.chainId,
-      data,
+      data: executionTransaction.transaction.data,
       gasPolicyId: body.gasPolicyId,
       kind: "DEAL_MILESTONE_SETTLEMENT_EXECUTION_TRANSACTION_CREATE",
       organizationId: params.organizationId,
       requestMetadata,
       subjectId: params.dealMilestoneSettlementRequestId,
       subjectType: "DEAL_MILESTONE_SETTLEMENT_REQUEST",
-      toAddress: plan.plan.agreementAddress,
-      value: "0",
+      toAddress: executionTransaction.transaction.to,
+      value: executionTransaction.transaction.value,
       walletId: actor.wallet.id,
       walletAddress: actor.wallet.address,
       draftDealId: params.draftDealId,

@@ -7,8 +7,10 @@ import {
   createGasPolicy,
   createActionApprovalRequest,
   createFinanceExport,
+  createFundingTransaction,
   createFundingApprovalRequest,
   createMilestoneReview,
+  createMilestoneSettlementExecutionTransaction,
   createMilestoneSettlementRequest,
   createSponsoredFundingRequest,
   createSponsoredSettlementExecutionRequest,
@@ -20,6 +22,24 @@ import {
 
 function redirectBack(returnPath: string) {
   redirect(returnPath);
+}
+
+export type TransactionRecordActionState = {
+  error: string | null;
+  ok: boolean;
+  transactionHash: string | null;
+};
+
+export const initialTransactionRecordActionState: TransactionRecordActionState = {
+  error: null,
+  ok: false,
+  transactionHash: null
+};
+
+function formatActionError(caught: unknown): string {
+  return caught instanceof Error && caught.message.trim().length > 0
+    ? caught.message
+    : "Request failed.";
 }
 
 export async function requestFundingApprovalAction(formData: FormData) {
@@ -260,4 +280,74 @@ export async function createSponsoredSettlementExecutionRequestAction(
   );
   revalidatePath(returnPath);
   redirectBack(returnPath);
+}
+
+export async function recordFundingTransactionAction(
+  _previousState: TransactionRecordActionState,
+  formData: FormData
+): Promise<TransactionRecordActionState> {
+  const organizationId = String(formData.get("organizationId"));
+  const draftDealId = String(formData.get("draftDealId"));
+  const dealVersionId = String(formData.get("dealVersionId"));
+  const returnPath = String(formData.get("returnPath"));
+  const transactionHash = String(formData.get("transactionHash") ?? "").trim();
+
+  try {
+    await createFundingTransaction(
+      { dealVersionId, draftDealId, organizationId },
+      { transactionHash }
+    );
+    revalidatePath(returnPath);
+
+    return {
+      error: null,
+      ok: true,
+      transactionHash
+    };
+  } catch (caught) {
+    return {
+      error: formatActionError(caught),
+      ok: false,
+      transactionHash
+    };
+  }
+}
+
+export async function recordSettlementExecutionTransactionAction(
+  _previousState: TransactionRecordActionState,
+  formData: FormData
+): Promise<TransactionRecordActionState> {
+  const organizationId = String(formData.get("organizationId"));
+  const draftDealId = String(formData.get("draftDealId"));
+  const dealVersionId = String(formData.get("dealVersionId"));
+  const dealMilestoneSettlementRequestId = String(
+    formData.get("dealMilestoneSettlementRequestId")
+  );
+  const returnPath = String(formData.get("returnPath"));
+  const transactionHash = String(formData.get("transactionHash") ?? "").trim();
+
+  try {
+    await createMilestoneSettlementExecutionTransaction(
+      {
+        dealMilestoneSettlementRequestId,
+        dealVersionId,
+        draftDealId,
+        organizationId
+      },
+      { transactionHash }
+    );
+    revalidatePath(returnPath);
+
+    return {
+      error: null,
+      ok: true,
+      transactionHash
+    };
+  } catch (caught) {
+    return {
+      error: formatActionError(caught),
+      ok: false,
+      transactionHash
+    };
+  }
 }

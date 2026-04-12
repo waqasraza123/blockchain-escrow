@@ -5,6 +5,7 @@ import type { CounterpartySummary } from "./counterparties";
 import type { FileSummary } from "./files";
 import type {
   FundingTransactionIndexedExecutionStatus,
+  PreparedTransaction,
   FundingTransactionReconciledStatus,
   FundingTransactionStalePendingEvaluation,
   FundingTransactionStatus,
@@ -732,6 +733,8 @@ export interface MilestoneSettlementExecutionPlanSummary {
   dealId: HexString | null;
   dealVersionHash: HexString | null;
   executionPreparation: DealMilestoneSettlementPreparationSummary | null;
+  executionTransaction: PreparedTransaction | null;
+  executionTransactionMethod: "refundMilestone" | "releaseMilestone" | null;
   indexedSettlement: DealMilestoneIndexedSettlementSummary | null;
   milestone: DealVersionMilestoneSnapshot;
   network: string | null;

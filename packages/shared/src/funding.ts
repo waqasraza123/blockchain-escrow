@@ -84,11 +84,13 @@ export type FundingTransactionStalePendingEvaluation = z.infer<
   typeof fundingTransactionStalePendingEvaluationSchema
 >;
 
-export interface FundingPreparationTransaction {
+export interface PreparedTransaction {
   data: HexString;
   to: WalletAddress;
-  value: "0";
+  value: string;
 }
+
+export type FundingPreparationTransaction = PreparedTransaction;
 
 export const fundingPreparationTransactionFunctionSchema = z.enum([
   "createAgreement",
