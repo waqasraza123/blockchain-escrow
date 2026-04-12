@@ -7,6 +7,7 @@ export interface WorkerRunSnapshot {
   readonly completedFinanceExportJobCount: number;
   readonly clearedMilestoneSettlementExecutionReconciliationCount: number;
   readonly expiredMilestoneReviewDeadlineCount: number;
+  readonly expiredSponsoredTransactionRequestCount: number;
   readonly failedFinanceExportJobCount: number;
   readonly generatedFinanceExportArtifactCount: number;
   readonly processedFinanceExportJobCount: number;
@@ -17,6 +18,7 @@ export interface WorkerRunSnapshot {
   readonly reopenedOperatorAlertCount: number;
   readonly scannedDraftCustodyStateCount: number;
   readonly scannedDraftCount: number;
+  readonly scannedExpirableSponsoredTransactionRequestCount: number;
   readonly scannedFundingTransactionCount: number;
   readonly scannedMilestoneReviewDeadlineCount: number;
   readonly scannedMilestoneReviewDeadlineDraftCount: number;

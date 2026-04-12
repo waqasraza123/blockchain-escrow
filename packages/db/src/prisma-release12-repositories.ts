@@ -302,6 +302,31 @@ export function createRelease12Repositories(prisma: DatabaseClient): Release12Re
           }
         })
       ),
+    expireIfStillPending: async (input) =>
+      prisma.$transaction(async (transaction) => {
+        const evaluatedAt = toDate(input.evaluatedAt);
+        const updated = await transaction.sponsoredTransactionRequest.updateMany({
+          data: {
+            status: "EXPIRED",
+            updatedAt: evaluatedAt
+          },
+          where: {
+            expiresAt: { lte: evaluatedAt },
+            id: input.id,
+            status: "APPROVED",
+            submittedAt: null
+          }
+        });
+
+        if (updated.count === 0) {
+          return null;
+        }
+
+        const record = await transaction.sponsoredTransactionRequest.findUnique({
+          where: { id: input.id }
+        });
+        return record ? mapSponsoredTransactionRequestRecord(record) : null;
+      }),
     findById: async (id) => {
       const record = await prisma.sponsoredTransactionRequest.findUnique({ where: { id } });
       return record ? mapSponsoredTransactionRequestRecord(record) : null;
@@ -310,6 +335,7 @@ export function createRelease12Repositories(prisma: DatabaseClient): Release12Re
       const record = await prisma.sponsoredTransactionRequest.findFirst({
         orderBy: { createdAt: "desc" },
         where: {
+          expiresAt: { gt: new Date() },
           kind: input.kind,
           status: "APPROVED",
           subjectId: input.subjectId,
@@ -319,6 +345,17 @@ export function createRelease12Repositories(prisma: DatabaseClient): Release12Re
       });
       return record ? mapSponsoredTransactionRequestRecord(record) : null;
     },
+    listApprovedPendingByExpiresAt: async (expiresAt) =>
+      (
+        await prisma.sponsoredTransactionRequest.findMany({
+          orderBy: [{ expiresAt: "asc" }, { createdAt: "asc" }],
+          where: {
+            expiresAt: { lte: toDate(expiresAt) },
+            status: "APPROVED",
+            submittedAt: null
+          }
+        })
+      ).map(mapSponsoredTransactionRequestRecord),
     listByOrganizationId: async (organizationId) =>
       (
         await prisma.sponsoredTransactionRequest.findMany({

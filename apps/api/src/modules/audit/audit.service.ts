@@ -298,6 +298,7 @@ export class AuditService {
       case "PARTNER_WEBHOOK_DELIVERY_ATTEMPT":
       case "PARTNER_WEBHOOK_EVENT":
       case "PARTNER_WEBHOOK_SUBSCRIPTION":
+      case "SPONSORED_TRANSACTION_REQUEST":
         throw new ForbiddenException(
           "audit logs for operator-only entities are not available on this surface"
         );

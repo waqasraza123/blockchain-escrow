@@ -2500,6 +2500,8 @@ test("milestones service marks approved settlement sponsorship requests as submi
     services.sessionTokenService
   );
   const seeded = await seedMilestoneScenario(services, actor, "BUYER");
+  const sponsoredRequestCreatedAt = isoFromNow(-300);
+  const sponsoredRequestExpiresAt = isoFromNow(1800);
 
   await seedActiveAgreement(services, seeded);
   const submission = await seedCounterpartySellerSubmission(services, seeded, {
@@ -2545,14 +2547,14 @@ test("milestones service marks approved settlement sponsorship requests as submi
   });
   await services.release12Repositories.sponsoredTransactionRequests.create({
     amountMinor: seeded.version.version.milestones[0]!.amountMinor,
-    approvedAt: "2026-04-08T01:30:00.000Z",
+    approvedAt: sponsoredRequestCreatedAt,
     chainId: 84532,
-    createdAt: "2026-04-08T01:30:00.000Z",
+    createdAt: sponsoredRequestCreatedAt,
     data: "0x1234",
     dealMilestoneSettlementRequestId: "settlement-request-sponsored",
     dealVersionId: seeded.version.version.id,
     draftDealId: seeded.draft.draft.id,
-    expiresAt: "2026-04-08T02:30:00.000Z",
+    expiresAt: sponsoredRequestExpiresAt,
     gasPolicyId: "gas-policy-1",
     id: "sponsored-settlement-request-1",
     kind: "DEAL_MILESTONE_SETTLEMENT_EXECUTION_TRANSACTION_CREATE",
@@ -2566,7 +2568,7 @@ test("milestones service marks approved settlement sponsorship requests as submi
     submittedAt: null,
     submittedTransactionHash: null,
     toAddress: "0x7777777777777777777777777777777777777777",
-    updatedAt: "2026-04-08T01:30:00.000Z",
+    updatedAt: sponsoredRequestCreatedAt,
     value: "0",
     walletAddress: actor.walletAddress,
     walletId: actor.walletId
@@ -2599,6 +2601,113 @@ test("milestones service marks approved settlement sponsorship requests as submi
     created.executionTransaction.transactionHash
   );
   assert.notEqual(sponsoredRequest?.submittedAt, null);
+});
+
+test("milestones service does not match expired settlement sponsorship requests when recording tx hashes", async () => {
+  const services = createServices();
+  const actor = await seedAuthenticatedActor(
+    services.release1Repositories,
+    services.sessionTokenService
+  );
+  const seeded = await seedMilestoneScenario(services, actor, "BUYER");
+  const sponsoredRequestCreatedAt = isoFromNow(-7200);
+  const sponsoredRequestExpiresAt = isoFromNow(-3600);
+
+  await seedActiveAgreement(services, seeded);
+  const submission = await seedCounterpartySellerSubmission(services, seeded, {
+    dealVersionMilestoneId: seeded.version.version.milestones[0]!.id,
+    submissionNumber: 1
+  });
+  const review = await seedMilestoneReview(services, seeded, actor, submission.id, {
+    dealVersionMilestoneId: seeded.version.version.milestones[0]!.id
+  });
+  await services.release1Repositories.dealMilestoneSettlementRequests.create({
+    dealMilestoneReviewId: review.id,
+    dealMilestoneSubmissionId: submission.id,
+    dealVersionId: seeded.version.version.id,
+    dealVersionMilestoneId: seeded.version.version.milestones[0]!.id,
+    draftDealId: seeded.draft.draft.id,
+    id: "settlement-request-sponsored-expired",
+    kind: "RELEASE",
+    organizationId: "org-1",
+    requestedAt: "2026-04-08T00:00:00.000Z",
+    requestedByUserId: actor.userId,
+    statementMarkdown: null
+  });
+  await services.release1Repositories.dealMilestoneSettlementPreparations.create({
+    agreementAddress: "0x7777777777777777777777777777777777777777",
+    chainId: 84532,
+    dealId: buildCanonicalDealId("org-1", seeded.draft.draft.id),
+    dealMilestoneReviewId: review.id,
+    dealMilestoneSettlementRequestId: "settlement-request-sponsored-expired",
+    dealMilestoneSubmissionId: submission.id,
+    dealVersionHash:
+      "0x2222222222222222222222222222222222222222222222222222222222222222",
+    dealVersionId: seeded.version.version.id,
+    dealVersionMilestoneId: seeded.version.version.milestones[0]!.id,
+    draftDealId: seeded.draft.draft.id,
+    id: "settlement-preparation-sponsored-expired",
+    kind: "RELEASE",
+    milestoneAmountMinor: seeded.version.version.milestones[0]!.amountMinor,
+    milestonePosition: seeded.version.version.milestones[0]!.position,
+    organizationId: "org-1",
+    preparedAt: "2026-04-08T01:00:00.000Z",
+    settlementTokenAddress: "0x6666666666666666666666666666666666666666",
+    totalAmount: "3000000"
+  });
+  await services.release12Repositories.sponsoredTransactionRequests.create({
+    amountMinor: seeded.version.version.milestones[0]!.amountMinor,
+    approvedAt: sponsoredRequestCreatedAt,
+    chainId: 84532,
+    createdAt: sponsoredRequestCreatedAt,
+    data: "0x1234",
+    dealMilestoneSettlementRequestId: "settlement-request-sponsored-expired",
+    dealVersionId: seeded.version.version.id,
+    draftDealId: seeded.draft.draft.id,
+    expiresAt: sponsoredRequestExpiresAt,
+    gasPolicyId: "gas-policy-1",
+    id: "sponsored-settlement-request-expired",
+    kind: "DEAL_MILESTONE_SETTLEMENT_EXECUTION_TRANSACTION_CREATE",
+    organizationId: "org-1",
+    reason: null,
+    requestedByUserId: actor.userId,
+    rejectedAt: null,
+    status: "APPROVED",
+    subjectId: "settlement-request-sponsored-expired",
+    subjectType: "DEAL_MILESTONE_SETTLEMENT_REQUEST",
+    submittedAt: null,
+    submittedTransactionHash: null,
+    toAddress: "0x7777777777777777777777777777777777777777",
+    updatedAt: sponsoredRequestCreatedAt,
+    value: "0",
+    walletAddress: actor.walletAddress,
+    walletId: actor.walletId
+  });
+
+  await withManifestContractVersion(3, async () =>
+    services.milestonesService.createMilestoneSettlementExecutionTransaction(
+      {
+        dealMilestoneSettlementRequestId: "settlement-request-sponsored-expired",
+        dealVersionId: seeded.version.version.id,
+        draftDealId: seeded.draft.draft.id,
+        organizationId: "org-1"
+      },
+      {
+        transactionHash:
+          "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      requestMetadata(actor.cookieHeader)
+    )
+  );
+
+  const sponsoredRequest =
+    await services.release12Repositories.sponsoredTransactionRequests.findById(
+      "sponsored-settlement-request-expired"
+    );
+
+  assert.equal(sponsoredRequest?.status, "APPROVED");
+  assert.equal(sponsoredRequest?.submittedAt, null);
+  assert.equal(sponsoredRequest?.submittedTransactionHash, null);
 });
 
 test("milestones service exposes persisted stale pending escalation metadata on settlement execution transactions", async () => {

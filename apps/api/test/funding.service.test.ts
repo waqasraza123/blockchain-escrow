@@ -1356,17 +1356,19 @@ test("funding service marks approved sponsored funding requests as submitted", a
   const seeded = await seedFundingScenario();
 
   await createCounterpartyAcceptance(seeded);
+  const sponsoredRequestCreatedAt = isoFromNow(-300);
+  const sponsoredRequestExpiresAt = isoFromNow(1800);
 
   await seeded.services.release12Repositories.sponsoredTransactionRequests.create({
     amountMinor: "3500000",
-    approvedAt: "2026-04-07T00:00:00.000Z",
+    approvedAt: sponsoredRequestCreatedAt,
     chainId: 84532,
-    createdAt: "2026-04-07T00:00:00.000Z",
+    createdAt: sponsoredRequestCreatedAt,
     data: "0x1234",
     dealMilestoneSettlementRequestId: null,
     dealVersionId: seeded.version.version.id,
     draftDealId: seeded.draft.draft.id,
-    expiresAt: "2026-04-07T01:00:00.000Z",
+    expiresAt: sponsoredRequestExpiresAt,
     gasPolicyId: "gas-policy-1",
     id: "sponsored-funding-request-1",
     kind: "FUNDING_TRANSACTION_CREATE",
@@ -1380,27 +1382,29 @@ test("funding service marks approved sponsored funding requests as submitted", a
     submittedAt: null,
     submittedTransactionHash: null,
     toAddress: seeded.manifest.contracts.EscrowFactory!.toLowerCase() as `0x${string}`,
-    updatedAt: "2026-04-07T00:00:00.000Z",
+    updatedAt: sponsoredRequestCreatedAt,
     value: "0",
     walletAddress: seeded.actor.walletAddress,
     walletId: seeded.actor.walletId
   });
 
-  const created = await seeded.services.fundingService.createFundingTransaction(
-    {
-      dealVersionId: seeded.version.version.id,
-      draftDealId: seeded.draft.draft.id,
-      organizationId: "org-1"
-    },
-    {
-      transactionHash:
-        "0x6666666666666666666666666666666666666666666666666666666666666666"
-    },
-    {
-      cookieHeader: seeded.actor.cookieHeader,
-      ipAddress: "127.0.0.1",
-      userAgent: "test-agent"
-    }
+  const created = await withContractVersion(84532, 1, async () =>
+    seeded.services.fundingService.createFundingTransaction(
+      {
+        dealVersionId: seeded.version.version.id,
+        draftDealId: seeded.draft.draft.id,
+        organizationId: "org-1"
+      },
+      {
+        transactionHash:
+          "0x6666666666666666666666666666666666666666666666666666666666666666"
+      },
+      {
+        cookieHeader: seeded.actor.cookieHeader,
+        ipAddress: "127.0.0.1",
+        userAgent: "test-agent"
+      }
+    )
   );
 
   const sponsoredRequest =
@@ -1414,4 +1418,69 @@ test("funding service marks approved sponsored funding requests as submitted", a
     created.fundingTransaction.transactionHash
   );
   assert.notEqual(sponsoredRequest?.submittedAt, null);
+});
+
+test("funding service does not match expired sponsored funding requests when recording tx hashes", async () => {
+  const seeded = await seedFundingScenario();
+
+  await createCounterpartyAcceptance(seeded);
+  const sponsoredRequestCreatedAt = isoFromNow(-7200);
+  const sponsoredRequestExpiresAt = isoFromNow(-3600);
+
+  await seeded.services.release12Repositories.sponsoredTransactionRequests.create({
+    amountMinor: "3500000",
+    approvedAt: sponsoredRequestCreatedAt,
+    chainId: 84532,
+    createdAt: sponsoredRequestCreatedAt,
+    data: "0x1234",
+    dealMilestoneSettlementRequestId: null,
+    dealVersionId: seeded.version.version.id,
+    draftDealId: seeded.draft.draft.id,
+    expiresAt: sponsoredRequestExpiresAt,
+    gasPolicyId: "gas-policy-1",
+    id: "sponsored-funding-request-expired",
+    kind: "FUNDING_TRANSACTION_CREATE",
+    organizationId: "org-1",
+    reason: null,
+    requestedByUserId: seeded.actor.userId,
+    rejectedAt: null,
+    status: "APPROVED",
+    subjectId: seeded.version.version.id,
+    subjectType: "DEAL_VERSION",
+    submittedAt: null,
+    submittedTransactionHash: null,
+    toAddress: seeded.manifest.contracts.EscrowFactory!.toLowerCase() as `0x${string}`,
+    updatedAt: sponsoredRequestCreatedAt,
+    value: "0",
+    walletAddress: seeded.actor.walletAddress,
+    walletId: seeded.actor.walletId
+  });
+
+  await withContractVersion(84532, 1, async () =>
+    seeded.services.fundingService.createFundingTransaction(
+      {
+        dealVersionId: seeded.version.version.id,
+        draftDealId: seeded.draft.draft.id,
+        organizationId: "org-1"
+      },
+      {
+        transactionHash:
+          "0x7777777777777777777777777777777777777777777777777777777777777777"
+      },
+      {
+        cookieHeader: seeded.actor.cookieHeader,
+        ipAddress: "127.0.0.1",
+        userAgent: "test-agent"
+      }
+    )
+  );
+
+  const sponsoredRequest =
+    await seeded.services.release12Repositories.sponsoredTransactionRequests.findById(
+      "sponsored-funding-request-expired"
+    );
+
+  assert.equal(sponsoredRequest?.status, "APPROVED");
+  assert.equal(sponsoredRequest?.submittedAt, null);
+  assert.equal(sponsoredRequest?.submittedTransactionHash, null);
 });

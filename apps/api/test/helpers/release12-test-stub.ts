@@ -50,6 +50,26 @@ export function createRelease12RepositoriesStub() {
         sponsoredRequestStore.set(record.id, record);
         return record;
       },
+      expireIfStillPending: async (input: { evaluatedAt: string; id: string }) => {
+        const existing = sponsoredRequestStore.get(input.id);
+
+        if (
+          !existing ||
+          existing.status !== "APPROVED" ||
+          existing.submittedAt !== null ||
+          new Date(existing.expiresAt).getTime() > new Date(input.evaluatedAt).getTime()
+        ) {
+          return null;
+        }
+
+        const next: SponsoredTransactionRequestRecord = {
+          ...existing,
+          status: "EXPIRED",
+          updatedAt: input.evaluatedAt
+        };
+        sponsoredRequestStore.set(input.id, next);
+        return next;
+      },
       findById: async (id: string) => sponsoredRequestStore.get(id) ?? null,
       findLatestApprovedBySubjectAndWallet: async (input: {
         kind: SponsoredTransactionRequestRecord["kind"];
@@ -63,9 +83,23 @@ export function createRelease12RepositoriesStub() {
               record.status === "APPROVED" &&
               record.subjectId === input.subjectId &&
               record.walletId === input.walletId &&
-              record.submittedAt === null
+              record.submittedAt === null &&
+              new Date(record.expiresAt).getTime() > Date.now()
           )
           .sort((left, right) => right.createdAt.localeCompare(left.createdAt))[0] ?? null,
+      listApprovedPendingByExpiresAt: async (expiresAt: string) =>
+        [...sponsoredRequestStore.values()]
+          .filter(
+            (record) =>
+              record.status === "APPROVED" &&
+              record.submittedAt === null &&
+              new Date(record.expiresAt).getTime() <= new Date(expiresAt).getTime()
+          )
+          .sort(
+            (left, right) =>
+              new Date(left.expiresAt).getTime() - new Date(right.expiresAt).getTime() ||
+              left.createdAt.localeCompare(right.createdAt)
+          ),
       listByOrganizationId: async (organizationId: string) =>
         [...sponsoredRequestStore.values()].filter(
           (record) => record.organizationId === organizationId

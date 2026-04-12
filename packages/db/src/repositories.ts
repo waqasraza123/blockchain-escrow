@@ -531,12 +531,19 @@ export interface SponsoredTransactionRequestRepository {
   create(
     record: SponsoredTransactionRequestRecord
   ): Promise<SponsoredTransactionRequestRecord>;
+  expireIfStillPending(input: {
+    evaluatedAt: IsoTimestamp;
+    id: EntityId;
+  }): Promise<SponsoredTransactionRequestRecord | null>;
   findById(id: EntityId): Promise<SponsoredTransactionRequestRecord | null>;
   findLatestApprovedBySubjectAndWallet(input: {
     kind: SponsoredTransactionRequestRecord["kind"];
     subjectId: EntityId;
     walletId: EntityId;
   }): Promise<SponsoredTransactionRequestRecord | null>;
+  listApprovedPendingByExpiresAt(
+    expiresAt: IsoTimestamp
+  ): Promise<SponsoredTransactionRequestRecord[]>;
   listByOrganizationId(
     organizationId: EntityId
   ): Promise<SponsoredTransactionRequestRecord[]>;

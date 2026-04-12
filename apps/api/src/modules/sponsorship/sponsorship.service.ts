@@ -3,7 +3,8 @@ import { randomUUID } from "node:crypto";
 import type {
   GasPolicyRecord,
   Release1Repositories,
-  Release12Repositories
+  Release12Repositories,
+  SponsoredTransactionRequestRecord
 } from "@blockchain-escrow/db";
 import { hasMinimumOrganizationRole } from "@blockchain-escrow/security";
 import {
@@ -67,6 +68,24 @@ function addMinutes(timestamp: string, minutes: number): string {
 
 function toGasPolicySummary(record: GasPolicyRecord): GasPolicySummary {
   return record;
+}
+
+function toSponsoredTransactionRequestSummary(
+  record: SponsoredTransactionRequestRecord,
+  evaluatedAt: string
+): SponsoredTransactionRequestSummary {
+  if (
+    record.status === "APPROVED" &&
+    record.submittedAt === null &&
+    new Date(record.expiresAt).getTime() <= new Date(evaluatedAt).getTime()
+  ) {
+    return {
+      ...record,
+      status: "EXPIRED"
+    } as SponsoredTransactionRequestSummary;
+  }
+
+  return record as SponsoredTransactionRequestSummary;
 }
 
 @Injectable()
@@ -183,14 +202,15 @@ export class SponsorshipService {
     requestMetadata: RequestMetadata
   ): Promise<ListSponsoredTransactionRequestsResponse> {
     await this.requireOrganizationMembership(organizationId, requestMetadata, "MEMBER");
+    const evaluatedAt = nowIso();
     const requests =
       await this.release12Repositories.sponsoredTransactionRequests.listByOrganizationId(
         organizationId
       );
 
     return {
-      sponsoredTransactionRequests: requests.map(
-        (record) => record as SponsoredTransactionRequestSummary
+      sponsoredTransactionRequests: requests.map((record) =>
+        toSponsoredTransactionRequestSummary(record, evaluatedAt)
       )
     };
   }
@@ -319,6 +339,20 @@ export class SponsorshipService {
       input.walletId,
       input.gasPolicyId
     );
+    const existingApprovedRequest =
+      await this.release12Repositories.sponsoredTransactionRequests.findLatestApprovedBySubjectAndWallet(
+        {
+          kind: input.kind,
+          subjectId: input.subjectId,
+          walletId: input.walletId
+        }
+      );
+
+    if (existingApprovedRequest) {
+      throw new ConflictException(
+        "a sponsored transaction request is already approved and awaiting submission"
+      );
+    }
 
     if (!gasPolicy) {
       throw new ConflictException("no active gas policy is available");

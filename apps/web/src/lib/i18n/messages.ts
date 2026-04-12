@@ -332,6 +332,8 @@ export const enMessages = {
     actions: "Actions",
     allowedApprovalPolicyKinds: "Allowed approval kinds",
     amount: "Amount",
+    approvedSponsoredRequestPending:
+      "A sponsored request is approved and awaiting transaction submission.",
     approvalNoteTemplate: "Approval note template",
     connectedWalletMismatch:
       "The connected wallet does not match the authenticated session wallet.",
@@ -344,6 +346,8 @@ export const enMessages = {
     defaultGasPolicyId: "Default gas policy id",
     displayName: "Display name",
     eyebrow: "Release 12",
+    expiredSponsoredRequestMessage:
+      "The latest sponsored request expired before submission. You can request a new one.",
     executeFunding: "Execute funding",
     executeRefund: "Execute refund",
     executeRelease: "Execute release",
@@ -352,6 +356,7 @@ export const enMessages = {
     expires: "Expires",
     gasPolicies: "Gas policies",
     kind: "Kind",
+    latestSponsoredRequest: "Latest sponsored request",
     latestTrackedTransaction: "Latest tracked transaction",
     maxAmountMinor: "Max amount minor",
     maxRequestsPerDay: "Max requests per day",
@@ -371,6 +376,8 @@ export const enMessages = {
     quickReject: "Quick reject",
     reason: "Reason",
     recordingTransaction: "Recording transaction...",
+    rejectedSponsoredRequestMessage:
+      "The latest sponsored request was rejected. Review the reason before requesting another one.",
     requestRefund: "Request refund",
     requestRelease: "Request release",
     requestSponsoredFunding: "Request sponsored funding",
@@ -393,6 +400,8 @@ export const enMessages = {
     sponsoredRequests: "Sponsored requests",
     sponsorWindowMinutes: "Sponsor window minutes",
     status: "Status",
+    submittedSponsoredRequestPending:
+      "A sponsored request is already linked to a submitted transaction.",
     subtitle:
       "Manage wallet defaults, sponsorship budgets, and the request queue for funding and settlement actions.",
     submittedHash: "Submitted hash",
@@ -810,6 +819,8 @@ export const arMessages = {
     actions: "الإجراءات",
     allowedApprovalPolicyKinds: "أنواع الموافقات المسموح بها",
     amount: "المبلغ",
+    approvedSponsoredRequestPending:
+      "تم اعتماد طلب الرعاية وهو بانتظار إرسال المعاملة.",
     approvalNoteTemplate: "قالب ملاحظة الموافقة",
     connectedWalletMismatch:
       "المحفظة المتصلة لا تطابق محفظة جلسة المستخدم الحالية.",
@@ -822,6 +833,8 @@ export const arMessages = {
     defaultGasPolicyId: "معرف سياسة الغاز الافتراضية",
     displayName: "الاسم المعروض",
     eyebrow: "الإصدار 12",
+    expiredSponsoredRequestMessage:
+      "انتهت صلاحية أحدث طلب رعاية قبل إرسال المعاملة. يمكنك طلب واحد جديد.",
     executeFunding: "تنفيذ التمويل",
     executeRefund: "تنفيذ الاسترداد",
     executeRelease: "تنفيذ الإفراج",
@@ -830,6 +843,7 @@ export const arMessages = {
     expires: "ينتهي",
     gasPolicies: "سياسات الغاز",
     kind: "النوع",
+    latestSponsoredRequest: "أحدث طلب رعاية",
     latestTrackedTransaction: "آخر معاملة متتبعة",
     maxAmountMinor: "الحد الأقصى للمبلغ",
     maxRequestsPerDay: "الحد الأقصى للطلبات يوميًا",
@@ -849,6 +863,8 @@ export const arMessages = {
     quickReject: "رفض سريع",
     reason: "السبب",
     recordingTransaction: "جارٍ تسجيل المعاملة...",
+    rejectedSponsoredRequestMessage:
+      "تم رفض أحدث طلب رعاية. راجع السبب قبل طلب واحد آخر.",
     requestRefund: "طلب استرداد",
     requestRelease: "طلب إفراج",
     requestSponsoredFunding: "طلب تمويل مدعوم",
@@ -871,6 +887,8 @@ export const arMessages = {
     sponsoredRequests: "الطلبات المدعومة",
     sponsorWindowMinutes: "دقائق نافذة الرعاية",
     status: "الحالة",
+    submittedSponsoredRequestPending:
+      "تم ربط طلب الرعاية بالفعل بمعاملة مُرسلة.",
     subtitle:
       "إدارة افتراضيات المحافظ وميزانيات الرعاية وقائمة طلبات التمويل والتسوية.",
     submittedHash: "التجزئة المرسلة",

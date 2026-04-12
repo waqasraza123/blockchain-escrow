@@ -1,6 +1,9 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import type { FundingTransactionStatus } from "@blockchain-escrow/shared";
+import type {
+  FundingTransactionStatus,
+  SponsoredTransactionRequestSummary
+} from "@blockchain-escrow/shared";
 
 import {
   getMilestoneSettlementExecutionPlan,
@@ -12,6 +15,7 @@ import {
   listGasPolicies,
   listFundingTransactions,
   listMilestoneSettlementExecutionTransactions,
+  listSponsoredTransactionRequests,
   listMilestoneWorkflows,
   listWallets,
   previewApprovalRequirement
@@ -47,6 +51,17 @@ type VersionDetailPageProps = {
 
 function sortBySubmittedAtDescending<T extends { submittedAt: string }>(left: T, right: T): number {
   return right.submittedAt.localeCompare(left.submittedAt);
+}
+
+function sortByCreatedAtDescending<T extends { createdAt: string }>(left: T, right: T): number {
+  return right.createdAt.localeCompare(left.createdAt);
+}
+
+function findLatestSponsoredRequest(
+  requests: SponsoredTransactionRequestSummary[],
+  predicate: (request: SponsoredTransactionRequestSummary) => boolean
+): SponsoredTransactionRequestSummary | null {
+  return requests.find(predicate) ?? null;
 }
 
 function buildExecutionUiState(input: {
@@ -88,6 +103,42 @@ function buildExecutionUiState(input: {
   }
 }
 
+function buildSponsoredRequestUiState(input: {
+  approvedMessage: string;
+  expiredMessage: string;
+  latestRequest: SponsoredTransactionRequestSummary | null;
+  rejectedMessage: string;
+  submittedMessage: string;
+}) {
+  switch (input.latestRequest?.status) {
+    case "APPROVED":
+      return {
+        canRequest: false,
+        contextMessage: input.approvedMessage
+      };
+    case "SUBMITTED":
+      return {
+        canRequest: false,
+        contextMessage: input.submittedMessage
+      };
+    case "REJECTED":
+      return {
+        canRequest: true,
+        contextMessage: input.rejectedMessage
+      };
+    case "EXPIRED":
+      return {
+        canRequest: true,
+        contextMessage: input.expiredMessage
+      };
+    default:
+      return {
+        canRequest: true,
+        contextMessage: null
+      };
+  }
+}
+
 export default async function VersionDetailPage(props: VersionDetailPageProps) {
   const { dealVersionId, draftDealId, organizationId } = await props.params;
   const { messages } = await getI18n();
@@ -111,7 +162,8 @@ export default async function VersionDetailPage(props: VersionDetailPageProps) {
     wallets,
     gasPolicies,
     snapshotApproval,
-    session
+    session,
+    sponsoredTransactionRequestsResponse
   ] = await Promise.all([
     getFundingPreparation({ dealVersionId, draftDealId, organizationId }),
     getSettlementStatement({ dealVersionId, draftDealId, organizationId }),
@@ -132,7 +184,8 @@ export default async function VersionDetailPage(props: VersionDetailPageProps) {
       title: version.title,
       totalAmountMinor
     }),
-    getSession()
+    getSession(),
+    listSponsoredTransactionRequests(organizationId)
   ]);
   const returnPath = `/orgs/${organizationId}/drafts/${draftDealId}/versions/${dealVersionId}`;
 
@@ -165,7 +218,15 @@ export default async function VersionDetailPage(props: VersionDetailPageProps) {
   const fundingTransactions = [...fundingTransactionsResponse.fundingTransactions].sort(
     sortBySubmittedAtDescending
   );
+  const sponsoredTransactionRequests = [
+    ...sponsoredTransactionRequestsResponse.sponsoredTransactionRequests
+  ].sort(sortByCreatedAtDescending);
   const latestFundingTransaction = fundingTransactions[0] ?? null;
+  const latestFundingSponsoredRequest = findLatestSponsoredRequest(
+    sponsoredTransactionRequests,
+    (request) =>
+      request.kind === "FUNDING_TRANSACTION_CREATE" && request.dealVersionId === dealVersionId
+  );
   const fundingExecutionUi = buildExecutionUiState({
     confirmedMessage: messages.wallets.confirmedFundingReconciliationPending,
     executeLabel: messages.wallets.executeFunding,
@@ -174,6 +235,13 @@ export default async function VersionDetailPage(props: VersionDetailPageProps) {
     replaceLabel: messages.wallets.replaceFunding,
     retryLabel: messages.wallets.retryFunding,
     retryMessage: messages.wallets.retryExecutionAvailable
+  });
+  const fundingSponsoredRequestUi = buildSponsoredRequestUiState({
+    approvedMessage: messages.wallets.approvedSponsoredRequestPending,
+    expiredMessage: messages.wallets.expiredSponsoredRequestMessage,
+    latestRequest: latestFundingSponsoredRequest,
+    rejectedMessage: messages.wallets.rejectedSponsoredRequestMessage,
+    submittedMessage: messages.wallets.submittedSponsoredRequestPending
   });
   const settlementExecutionEntries = await Promise.all(
     milestoneWorkflows.milestones
@@ -318,7 +386,8 @@ export default async function VersionDetailPage(props: VersionDetailPageProps) {
           ) : null}
           {fundingPreparation.preparation.ready &&
           defaultGasPolicyId &&
-          fundingExecutionUi.canRequestSponsorship ? (
+          fundingExecutionUi.canRequestSponsorship &&
+          fundingSponsoredRequestUi.canRequest ? (
             <form action={createSponsoredFundingRequestAction} className="actions-row">
               <input name="organizationId" type="hidden" value={organizationId} />
               <input name="draftDealId" type="hidden" value={draftDealId} />
@@ -329,6 +398,42 @@ export default async function VersionDetailPage(props: VersionDetailPageProps) {
                 {messages.wallets.requestSponsoredFunding}
               </button>
             </form>
+          ) : null}
+          {fundingSponsoredRequestUi.contextMessage ? (
+            <p className="empty-state">{fundingSponsoredRequestUi.contextMessage}</p>
+          ) : null}
+          {latestFundingSponsoredRequest ? (
+            <div className="detail-grid">
+              <div className="detail-item">
+                <span className="muted">{messages.wallets.latestSponsoredRequest}</span>
+                <Pill
+                  tone={toneForStatus(latestFundingSponsoredRequest.status)}
+                  value={formatCode(
+                    latestFundingSponsoredRequest.status,
+                    messages.statuses,
+                    messages.common.none
+                  )}
+                />
+              </div>
+              <div className="detail-item">
+                <span className="muted">{messages.wallets.expires}</span>
+                <strong>{latestFundingSponsoredRequest.expiresAt}</strong>
+              </div>
+              {latestFundingSponsoredRequest.submittedTransactionHash ? (
+                <div className="detail-item">
+                  <span className="muted">{messages.wallets.submittedHash}</span>
+                  <strong className="mono">
+                    {latestFundingSponsoredRequest.submittedTransactionHash}
+                  </strong>
+                </div>
+              ) : null}
+              {latestFundingSponsoredRequest.reason ? (
+                <div className="detail-item">
+                  <span className="muted">{messages.wallets.reason}</span>
+                  <strong>{latestFundingSponsoredRequest.reason}</strong>
+                </div>
+              ) : null}
+            </div>
           ) : null}
           {latestFundingTransaction ? (
             <div className="detail-grid">
@@ -461,6 +566,15 @@ export default async function VersionDetailPage(props: VersionDetailPageProps) {
               const settlementExecution = latestSettlementRequest
                 ? settlementExecutionByRequestId.get(latestSettlementRequest.id) ?? null
                 : null;
+              const latestSettlementSponsoredRequest = latestSettlementRequest
+                ? findLatestSponsoredRequest(
+                    sponsoredTransactionRequests,
+                    (request) =>
+                      request.kind ===
+                        "DEAL_MILESTONE_SETTLEMENT_EXECUTION_TRANSACTION_CREATE" &&
+                      request.dealMilestoneSettlementRequestId === latestSettlementRequest.id
+                  )
+                : null;
               const latestExecutionTransaction =
                 settlementExecution?.executionTransactions[0] ?? null;
               const settlementExecutionUi = buildExecutionUiState({
@@ -481,6 +595,13 @@ export default async function VersionDetailPage(props: VersionDetailPageProps) {
                     ? messages.wallets.retryRelease
                     : messages.wallets.retryRefund,
                 retryMessage: messages.wallets.retryExecutionAvailable
+              });
+              const settlementSponsoredRequestUi = buildSponsoredRequestUiState({
+                approvedMessage: messages.wallets.approvedSponsoredRequestPending,
+                expiredMessage: messages.wallets.expiredSponsoredRequestMessage,
+                latestRequest: latestSettlementSponsoredRequest,
+                rejectedMessage: messages.wallets.rejectedSponsoredRequestMessage,
+                submittedMessage: messages.wallets.submittedSponsoredRequestPending
               });
 
               return (
@@ -643,7 +764,8 @@ export default async function VersionDetailPage(props: VersionDetailPageProps) {
                   {latestSettlementRequest &&
                   settlementExecution?.plan.ready &&
                   defaultGasPolicyId &&
-                  settlementExecutionUi.canRequestSponsorship ? (
+                  settlementExecutionUi.canRequestSponsorship &&
+                  settlementSponsoredRequestUi.canRequest ? (
                     <form
                       action={createSponsoredSettlementExecutionRequestAction}
                       className="actions-row"
@@ -662,6 +784,44 @@ export default async function VersionDetailPage(props: VersionDetailPageProps) {
                         {messages.wallets.requestSponsoredSettlement}
                       </button>
                     </form>
+                  ) : null}
+                  {settlementSponsoredRequestUi.contextMessage ? (
+                    <p className="empty-state">
+                      {settlementSponsoredRequestUi.contextMessage}
+                    </p>
+                  ) : null}
+                  {latestSettlementSponsoredRequest ? (
+                    <div className="detail-grid">
+                      <div className="detail-item">
+                        <span className="muted">{messages.wallets.latestSponsoredRequest}</span>
+                        <Pill
+                          tone={toneForStatus(latestSettlementSponsoredRequest.status)}
+                          value={formatCode(
+                            latestSettlementSponsoredRequest.status,
+                            messages.statuses,
+                            messages.common.none
+                          )}
+                        />
+                      </div>
+                      <div className="detail-item">
+                        <span className="muted">{messages.wallets.expires}</span>
+                        <strong>{latestSettlementSponsoredRequest.expiresAt}</strong>
+                      </div>
+                      {latestSettlementSponsoredRequest.submittedTransactionHash ? (
+                        <div className="detail-item">
+                          <span className="muted">{messages.wallets.submittedHash}</span>
+                          <strong className="mono">
+                            {latestSettlementSponsoredRequest.submittedTransactionHash}
+                          </strong>
+                        </div>
+                      ) : null}
+                      {latestSettlementSponsoredRequest.reason ? (
+                        <div className="detail-item">
+                          <span className="muted">{messages.wallets.reason}</span>
+                          <strong>{latestSettlementSponsoredRequest.reason}</strong>
+                        </div>
+                      ) : null}
+                    </div>
                   ) : null}
                   {latestExecutionTransaction ? (
                     <div className="detail-grid">

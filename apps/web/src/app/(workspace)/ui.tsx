@@ -95,7 +95,8 @@ export function toneForStatus(value: string | null | undefined) {
     normalized.includes("PENDING") ||
     normalized.includes("REQUIRED") ||
     normalized.includes("PROCESSING") ||
-    normalized.includes("DISPUTED")
+    normalized.includes("DISPUTED") ||
+    normalized.includes("EXPIRED")
   ) {
     return "warning" as const;
   }

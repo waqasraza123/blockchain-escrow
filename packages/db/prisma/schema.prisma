@@ -95,6 +95,7 @@ enum AuditAction {
   OPERATOR_ALERT_ACKNOWLEDGED
   OPERATOR_ALERT_RESOLVED
   PROTOCOL_PROPOSAL_DRAFT_CREATED
+  SPONSORED_TRANSACTION_REQUEST_EXPIRED
   FINANCE_EXPORT_CREATED
   FINANCE_EXPORT_COMPLETED
   FINANCE_EXPORT_FAILED
@@ -423,6 +424,7 @@ enum AuditEntityType {
   PARTNER_WEBHOOK_SUBSCRIPTION
   PROTOCOL_PROPOSAL_DRAFT
   SESSION
+  SPONSORED_TRANSACTION_REQUEST
   FINANCE_EXPORT_JOB
   FINANCE_EXPORT_ARTIFACT
   STATEMENT_SNAPSHOT
@@ -744,6 +746,7 @@ model SponsoredTransactionRequest {
   @@index([requestedByUserId], map: "sponsored_transaction_requests_requested_by_user_id_idx")
   @@index([walletId], map: "sponsored_transaction_requests_wallet_id_idx")
   @@index([status], map: "sponsored_transaction_requests_status_idx")
+  @@index([status, submittedAt, expiresAt], map: "sponsored_transaction_requests_lifecycle_idx")
   @@index([subjectType, subjectId], map: "sponsored_transaction_requests_subject_idx")
   @@index([createdAt], map: "sponsored_transaction_requests_created_at_idx")
   @@map("sponsored_transaction_requests")
