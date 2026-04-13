@@ -352,6 +352,7 @@ export const enMessages = {
     recentDeliveries: "Recent deliveries"
   },
   search: {
+    chain: "Chain",
     empty: "Run a query to search the operator index.",
     entity: "Entity",
     identifier: "Identifier",
@@ -946,6 +947,7 @@ export const arMessages = {
     recentDeliveries: "عمليات التسليم الأخيرة"
   },
   search: {
+    chain: "السلسلة",
     empty: "شغّل استعلامًا للبحث في فهرس المشغّل.",
     entity: "الكيان",
     identifier: "المعرّف",

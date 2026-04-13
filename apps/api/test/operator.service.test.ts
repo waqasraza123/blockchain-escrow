@@ -272,10 +272,36 @@ test("operator search returns core operational entities", async () => {
     { q: "0x7777777777777777777777777777777777777777" },
     requestMetadata(actor.cookieHeader)
   );
+  const fundingResults = await services.operatorService.search(
+    {
+      q: "0x1212121212121212121212121212121212121212121212121212121212121212"
+    },
+    requestMetadata(actor.cookieHeader)
+  );
+  const settlementResults = await services.operatorService.search(
+    {
+      q: "0x3434343434343434343434343434343434343434343434343434343434343434"
+    },
+    requestMetadata(actor.cookieHeader)
+  );
   const disputeResults = await services.operatorService.search(
     { q: "Payment dispute" },
     requestMetadata(actor.cookieHeader)
   );
+  const draftHit =
+    titleResults.hits.find((entry) => entry.entityType === "DRAFT_DEAL") ?? null;
+  const agreementHit =
+    agreementResults.hits.find((entry) => entry.entityType === "ESCROW_AGREEMENT") ??
+    null;
+  const fundingHit =
+    fundingResults.hits.find((entry) => entry.entityType === "FUNDING_TRANSACTION") ??
+    null;
+  const settlementHit =
+    settlementResults.hits.find(
+      (entry) =>
+        entry.entityType ===
+        "DEAL_MILESTONE_SETTLEMENT_EXECUTION_TRANSACTION"
+    ) ?? null;
 
   assert.ok(
     titleResults.hits.some((entry) => entry.entityType === "DRAFT_DEAL")
@@ -291,6 +317,14 @@ test("operator search returns core operational entities", async () => {
       (entry) => entry.entityType === "DEAL_MILESTONE_DISPUTE"
     )
   );
+  assert.equal(draftHit?.chainId, null);
+  assert.equal(draftHit?.network, null);
+  assert.equal(agreementHit?.chainId, 84532);
+  assert.equal(agreementHit?.network, "base-sepolia");
+  assert.equal(fundingHit?.chainId, 84532);
+  assert.equal(fundingHit?.network, "base-sepolia");
+  assert.equal(settlementHit?.chainId, 84532);
+  assert.equal(settlementHit?.network, "base-sepolia");
 });
 
 test("compliance operators can manage alerts, checkpoints, and cases", async () => {

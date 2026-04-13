@@ -46,6 +46,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
             headers={[
               messages.search.entity,
               messages.search.identifier,
+              messages.search.chain,
               messages.search.status,
               messages.search.route
             ]}
@@ -55,10 +56,19 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
                 <td>
                   <div className="stack-sm">
                     <strong>{hit.title}</strong>
-                    <span className="muted">{hit.entityType}</span>
+                    <span className="muted">
+                      {hit.subtitle
+                        ? `${hit.entityType} · ${hit.subtitle}`
+                        : hit.entityType}
+                    </span>
                   </div>
                 </td>
                 <td className="mono">{hit.primaryIdentifier}</td>
+                <td>
+                  {hit.chainId !== null
+                    ? `${hit.network ?? messages.common.none} (${hit.chainId})`
+                    : messages.common.na}
+                </td>
                 <td>
                   <Pill
                     tone={toneForStatus(hit.status)}

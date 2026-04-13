@@ -314,6 +314,7 @@ export interface OperatorSubjectSummary {
 }
 
 export interface OperatorSearchHit {
+  chainId: ChainId | null;
   entityType:
     | "DRAFT_DEAL"
     | "DEAL_VERSION"
@@ -322,6 +323,7 @@ export interface OperatorSearchHit {
     | "FUNDING_TRANSACTION"
     | "DEAL_MILESTONE_SETTLEMENT_EXECUTION_TRANSACTION";
   id: EntityId;
+  network: string | null;
   organizationId: EntityId | null;
   primaryIdentifier: string;
   route: string;

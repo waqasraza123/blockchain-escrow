@@ -1344,6 +1344,12 @@ export class OperatorService {
     await this.requireOperatorContext(requestMetadata);
     const query = params.q.trim().toLowerCase();
     const hits: OperatorSearchHit[] = [];
+    const manifestByChainId = new Map(
+      this.getVisibleDeploymentManifests().map((manifest) => [
+        manifest.chainId,
+        manifest
+      ] as const)
+    );
 
     const [
       draftDeals,
@@ -1356,10 +1362,16 @@ export class OperatorService {
       this.release1Repositories.draftDeals.listAll(),
       this.release1Repositories.dealVersions.listAll(),
       this.release1Repositories.dealMilestoneDisputes.listAll(),
-      this.release4Repositories.escrowAgreements.listByChainId(this.configuration.chainId),
-      this.release1Repositories.fundingTransactions.listByChainId(this.configuration.chainId),
-      this.release1Repositories.dealMilestoneSettlementExecutionTransactions.listByChainId(
-        this.configuration.chainId
+      this.listByVisibleChainIds((chainId) =>
+        this.release4Repositories.escrowAgreements.listByChainId(chainId)
+      ),
+      this.listByVisibleChainIds((chainId) =>
+        this.release1Repositories.fundingTransactions.listByChainId(chainId)
+      ),
+      this.listByVisibleChainIds((chainId) =>
+        this.release1Repositories.dealMilestoneSettlementExecutionTransactions.listByChainId(
+          chainId
+        )
       )
     ]);
 
@@ -1372,8 +1384,10 @@ export class OperatorService {
         lowerCaseIncludes(draft.summary, query)
       ) {
         hits.push({
+          chainId: null,
           entityType: "DRAFT_DEAL",
           id: draft.id,
+          network: null,
           organizationId: draft.organizationId,
           primaryIdentifier: canonicalDealId,
           route: `/search?q=${encodeURIComponent(canonicalDealId)}`,
@@ -1391,8 +1405,10 @@ export class OperatorService {
         lowerCaseIncludes(version.summary, query)
       ) {
         hits.push({
+          chainId: null,
           entityType: "DEAL_VERSION",
           id: version.id,
+          network: null,
           organizationId: version.organizationId,
           primaryIdentifier: version.id,
           route: `/search?q=${encodeURIComponent(version.id)}`,
@@ -1413,8 +1429,10 @@ export class OperatorService {
             dispute.id
           );
         hits.push({
+          chainId: null,
           entityType: "DEAL_MILESTONE_DISPUTE",
           id: dispute.id,
+          network: null,
           organizationId: dispute.organizationId,
           primaryIdentifier: dispute.id,
           route: `/cases?subjectId=${dispute.id}&subjectType=DEAL_MILESTONE_DISPUTE`,
@@ -1427,6 +1445,7 @@ export class OperatorService {
 
     for (const agreement of agreements) {
       const linkedDraft = findDraftByCanonicalDealId(draftDeals, agreement.dealId);
+      const manifest = manifestByChainId.get(agreement.chainId) ?? null;
 
       if (
         lowerCaseIncludes(agreement.agreementAddress, query) ||
@@ -1434,8 +1453,10 @@ export class OperatorService {
         lowerCaseIncludes(agreement.dealVersionHash, query)
       ) {
         hits.push({
+          chainId: agreement.chainId,
           entityType: "ESCROW_AGREEMENT",
           id: agreement.agreementAddress,
+          network: manifest?.network ?? null,
           organizationId: linkedDraft?.organizationId ?? null,
           primaryIdentifier: agreement.agreementAddress,
           route: `/search?q=${encodeURIComponent(agreement.agreementAddress)}`,
@@ -1447,13 +1468,17 @@ export class OperatorService {
     }
 
     for (const transaction of fundingTransactions) {
+      const manifest = manifestByChainId.get(transaction.chainId) ?? null;
+
       if (
         lowerCaseIncludes(transaction.id, query) ||
         lowerCaseIncludes(transaction.transactionHash, query)
       ) {
         hits.push({
+          chainId: transaction.chainId,
           entityType: "FUNDING_TRANSACTION",
           id: transaction.id,
+          network: manifest?.network ?? null,
           organizationId: transaction.organizationId,
           primaryIdentifier: transaction.transactionHash,
           route: `/reconciliation?entityId=${transaction.id}`,
@@ -1465,13 +1490,17 @@ export class OperatorService {
     }
 
     for (const transaction of settlementTransactions) {
+      const manifest = manifestByChainId.get(transaction.chainId) ?? null;
+
       if (
         lowerCaseIncludes(transaction.id, query) ||
         lowerCaseIncludes(transaction.transactionHash, query)
       ) {
         hits.push({
+          chainId: transaction.chainId,
           entityType: "DEAL_MILESTONE_SETTLEMENT_EXECUTION_TRANSACTION",
           id: transaction.id,
+          network: manifest?.network ?? null,
           organizationId: transaction.organizationId,
           primaryIdentifier: transaction.transactionHash,
           route: `/reconciliation?entityId=${transaction.id}`,
