@@ -26,7 +26,7 @@ export default async function AlertsPage() {
         {alerts.alerts.length === 0 ? (
           <EmptyState body={messages.alerts.empty} />
         ) : (
-          <DataTable headers={[messages.alerts.kind, messages.alerts.status, messages.alerts.subject, messages.alerts.updated, messages.alerts.actions]}>
+          <DataTable headers={[messages.alerts.kind, messages.alerts.status, messages.alerts.subject, messages.alerts.chain, messages.alerts.updated, messages.alerts.actions]}>
             {alerts.alerts.map((alert) => (
               <tr key={alert.id}>
                 <td>{alert.kind}</td>
@@ -37,6 +37,11 @@ export default async function AlertsPage() {
                   />
                 </td>
                 <td>{alert.subject.label ?? alert.subject.subjectId}</td>
+                <td>
+                  {alert.subject.chainId !== null
+                    ? `${alert.subject.network ?? messages.common.none} (${alert.subject.chainId})`
+                    : messages.common.na}
+                </td>
                 <td className="mono">{alert.lastDetectedAt}</td>
                 <td>
                   <div className="actions-row">

@@ -305,9 +305,11 @@ export interface OperatorSessionResponse {
 
 export interface OperatorSubjectSummary {
   agreementAddress: WalletAddress | null;
+  chainId: ChainId | null;
   dealVersionId: EntityId | null;
   draftDealId: EntityId | null;
   label: string | null;
+  network: string | null;
   organizationId: EntityId | null;
   subjectId: EntityId;
   subjectType: OperatorSubjectType;

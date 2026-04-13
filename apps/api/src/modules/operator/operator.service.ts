@@ -9,6 +9,7 @@ import type { DeploymentManifest } from "@blockchain-escrow/contracts-sdk";
 import type {
   ComplianceCaseRecord,
   ComplianceCheckpointRecord,
+  EscrowAgreementRecord,
   FeeVaultStateRecord,
   GasPolicyRecord,
   OperatorAccountRecord,
@@ -269,18 +270,22 @@ function buildPermissions(role: OperatorAccountRecord["role"]): OperatorPermissi
 
 function buildSubjectSummary(input: {
   agreementAddress?: string | null;
+  chainId?: number | null;
   dealVersionId?: string | null;
   draftDealId?: string | null;
   label?: string | null;
+  network?: string | null;
   organizationId?: string | null;
   subjectId: string;
   subjectType: OperatorSubjectSummary["subjectType"];
 }): OperatorSubjectSummary {
   return {
     agreementAddress: (input.agreementAddress ?? null) as OperatorSubjectSummary["agreementAddress"],
+    chainId: input.chainId ?? null,
     dealVersionId: input.dealVersionId ?? null,
     draftDealId: input.draftDealId ?? null,
     label: input.label ?? null,
+    network: input.network ?? null,
     organizationId: input.organizationId ?? null,
     subjectId: input.subjectId,
     subjectType: input.subjectType
@@ -317,7 +322,24 @@ function findDraftByCanonicalDealId(
   );
 }
 
-function toAlertSummary(record: OperatorAlertRecord): ListOperatorAlertsResponse["alerts"][number] {
+function buildStoredSubjectSummary(input: {
+  agreementAddress?: string | null;
+  dealVersionId?: string | null;
+  draftDealId?: string | null;
+  label?: string | null;
+  organizationId?: string | null;
+  subjectId: string;
+  subjectType: OperatorSubjectSummary["subjectType"];
+}): OperatorSubjectSummary {
+  return buildSubjectSummary(input);
+}
+
+function buildAlertSummary(input: {
+  record: OperatorAlertRecord;
+  subject: OperatorSubjectSummary;
+}): ListOperatorAlertsResponse["alerts"][number] {
+  const { record, subject } = input;
+
   return {
     acknowledgedAt: record.acknowledgedAt,
     acknowledgedByOperatorAccountId: record.acknowledgedByOperatorAccountId,
@@ -332,21 +354,16 @@ function toAlertSummary(record: OperatorAlertRecord): ListOperatorAlertsResponse
     resolvedByOperatorAccountId: record.resolvedByOperatorAccountId,
     severity: record.severity,
     status: record.status,
-    subject: buildSubjectSummary({
-      agreementAddress: record.agreementAddress,
-      dealVersionId: record.dealVersionId,
-      draftDealId: record.draftDealId,
-      label: record.subjectLabel,
-      organizationId: record.organizationId,
-      subjectId: record.subjectId,
-      subjectType: record.subjectType
-    })
+    subject
   };
 }
 
-function toCheckpointSummary(
-  record: ComplianceCheckpointRecord
-): ComplianceCheckpointSummary {
+function buildCheckpointSummary(input: {
+  record: ComplianceCheckpointRecord;
+  subject: OperatorSubjectSummary;
+}): ComplianceCheckpointSummary {
+  const { record, subject } = input;
+
   return {
     createdAt: record.createdAt,
     createdByOperatorAccountId: record.createdByOperatorAccountId,
@@ -358,19 +375,16 @@ function toCheckpointSummary(
     linkedComplianceCaseId: record.linkedComplianceCaseId,
     note: record.note,
     status: record.status,
-    subject: buildSubjectSummary({
-      agreementAddress: record.agreementAddress,
-      dealVersionId: record.dealVersionId,
-      draftDealId: record.draftDealId,
-      label: record.subjectLabel,
-      organizationId: record.organizationId,
-      subjectId: record.subjectId,
-      subjectType: record.subjectType
-    })
+    subject
   };
 }
 
-function toCaseSummary(record: ComplianceCaseRecord): ComplianceCaseSummary {
+function buildCaseSummary(input: {
+  record: ComplianceCaseRecord;
+  subject: OperatorSubjectSummary;
+}): ComplianceCaseSummary {
+  const { record, subject } = input;
+
   return {
     assignedOperatorAccountId: record.assignedOperatorAccountId,
     createdAt: record.createdAt,
@@ -381,15 +395,7 @@ function toCaseSummary(record: ComplianceCaseRecord): ComplianceCaseSummary {
     linkedCheckpointId: record.linkedCheckpointId,
     severity: record.severity,
     status: record.status,
-    subject: buildSubjectSummary({
-      agreementAddress: record.agreementAddress,
-      dealVersionId: record.dealVersionId,
-      draftDealId: record.draftDealId,
-      label: record.subjectLabel,
-      organizationId: record.organizationId,
-      subjectId: record.subjectId,
-      subjectType: record.subjectType
-    }),
+    subject,
     summary: record.summary,
     title: record.title
   };
@@ -626,6 +632,110 @@ export class OperatorService {
     );
 
     return records.flat();
+  }
+
+  private getVisibleDeploymentManifestByChainId(
+    chainId: number
+  ): DeploymentManifest | null {
+    return (
+      this.getVisibleDeploymentManifests().find(
+        (manifest) => manifest.chainId === chainId
+      ) ?? null
+    );
+  }
+
+  private async findVisibleAgreementByAddress(address: `0x${string}`): Promise<{
+    agreement: EscrowAgreementRecord;
+    manifest: DeploymentManifest;
+  } | null> {
+    for (const manifest of this.getVisibleDeploymentManifests()) {
+      const agreement =
+        await this.release4Repositories.escrowAgreements.findByChainIdAndAddress(
+          manifest.chainId,
+          address
+        );
+
+      if (agreement) {
+        return { agreement, manifest };
+      }
+    }
+
+    return null;
+  }
+
+  private async hydrateStoredSubjectSummary(
+    subject: OperatorSubjectSummary
+  ): Promise<OperatorSubjectSummary> {
+    const liveSubject = await this.loadSubjectSummary(
+      subject.subjectType,
+      subject.subjectId
+    );
+
+    return buildSubjectSummary({
+      agreementAddress: subject.agreementAddress ?? liveSubject.agreementAddress,
+      chainId: liveSubject.chainId,
+      dealVersionId: subject.dealVersionId ?? liveSubject.dealVersionId,
+      draftDealId: subject.draftDealId ?? liveSubject.draftDealId,
+      label: subject.label ?? liveSubject.label,
+      network: liveSubject.network,
+      organizationId: subject.organizationId ?? liveSubject.organizationId,
+      subjectId: subject.subjectId,
+      subjectType: subject.subjectType
+    });
+  }
+
+  private async toAlertSummary(
+    record: OperatorAlertRecord
+  ): Promise<ListOperatorAlertsResponse["alerts"][number]> {
+    const subject = await this.hydrateStoredSubjectSummary(
+      buildStoredSubjectSummary({
+        agreementAddress: record.agreementAddress,
+        dealVersionId: record.dealVersionId,
+        draftDealId: record.draftDealId,
+        label: record.subjectLabel,
+        organizationId: record.organizationId,
+        subjectId: record.subjectId,
+        subjectType: record.subjectType
+      })
+    );
+
+    return buildAlertSummary({ record, subject });
+  }
+
+  private async toCheckpointSummary(
+    record: ComplianceCheckpointRecord
+  ): Promise<ComplianceCheckpointSummary> {
+    const subject = await this.hydrateStoredSubjectSummary(
+      buildStoredSubjectSummary({
+        agreementAddress: record.agreementAddress,
+        dealVersionId: record.dealVersionId,
+        draftDealId: record.draftDealId,
+        label: record.subjectLabel,
+        organizationId: record.organizationId,
+        subjectId: record.subjectId,
+        subjectType: record.subjectType
+      })
+    );
+
+    return buildCheckpointSummary({ record, subject });
+  }
+
+  private async toCaseSummary(
+    record: ComplianceCaseRecord
+  ): Promise<ComplianceCaseSummary> {
+    const subject = await this.hydrateStoredSubjectSummary(
+      buildStoredSubjectSummary({
+        agreementAddress: record.agreementAddress,
+        dealVersionId: record.dealVersionId,
+        draftDealId: record.draftDealId,
+        label: record.subjectLabel,
+        organizationId: record.organizationId,
+        subjectId: record.subjectId,
+        subjectType: record.subjectType
+      })
+    );
+
+    return buildCaseSummary({ record, subject });
   }
 
   private async buildDeploymentSummary(
@@ -2285,10 +2395,12 @@ export class OperatorService {
     const alerts = await this.release8Repositories.operatorAlerts.listAll();
 
     return {
-      alerts: alerts
-        .filter((entry) => !params.kind || entry.kind === params.kind)
-        .filter((entry) => !params.status || entry.status === params.status)
-        .map(toAlertSummary)
+      alerts: await Promise.all(
+        alerts
+          .filter((entry) => !params.kind || entry.kind === params.kind)
+          .filter((entry) => !params.status || entry.status === params.status)
+          .map((entry) => this.toAlertSummary(entry))
+      )
     };
   }
 
@@ -2430,7 +2542,7 @@ export class OperatorService {
       userAgent: context.requestMetadata.userAgent
     });
 
-    return toAlertSummary(updated);
+    return this.toAlertSummary(updated);
   }
 
   async resolveAlert(
@@ -2473,7 +2585,7 @@ export class OperatorService {
       userAgent: context.requestMetadata.userAgent
     });
 
-    return toAlertSummary(updated);
+    return this.toAlertSummary(updated);
   }
 
   async listCheckpoints(
@@ -2483,7 +2595,9 @@ export class OperatorService {
     const checkpoints = await this.release8Repositories.complianceCheckpoints.listAll();
 
     return {
-      checkpoints: checkpoints.map(toCheckpointSummary)
+      checkpoints: await Promise.all(
+        checkpoints.map((checkpoint) => this.toCheckpointSummary(checkpoint))
+      )
     };
   }
 
@@ -2537,7 +2651,7 @@ export class OperatorService {
       userAgent: context.requestMetadata.userAgent
     });
 
-    return toCheckpointSummary(checkpoint);
+    return this.toCheckpointSummary(checkpoint);
   }
 
   async decideCheckpoint(
@@ -2578,7 +2692,7 @@ export class OperatorService {
       userAgent: context.requestMetadata.userAgent
     });
 
-    return toCheckpointSummary(updated);
+    return this.toCheckpointSummary(updated);
   }
 
   async listCases(
@@ -2595,16 +2709,18 @@ export class OperatorService {
     );
 
     return {
-      cases: cases
-        .filter((entry) => !params.status || entry.status === params.status)
-        .map((entry, index) => {
-          const caseNotes = notes[index] ?? [];
+      cases: await Promise.all(
+        cases
+          .filter((entry) => !params.status || entry.status === params.status)
+          .map(async (entry, index) => {
+            const caseNotes = notes[index] ?? [];
 
-          return {
-            ...toCaseSummary(entry),
-            lastNoteAt: caseNotes.at(-1)?.createdAt ?? null
-          };
-        })
+            return {
+              ...(await this.toCaseSummary(entry)),
+              lastNoteAt: caseNotes.at(-1)?.createdAt ?? null
+            };
+          })
+      )
     };
   }
 
@@ -2685,7 +2801,7 @@ export class OperatorService {
       userAgent: context.requestMetadata.userAgent
     });
 
-    return toCaseSummary(created);
+    return this.toCaseSummary(created);
   }
 
   async getCase(
@@ -2701,7 +2817,7 @@ export class OperatorService {
 
     return {
       case: {
-        ...toCaseSummary(record),
+        ...(await this.toCaseSummary(record)),
         lastNoteAt: notes.at(-1)?.createdAt ?? null
       },
       notes: notes.map((note) => ({
@@ -2800,7 +2916,7 @@ export class OperatorService {
     );
 
     return {
-      ...toCaseSummary(updated),
+      ...(await this.toCaseSummary(updated)),
       lastNoteAt: notes.at(-1)?.createdAt ?? null
     };
   }
@@ -2843,7 +2959,7 @@ export class OperatorService {
     );
 
     return {
-      ...toCaseSummary(updated),
+      ...(await this.toCaseSummary(updated)),
       lastNoteAt: notes.at(-1)?.createdAt ?? null
     };
   }
@@ -3453,12 +3569,15 @@ export class OperatorService {
         if (!transaction) {
           break;
         }
+        const manifest = this.getVisibleDeploymentManifestByChainId(transaction.chainId);
 
         return buildSubjectSummary({
           agreementAddress: transaction.reconciledAgreementAddress,
+          chainId: transaction.chainId,
           dealVersionId: transaction.dealVersionId,
           draftDealId: transaction.draftDealId,
           label: transaction.transactionHash,
+          network: manifest?.network ?? null,
           organizationId: transaction.organizationId,
           subjectId: transaction.id,
           subjectType
@@ -3472,12 +3591,15 @@ export class OperatorService {
         if (!transaction) {
           break;
         }
+        const manifest = this.getVisibleDeploymentManifestByChainId(transaction.chainId);
 
         return buildSubjectSummary({
           agreementAddress: transaction.reconciledAgreementAddress,
+          chainId: transaction.chainId,
           dealVersionId: transaction.dealVersionId,
           draftDealId: transaction.draftDealId,
           label: transaction.transactionHash,
+          network: manifest?.network ?? null,
           organizationId: transaction.organizationId,
           subjectId: transaction.id,
           subjectType
@@ -3490,24 +3612,29 @@ export class OperatorService {
           break;
         }
 
-        const agreement =
-          await this.release4Repositories.escrowAgreements.findByChainIdAndAddress(
-            this.configuration.chainId,
-            normalizedAddress
-          );
-        if (!agreement) {
+        const visibleAgreement = await this.findVisibleAgreementByAddress(
+          normalizedAddress
+        );
+        if (!visibleAgreement) {
           break;
         }
 
         const drafts = await this.release1Repositories.draftDeals.listAll();
-        const linkedDraft = findDraftByCanonicalDealId(drafts, agreement.dealId);
+        const linkedDraft = findDraftByCanonicalDealId(
+          drafts,
+          visibleAgreement.agreement.dealId
+        );
 
         return buildSubjectSummary({
-          agreementAddress: agreement.agreementAddress,
+          agreementAddress: visibleAgreement.agreement.agreementAddress,
+          chainId: visibleAgreement.agreement.chainId,
           draftDealId: linkedDraft?.id ?? null,
-          label: linkedDraft?.title ?? agreement.agreementAddress,
+          label:
+            linkedDraft?.title ??
+            visibleAgreement.agreement.agreementAddress,
+          network: visibleAgreement.manifest.network,
           organizationId: linkedDraft?.organizationId ?? null,
-          subjectId: agreement.agreementAddress,
+          subjectId: visibleAgreement.agreement.agreementAddress,
           subjectType
         });
       }

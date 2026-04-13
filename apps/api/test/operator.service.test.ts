@@ -419,6 +419,151 @@ test("compliance operators can manage alerts, checkpoints, and cases", async () 
   );
 });
 
+test("operator alert and compliance subjects include visible-chain context for funding transactions", async () => {
+  const services = createServices();
+  const actor = await seedOperatorActor(services, "COMPLIANCE");
+  const manifest = getDeploymentManifestByChainId(84532);
+  const now = new Date().toISOString();
+
+  assert.ok(manifest, "missing base sepolia manifest");
+
+  await services.release1Repositories.organizations.create({
+    createdAt: now,
+    createdByUserId: actor.userId,
+    id: "org-1",
+    name: "Acme Procurement",
+    slug: "acme-procurement",
+    updatedAt: now
+  });
+  await services.release1Repositories.draftDeals.create({
+    createdAt: now,
+    createdByUserId: actor.userId,
+    id: "draft-1",
+    organizationId: "org-1",
+    settlementCurrency: "USDC",
+    state: "AWAITING_FUNDING",
+    summary: "Funding anomaly",
+    templateId: null,
+    title: "Funding Deal",
+    updatedAt: now
+  });
+  await services.release1Repositories.dealVersions.create({
+    bodyMarkdown: "# Funding",
+    createdAt: now,
+    createdByUserId: actor.userId,
+    draftDealId: "draft-1",
+    id: "version-1",
+    organizationId: "org-1",
+    settlementCurrency: "USDC",
+    summary: "Funding version",
+    templateId: null,
+    title: "Funding Deal v1",
+    versionNumber: 1
+  });
+  await services.release1Repositories.fundingTransactions.create({
+    chainId: 84532,
+    dealVersionId: "version-1",
+    draftDealId: "draft-1",
+    id: "funding-1",
+    organizationId: "org-1",
+    reconciledAgreementAddress:
+      "0x7777777777777777777777777777777777777777",
+    reconciledAt: null,
+    reconciledConfirmedAt: null,
+    reconciledMatchesTrackedVersion: null,
+    reconciledStatus: null,
+    stalePendingEscalatedAt: null,
+    submittedAt: now,
+    submittedByUserId: actor.userId,
+    submittedWalletAddress:
+      "0x1111111111111111111111111111111111111111",
+    submittedWalletId: actor.walletId,
+    supersededAt: null,
+    supersededByFundingTransactionId: null,
+    transactionHash:
+      "0x5656565656565656565656565656565656565656565656565656565656565656"
+  });
+  await services.release8Repositories.operatorAlerts.create({
+    acknowledgedAt: null,
+    acknowledgedByOperatorAccountId: null,
+    agreementAddress: null,
+    assignedOperatorAccountId: null,
+    dealVersionId: "version-1",
+    description: "Funding transaction remains pending beyond the stale threshold.",
+    draftDealId: "draft-1",
+    fingerprint: "FUNDING_TRANSACTION_STALE_PENDING:funding-1",
+    firstDetectedAt: now,
+    id: "alert-chain-1",
+    kind: "FUNDING_TRANSACTION_STALE_PENDING",
+    lastDetectedAt: now,
+    linkedComplianceCaseId: null,
+    metadata: null,
+    organizationId: "org-1",
+    resolvedAt: null,
+    resolvedByOperatorAccountId: null,
+    severity: "MEDIUM",
+    status: "OPEN",
+    subjectId: "funding-1",
+    subjectLabel: null,
+    subjectType: "FUNDING_TRANSACTION"
+  });
+
+  const alerts = await services.operatorService.listAlerts(
+    {},
+    requestMetadata(actor.cookieHeader)
+  );
+  const checkpoint = await services.operatorService.createCheckpoint(
+    {
+      kind: "SANCTIONS",
+      note: "Funding transaction requires sanctions review",
+      subjectId: "funding-1",
+      subjectType: "FUNDING_TRANSACTION"
+    },
+    requestMetadata(actor.cookieHeader)
+  );
+  const listedCheckpoints = await services.operatorService.listCheckpoints(
+    requestMetadata(actor.cookieHeader)
+  );
+  const complianceCase = await services.operatorService.createCase(
+    {
+      alertId: "alert-chain-1",
+      checkpointId: checkpoint.id,
+      severity: "HIGH",
+      subjectId: "funding-1",
+      subjectType: "FUNDING_TRANSACTION",
+      summary: "Investigate stale funding and sanctions pressure.",
+      title: "Funding chain review"
+    },
+    requestMetadata(actor.cookieHeader)
+  );
+  const listedCases = await services.operatorService.listCases(
+    {},
+    requestMetadata(actor.cookieHeader)
+  );
+  const detailedCase = await services.operatorService.getCase(
+    { caseId: complianceCase.id },
+    requestMetadata(actor.cookieHeader)
+  );
+
+  assert.equal(alerts.alerts[0]?.subject.chainId, 84532);
+  assert.equal(alerts.alerts[0]?.subject.network, "base-sepolia");
+  assert.equal(checkpoint.subject.chainId, 84532);
+  assert.equal(checkpoint.subject.network, "base-sepolia");
+  assert.equal(listedCheckpoints.checkpoints[0]?.subject.chainId, 84532);
+  assert.equal(complianceCase.subject.chainId, 84532);
+  assert.equal(complianceCase.subject.network, "base-sepolia");
+  assert.equal(listedCases.cases[0]?.subject.chainId, 84532);
+  assert.equal(detailedCase.case.subject.chainId, 84532);
+  assert.equal(
+    detailedCase.case.subject.agreementAddress,
+    "0x7777777777777777777777777777777777777777"
+  );
+  assert.equal(
+    detailedCase.case.subject.network,
+    manifest.network
+  );
+});
+
 test("operator health aggregates remote readiness and protocol proposal drafts encode calldata", async () => {
   const services = createServices();
   const actor = await seedOperatorActor(services, "SUPER_ADMIN");

@@ -109,6 +109,7 @@ export default async function CasesPage() {
             <DataTable
               headers={[
                 messages.cases.titleLabel,
+                messages.cases.chain,
                 messages.cases.status,
                 messages.cases.severity,
                 messages.cases.updated,
@@ -118,6 +119,11 @@ export default async function CasesPage() {
               {cases.cases.map((entry) => (
                 <tr key={entry.id}>
                   <td>{entry.title}</td>
+                  <td>
+                    {entry.subject.chainId !== null
+                      ? `${entry.subject.network ?? messages.common.none} (${entry.subject.chainId})`
+                      : messages.common.na}
+                  </td>
                   <td>
                     <Pill
                       tone={toneForStatus(entry.status)}

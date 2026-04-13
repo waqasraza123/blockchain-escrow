@@ -71,6 +71,7 @@ export default async function CheckpointsPage() {
               headers={[
                 messages.checkpoints.status,
                 messages.checkpoints.subject,
+                messages.checkpoints.chain,
                 messages.checkpoints.created,
                 messages.checkpoints.open
               ]}
@@ -84,6 +85,11 @@ export default async function CheckpointsPage() {
                     />
                   </td>
                   <td>{checkpoint.subject.label ?? checkpoint.subject.subjectId}</td>
+                  <td>
+                    {checkpoint.subject.chainId !== null
+                      ? `${checkpoint.subject.network ?? messages.common.none} (${checkpoint.subject.chainId})`
+                      : messages.common.na}
+                  </td>
                   <td className="mono">{checkpoint.createdAt}</td>
                   <td>
                     <Link className="link-text" href={`/checkpoints/${checkpoint.id}`}>

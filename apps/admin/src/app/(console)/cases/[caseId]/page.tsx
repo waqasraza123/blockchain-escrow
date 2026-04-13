@@ -54,6 +54,14 @@ export default async function CaseDetailPage({ params }: CaseDetailPageProps) {
             <span>{messages.cases.subject}</span>
             <strong>{detail.case.subject.label ?? detail.case.subject.subjectId}</strong>
           </div>
+          <div className="detail-item">
+            <span>{messages.cases.chain}</span>
+            <strong>
+              {detail.case.subject.chainId !== null
+                ? `${detail.case.subject.network ?? messages.common.none} (${detail.case.subject.chainId})`
+                : messages.common.na}
+            </strong>
+          </div>
         </div>
       </Card>
       <div className="split-grid">

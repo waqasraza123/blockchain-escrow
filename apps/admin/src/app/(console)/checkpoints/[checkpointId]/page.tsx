@@ -58,6 +58,14 @@ export default async function CheckpointDetailPage({
             <strong className="mono">{checkpoint.createdAt}</strong>
           </div>
           <div className="detail-item">
+            <span>{messages.checkpoints.chain}</span>
+            <strong>
+              {checkpoint.subject.chainId !== null
+                ? `${checkpoint.subject.network ?? messages.common.none} (${checkpoint.subject.chainId})`
+                : messages.common.na}
+            </strong>
+          </div>
+          <div className="detail-item">
             <span>{messages.checkpoints.decision}</span>
             <strong>{checkpoint.decisionNote ?? messages.common.pending}</strong>
           </div>

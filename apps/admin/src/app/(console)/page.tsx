@@ -46,6 +46,7 @@ export default async function DashboardPage() {
                 messages.dashboard.kind,
                 messages.dashboard.status,
                 messages.dashboard.subject,
+                messages.dashboard.chain,
                 messages.dashboard.detected
               ]}
             >
@@ -59,6 +60,11 @@ export default async function DashboardPage() {
                     />
                   </td>
                   <td>{alert.subject.label ?? alert.subject.subjectId}</td>
+                  <td>
+                    {alert.subject.chainId !== null
+                      ? `${alert.subject.network ?? messages.common.none} (${alert.subject.chainId})`
+                      : messages.common.na}
+                  </td>
                   <td className="mono">{alert.lastDetectedAt}</td>
                 </tr>
               ))}
