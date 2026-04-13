@@ -82,6 +82,7 @@ import type {
   TenantInvoiceLineItemRecord,
   TenantInvoiceRecord,
   TemplateRecord,
+  TreasuryMovementRecord,
   TokenAllowlistEntryRecord,
   UserRecord,
   WalletNonceRecord,
@@ -970,6 +971,12 @@ export interface FeeVaultStateRepository {
   upsert(record: FeeVaultStateRecord): Promise<FeeVaultStateRecord>;
 }
 
+export interface TreasuryMovementRepository {
+  listByChainId(chainId: ChainId): Promise<TreasuryMovementRecord[]>;
+  resetByChainId(chainId: ChainId): Promise<void>;
+  upsert(record: TreasuryMovementRecord): Promise<TreasuryMovementRecord>;
+}
+
 export interface EscrowAgreementRepository {
   findByChainIdAndAddress(
     chainId: ChainId,
@@ -1003,6 +1010,7 @@ export interface Release4Repositories {
   indexedContractEvents: IndexedContractEventRepository;
   indexedTransactions: IndexedTransactionRepository;
   protocolConfigStates: ProtocolConfigStateRepository;
+  treasuryMovements: TreasuryMovementRepository;
   tokenAllowlistEntries: TokenAllowlistEntryRepository;
 }
 

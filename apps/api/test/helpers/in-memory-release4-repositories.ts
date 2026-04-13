@@ -10,6 +10,7 @@ import type {
   IndexedTransactionRecord,
   ProtocolConfigStateRecord,
   Release4Repositories,
+  TreasuryMovementRecord,
   TokenAllowlistEntryRecord
 } from "@blockchain-escrow/db";
 
@@ -160,6 +161,38 @@ export class InMemoryRelease4Repositories implements Release4Repositories {
     }
   };
 
+  readonly treasuryMovements = {
+    listByChainId: async (chainId: number) =>
+      this.treasuryMovementsStore
+        .filter((record) => record.chainId === chainId)
+        .sort((left, right) => {
+          const blockDelta =
+            Number(BigInt(right.occurredBlockNumber) - BigInt(left.occurredBlockNumber));
+          if (blockDelta !== 0) {
+            return blockDelta;
+          }
+
+          return right.occurredLogIndex - left.occurredLogIndex;
+        }),
+    resetByChainId: async (chainId: number) => {
+      this.treasuryMovementsStore = this.treasuryMovementsStore.filter(
+        (record) => record.chainId !== chainId
+      );
+    },
+    upsert: async (record: TreasuryMovementRecord) => {
+      this.treasuryMovementsStore = this.treasuryMovementsStore.filter(
+        (entry) =>
+          !(
+            entry.chainId === record.chainId &&
+            entry.occurredTransactionHash === record.occurredTransactionHash &&
+            entry.occurredLogIndex === record.occurredLogIndex
+          )
+      );
+      this.treasuryMovementsStore.push(record);
+      return record;
+    }
+  };
+
   readonly indexedBlocks = {
     deleteFromBlockNumber: async (chainId: number, fromBlockNumber: string) => {
       void chainId;
@@ -294,5 +327,6 @@ export class InMemoryRelease4Repositories implements Release4Repositories {
   private feeVaultStatesStore: FeeVaultStateRecord[] = [];
   private indexedTransactionsStore: IndexedTransactionRecord[] = [];
   private protocolConfigStatesStore: ProtocolConfigStateRecord[] = [];
+  private treasuryMovementsStore: TreasuryMovementRecord[] = [];
   private tokenAllowlistEntriesStore: TokenAllowlistEntryRecord[] = [];
 }

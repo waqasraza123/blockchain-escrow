@@ -565,6 +565,58 @@ test("operator deployments expose indexed treasury visibility for configured cha
   );
 });
 
+test("operator treasury movements list indexed fee vault withdrawals across visible chains", async () => {
+  const services = createServices();
+  const actor = await seedOperatorActor(services, "SUPER_ADMIN");
+  const manifest = getDeploymentManifestByChainId(84532);
+  const now = new Date().toISOString();
+
+  assert.ok(manifest, "missing base sepolia manifest");
+
+  await services.release4Repositories.treasuryMovements.upsert({
+    amount: "500000",
+    chainId: 84532,
+    feeVaultAddress: manifest.contracts.FeeVault!.toLowerCase() as `0x${string}`,
+    kind: "TOKEN",
+    occurredAt: now,
+    occurredBlockHash:
+      "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    occurredBlockNumber: "22",
+    occurredLogIndex: 4,
+    occurredTransactionHash:
+      "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    tokenAddress: manifest.usdcToken!.toLowerCase() as `0x${string}`,
+    treasuryAddress: manifest.treasury!.toLowerCase() as `0x${string}`
+  });
+  await services.release4Repositories.treasuryMovements.upsert({
+    amount: "125",
+    chainId: 84532,
+    feeVaultAddress: manifest.contracts.FeeVault!.toLowerCase() as `0x${string}`,
+    kind: "NATIVE",
+    occurredAt: now,
+    occurredBlockHash:
+      "0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    occurredBlockNumber: "21",
+    occurredLogIndex: 3,
+    occurredTransactionHash:
+      "0xdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+    tokenAddress: null,
+    treasuryAddress: manifest.treasury!.toLowerCase() as `0x${string}`
+  });
+
+  const response = await services.operatorService.listTreasuryMovements(
+    requestMetadata(actor.cookieHeader)
+  );
+
+  assert.equal(response.movements.length, 2);
+  assert.equal(response.movements[0]?.kind, "TOKEN");
+  assert.equal(response.movements[0]?.network, "base-sepolia");
+  assert.equal(response.movements[0]?.contractVersion, manifest.contractVersion);
+  assert.equal(response.movements[0]?.tokenAddress, manifest.usdcToken!.toLowerCase());
+  assert.equal(response.movements[1]?.kind, "NATIVE");
+  assert.equal(response.movements[1]?.tokenAddress, null);
+});
+
 test("compliance operators can review pending sponsored transaction requests", async () => {
   const services = createServices();
   const actor = await seedOperatorActor(services, "COMPLIANCE");

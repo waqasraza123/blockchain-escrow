@@ -34,6 +34,9 @@ export const indexedEventNameSchema = z.enum([
 ]);
 export type IndexedEventName = z.infer<typeof indexedEventNameSchema>;
 
+export const treasuryMovementKindSchema = z.enum(["NATIVE", "TOKEN"]);
+export type TreasuryMovementKind = z.infer<typeof treasuryMovementKindSchema>;
+
 export interface ChainCursorSummary {
   chainId: ChainId;
   cursorKey: string;
@@ -148,6 +151,20 @@ export interface FeeVaultStateSummary {
   updatedBlockNumber: string;
   updatedLogIndex: number;
   updatedTransactionHash: HexString;
+}
+
+export interface TreasuryMovementSummary {
+  amount: string;
+  chainId: ChainId;
+  feeVaultAddress: WalletAddress;
+  kind: TreasuryMovementKind;
+  occurredAt: IsoTimestamp;
+  occurredBlockHash: HexString;
+  occurredBlockNumber: string;
+  occurredLogIndex: number;
+  occurredTransactionHash: HexString;
+  tokenAddress: WalletAddress | null;
+  treasuryAddress: WalletAddress;
 }
 
 export interface EscrowAgreementSummary {

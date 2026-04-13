@@ -1,6 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
+import { getDeploymentManifestByChainId } from "@blockchain-escrow/contracts-sdk";
+
 import { loadIndexerConfig } from "../src/config";
 
 function withEnv(
@@ -73,8 +75,10 @@ test("loadIndexerConfig defaults startBlock from the deployment manifest", () =>
     },
     () => {
       const config = loadIndexerConfig();
+      const manifest = getDeploymentManifestByChainId(84532);
 
-      assert.equal(config.startBlock, 39797620n);
+      assert.ok(manifest);
+      assert.equal(config.startBlock, BigInt(manifest.deploymentStartBlock ?? "0"));
     }
   );
 });

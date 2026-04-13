@@ -41,6 +41,7 @@ import type {
   ListComplianceCasesResponse,
   ListComplianceCheckpointsResponse,
   ListOperatorDeploymentsResponse,
+  ListOperatorTreasuryMovementsResponse,
   ListInvoicesResponse,
   ListOperatorAlertsParams,
   ListOperatorAlertsResponse,
@@ -423,6 +424,13 @@ export class OperatorController {
     @Req() request: HttpRequestLike
   ): Promise<ListOperatorDeploymentsResponse> {
     return this.operatorService.listDeployments(readRequestMetadata(request));
+  }
+
+  @Get("treasury-movements")
+  async listTreasuryMovements(
+    @Req() request: HttpRequestLike
+  ): Promise<ListOperatorTreasuryMovementsResponse> {
+    return this.operatorService.listTreasuryMovements(readRequestMetadata(request));
   }
 
   @Get("reconciliation")

@@ -84,6 +84,7 @@ import type {
   ListComplianceCasesResponse,
   ListComplianceCheckpointsResponse,
   ListOperatorDeploymentsResponse,
+  ListOperatorTreasuryMovementsResponse,
   ListInvoicesResponse,
   ListOperatorAlertsResponse,
   ListOperatorSponsoredTransactionRequestsResponse,
@@ -178,6 +179,24 @@ function startOfUtcDayIso(timestamp: string): string {
   const value = new Date(timestamp);
   value.setUTCHours(0, 0, 0, 0);
   return value.toISOString();
+}
+
+function compareBlockAndLogDescending(
+  left: { occurredBlockNumber: string; occurredLogIndex: number },
+  right: { occurredBlockNumber: string; occurredLogIndex: number }
+): number {
+  const leftBlock = BigInt(left.occurredBlockNumber);
+  const rightBlock = BigInt(right.occurredBlockNumber);
+
+  if (leftBlock > rightBlock) {
+    return -1;
+  }
+
+  if (leftBlock < rightBlock) {
+    return 1;
+  }
+
+  return right.occurredLogIndex - left.occurredLogIndex;
 }
 
 function buildRelease4CursorKey(
@@ -1503,6 +1522,50 @@ export class OperatorService {
           this.buildDeploymentSummary(manifest)
         )
       )
+    };
+  }
+
+  async listTreasuryMovements(
+    requestMetadata: RequestMetadata
+  ): Promise<ListOperatorTreasuryMovementsResponse> {
+    await this.requireOperatorContext(requestMetadata);
+    const manifests = this.getVisibleDeploymentManifests();
+    const manifestByChainId = new Map(
+      manifests.map((manifest) => [manifest.chainId, manifest] as const)
+    );
+    const movements = await this.listByVisibleChainIds((chainId) =>
+      this.release4Repositories.treasuryMovements.listByChainId(chainId)
+    );
+
+    return {
+      movements: movements
+        .sort(compareBlockAndLogDescending)
+        .slice(0, 200)
+        .map((movement) => {
+          const manifest = manifestByChainId.get(movement.chainId);
+
+          if (!manifest) {
+            throw new Error(
+              `Missing deployment manifest for visible treasury movement chain ${movement.chainId}`
+            );
+          }
+
+          return {
+            amount: movement.amount,
+            chainId: movement.chainId,
+            contractVersion: manifest.contractVersion,
+            explorerUrl: manifest.explorerUrl,
+            feeVaultAddress: movement.feeVaultAddress,
+            kind: movement.kind,
+            network: manifest.network,
+            occurredAt: movement.occurredAt,
+            occurredBlockNumber: movement.occurredBlockNumber,
+            occurredLogIndex: movement.occurredLogIndex,
+            tokenAddress: movement.tokenAddress,
+            transactionHash: movement.occurredTransactionHash,
+            treasuryAddress: movement.treasuryAddress
+          };
+        })
     };
   }
 

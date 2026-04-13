@@ -8,6 +8,7 @@ import type {
   JsonObject,
   WalletAddress
 } from "./primitives";
+import type { TreasuryMovementKind } from "./indexer";
 import {
   sponsoredTransactionKindSchema,
   sponsoredTransactionStatusSchema
@@ -396,6 +397,26 @@ export interface OperatorDeploymentSummary {
 
 export interface ListOperatorDeploymentsResponse {
   deployments: OperatorDeploymentSummary[];
+}
+
+export interface OperatorTreasuryMovementSummary {
+  amount: string;
+  chainId: ChainId;
+  contractVersion: number;
+  explorerUrl: string;
+  feeVaultAddress: WalletAddress;
+  kind: TreasuryMovementKind;
+  network: string;
+  occurredAt: IsoTimestamp;
+  occurredBlockNumber: string;
+  occurredLogIndex: number;
+  tokenAddress: WalletAddress | null;
+  transactionHash: HexString;
+  treasuryAddress: WalletAddress;
+}
+
+export interface ListOperatorTreasuryMovementsResponse {
+  movements: OperatorTreasuryMovementSummary[];
 }
 
 export interface ReconciliationQueueSummaryRow {

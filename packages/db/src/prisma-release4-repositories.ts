@@ -17,6 +17,7 @@ import type {
   IndexedContractEventRecord,
   IndexedTransactionRecord,
   ProtocolConfigStateRecord,
+  TreasuryMovementRecord,
   TokenAllowlistEntryRecord
 } from "./records";
 import type { Release4Repositories } from "./repositories";
@@ -287,6 +288,36 @@ function mapFeeVaultStateRecord(record: {
     updatedLogIndex: record.updatedLogIndex,
     updatedTransactionHash:
       record.updatedTransactionHash as FeeVaultStateRecord["updatedTransactionHash"]
+  };
+}
+
+function mapTreasuryMovementRecord(record: {
+  amount: string;
+  chainId: number;
+  feeVaultAddress: string;
+  kind: string;
+  occurredAt: Date;
+  occurredBlockHash: string;
+  occurredBlockNumber: bigint;
+  occurredLogIndex: number;
+  occurredTransactionHash: string;
+  tokenAddress: string | null;
+  treasuryAddress: string;
+}): TreasuryMovementRecord {
+  return {
+    amount: record.amount,
+    chainId: record.chainId,
+    feeVaultAddress: record.feeVaultAddress as TreasuryMovementRecord["feeVaultAddress"],
+    kind: record.kind as TreasuryMovementRecord["kind"],
+    occurredAt: toIsoTimestamp(record.occurredAt),
+    occurredBlockHash:
+      record.occurredBlockHash as TreasuryMovementRecord["occurredBlockHash"],
+    occurredBlockNumber: toBigIntString(record.occurredBlockNumber),
+    occurredLogIndex: record.occurredLogIndex,
+    occurredTransactionHash:
+      record.occurredTransactionHash as TreasuryMovementRecord["occurredTransactionHash"],
+    tokenAddress: record.tokenAddress as TreasuryMovementRecord["tokenAddress"],
+    treasuryAddress: record.treasuryAddress as TreasuryMovementRecord["treasuryAddress"]
   };
 }
 
@@ -776,6 +807,56 @@ function buildRelease4Repositories(database: DatabaseClient): Release4Repositori
         });
 
         return mapFeeVaultStateRecord(persisted);
+      }
+    },
+    treasuryMovements: {
+      async listByChainId(chainId) {
+        const records = await database.treasuryMovementProjection.findMany({
+          where: { chainId },
+          orderBy: [{ occurredBlockNumber: "desc" }, { occurredLogIndex: "desc" }]
+        });
+
+        return records.map(mapTreasuryMovementRecord);
+      },
+      async resetByChainId(chainId) {
+        await database.treasuryMovementProjection.deleteMany({ where: { chainId } });
+      },
+      async upsert(record) {
+        const persisted = await database.treasuryMovementProjection.upsert({
+          where: {
+            chainId_occurredTransactionHash_occurredLogIndex: {
+              chainId: record.chainId,
+              occurredLogIndex: record.occurredLogIndex,
+              occurredTransactionHash: record.occurredTransactionHash
+            }
+          },
+          update: {
+            amount: record.amount,
+            feeVaultAddress: record.feeVaultAddress,
+            kind: record.kind,
+            occurredAt: toDate(record.occurredAt),
+            occurredBlockHash: record.occurredBlockHash,
+            occurredBlockNumber: BigInt(record.occurredBlockNumber),
+            tokenAddress: record.tokenAddress,
+            treasuryAddress: record.treasuryAddress
+          },
+          create: {
+            id: `${record.chainId}:${record.occurredTransactionHash}:${record.occurredLogIndex}`,
+            amount: record.amount,
+            chainId: record.chainId,
+            feeVaultAddress: record.feeVaultAddress,
+            kind: record.kind,
+            occurredAt: toDate(record.occurredAt),
+            occurredBlockHash: record.occurredBlockHash,
+            occurredBlockNumber: BigInt(record.occurredBlockNumber),
+            occurredLogIndex: record.occurredLogIndex,
+            occurredTransactionHash: record.occurredTransactionHash,
+            tokenAddress: record.tokenAddress,
+            treasuryAddress: record.treasuryAddress
+          }
+        });
+
+        return mapTreasuryMovementRecord(persisted);
       }
     },
     indexedBlocks: {

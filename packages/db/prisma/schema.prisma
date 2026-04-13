@@ -2354,6 +2354,26 @@ model FeeVaultProjection {
   @@map("fee_vault_projections")
 }
 
+model TreasuryMovementProjection {
+  id                     String   @id @db.Text
+  chainId                Int
+  feeVaultAddress        String   @db.Text
+  kind                   String   @db.Text
+  tokenAddress           String?  @db.Text
+  treasuryAddress        String   @db.Text
+  amount                 String   @db.Text
+  occurredBlockNumber    BigInt
+  occurredBlockHash      String   @db.Text
+  occurredTransactionHash String  @db.Text
+  occurredLogIndex       Int
+  occurredAt             DateTime @db.Timestamptz(3)
+
+  @@unique([chainId, occurredTransactionHash, occurredLogIndex], map: "tmp_chain_tx_log_key")
+  @@index([chainId, occurredBlockNumber, occurredLogIndex], map: "tmp_chain_block_log_idx")
+  @@index([chainId, feeVaultAddress, occurredBlockNumber], map: "tmp_chain_fee_vault_block_idx")
+  @@map("treasury_movement_projections")
+}
+
 model EscrowAgreementProjection {
   id                      String   @id @db.Text
   chainId                 Int

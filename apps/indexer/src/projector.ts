@@ -258,6 +258,30 @@ async function applyFeeVaultEvent(
   await repositories.feeVaultStates.upsert(state);
 }
 
+async function applyTreasuryMovementEvent(
+  repositories: Release4Repositories,
+  event: IndexedContractEventSummary
+): Promise<void> {
+  const kind = event.eventName === "NativeFeesWithdrawn" ? "NATIVE" : "TOKEN";
+
+  await repositories.treasuryMovements.upsert({
+    amount: requireString(event.data, "amount"),
+    chainId: event.chainId,
+    feeVaultAddress: event.contractAddress,
+    kind,
+    occurredAt: toEventTime(event),
+    occurredBlockHash: event.blockHash,
+    occurredBlockNumber: event.blockNumber,
+    occurredLogIndex: event.logIndex,
+    occurredTransactionHash: event.transactionHash,
+    tokenAddress:
+      kind === "TOKEN"
+        ? (requireString(event.data, "token") as WalletAddress)
+        : null,
+    treasuryAddress: requireString(event.data, "treasury") as WalletAddress
+  });
+}
+
 async function applyAgreementCreatedEvent(
   repositories: Release4Repositories,
   event: IndexedContractEventSummary,
@@ -388,6 +412,7 @@ export async function resetRelease4Projections(
   await repositories.escrowAgreementMilestoneSettlements.resetByChainId(chainId);
   await repositories.feeVaultStates.resetByChainId(chainId);
   await repositories.protocolConfigStates.resetByChainId(chainId);
+  await repositories.treasuryMovements.resetByChainId(chainId);
   await repositories.tokenAllowlistEntries.resetByChainId(chainId);
 }
 
@@ -456,9 +481,11 @@ export async function applyIndexedEvents(
       case "MilestoneReleased":
         await applyAgreementMilestoneSettlementEvent(repositories, event);
         break;
-      case "AgreementInitialized":
       case "NativeFeesWithdrawn":
       case "TokenFeesWithdrawn":
+        await applyTreasuryMovementEvent(repositories, event);
+        break;
+      case "AgreementInitialized":
         break;
       default: {
         const exhaustiveCheck: never = event.eventName;

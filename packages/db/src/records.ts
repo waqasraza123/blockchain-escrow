@@ -26,6 +26,7 @@ import type {
   OperatorAlertStatus,
   OperatorRole,
   OperatorSubjectType,
+  TreasuryMovementKind,
   PartnerBrandAssetRole,
   PartnerAccountStatus,
   PartnerApiKeyStatus,
@@ -1084,6 +1085,20 @@ export interface FeeVaultStateRecord {
   updatedBlockNumber: string;
   updatedLogIndex: number;
   updatedTransactionHash: HexString;
+}
+
+export interface TreasuryMovementRecord {
+  amount: string;
+  chainId: ChainId;
+  feeVaultAddress: WalletAddress;
+  kind: TreasuryMovementKind;
+  occurredAt: IsoTimestamp;
+  occurredBlockHash: HexString;
+  occurredBlockNumber: string;
+  occurredLogIndex: number;
+  occurredTransactionHash: HexString;
+  tokenAddress: WalletAddress | null;
+  treasuryAddress: WalletAddress;
 }
 
 export interface EscrowAgreementMilestoneSettlementRecord {

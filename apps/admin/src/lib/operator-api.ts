@@ -29,6 +29,7 @@ import type {
   ListComplianceCasesResponse,
   ListComplianceCheckpointsResponse,
   ListOperatorDeploymentsResponse,
+  ListOperatorTreasuryMovementsResponse,
   ListOperatorAlertsResponse,
   ListOperatorSponsoredTransactionRequestsResponse,
   ListPartnerAccountsResponse,
@@ -346,6 +347,10 @@ export function getHealth(): Promise<OperatorHealthResponse> {
 
 export function getDeployments(): Promise<ListOperatorDeploymentsResponse> {
   return apiRequest("/operator/deployments");
+}
+
+export function getTreasuryMovements(): Promise<ListOperatorTreasuryMovementsResponse> {
+  return apiRequest("/operator/treasury-movements");
 }
 
 export function getReconciliation(): Promise<OperatorReconciliationResponse> {

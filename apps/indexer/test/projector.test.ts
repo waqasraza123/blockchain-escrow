@@ -13,6 +13,7 @@ import type {
   IndexedTransactionRecord,
   ProtocolConfigStateRecord,
   Release4Repositories,
+  TreasuryMovementRecord,
   TokenAllowlistEntryRecord
 } from "@blockchain-escrow/db";
 import { applyIndexedEvents, resetRelease4Projections } from "../src/projector";
@@ -154,6 +155,35 @@ class InMemoryRelease4Repositories implements Release4Repositories {
     }
   };
 
+  readonly treasuryMovements = {
+    listByChainId: async (chainId: number) =>
+      [...this.treasuryMovementsStore.values()]
+        .filter((record) => record.chainId === chainId)
+        .sort((left, right) => {
+          const blockDelta =
+            Number(BigInt(right.occurredBlockNumber) - BigInt(left.occurredBlockNumber));
+          if (blockDelta !== 0) {
+            return blockDelta;
+          }
+
+          return right.occurredLogIndex - left.occurredLogIndex;
+        }),
+    resetByChainId: async (chainId: number) => {
+      for (const [key, value] of this.treasuryMovementsStore.entries()) {
+        if (value.chainId === chainId) {
+          this.treasuryMovementsStore.delete(key);
+        }
+      }
+    },
+    upsert: async (record: TreasuryMovementRecord) => {
+      this.treasuryMovementsStore.set(
+        `${record.chainId}:${record.occurredTransactionHash}:${record.occurredLogIndex}`,
+        record
+      );
+      return record;
+    }
+  };
+
   readonly indexedBlocks = {
     deleteFromBlockNumber: async (chainId: number, fromBlockNumber: string) => {
       void chainId;
@@ -281,6 +311,7 @@ class InMemoryRelease4Repositories implements Release4Repositories {
   private readonly feeVaultStatesStore = new Map<string, FeeVaultStateRecord>();
   private readonly indexedTransactionsStore = new Map<string, IndexedTransactionRecord>();
   private readonly protocolConfigStatesStore = new Map<string, ProtocolConfigStateRecord>();
+  private readonly treasuryMovementsStore = new Map<string, TreasuryMovementRecord>();
   private readonly tokenAllowlistEntriesStore = new Map<string, TokenAllowlistEntryRecord>();
 }
 
@@ -377,6 +408,27 @@ test("applyIndexedEvents builds protocol and agreement projections from replayab
       },
       eventName: "TreasuryUpdated",
       logIndex: 6
+    }),
+    createIndexedEvent({
+      contractAddress: "0xeca4953857048466bd2958273c9b470c28ecab2e",
+      contractName: "FeeVault",
+      data: {
+        amount: "125",
+        treasury: "0x573b6f6f84cdf764ee25cceea673a4cd259abfdb"
+      },
+      eventName: "NativeFeesWithdrawn",
+      logIndex: 7
+    }),
+    createIndexedEvent({
+      contractAddress: "0xeca4953857048466bd2958273c9b470c28ecab2e",
+      contractName: "FeeVault",
+      data: {
+        amount: "500000",
+        token: "0x036cbd53842c5426634e7929541ec2318f3dcf7e",
+        treasury: "0x573b6f6f84cdf764ee25cceea673a4cd259abfdb"
+      },
+      eventName: "TokenFeesWithdrawn",
+      logIndex: 8
     }),
     createIndexedEvent({
       blockHash: "0xbbbbccccddddeeeeffff0000111122223333444455556666777788889999aaaa",
@@ -494,6 +546,7 @@ test("applyIndexedEvents builds protocol and agreement projections from replayab
     84532,
     "0xeca4953857048466bd2958273c9b470c28ecab2e"
   );
+  const treasuryMovements = await repositories.treasuryMovements.listByChainId(84532);
   const agreements = await repositories.escrowAgreements.listByChainId(84532);
   const milestoneSettlements =
     await repositories.escrowAgreementMilestoneSettlements.listByChainIdAndAgreementAddress(
@@ -509,6 +562,14 @@ test("applyIndexedEvents builds protocol and agreement projections from replayab
     "0xa46bb7cc73f292d77e27b27fac6863601ce1d49b"
   );
   assert.equal(feeVault?.treasuryAddress, "0x573b6f6f84cdf764ee25cceea673a4cd259abfdb");
+  assert.equal(treasuryMovements.length, 2);
+  assert.equal(treasuryMovements[0]?.kind, "TOKEN");
+  assert.equal(
+    treasuryMovements[0]?.tokenAddress,
+    "0x036cbd53842c5426634e7929541ec2318f3dcf7e"
+  );
+  assert.equal(treasuryMovements[1]?.kind, "NATIVE");
+  assert.equal(treasuryMovements[1]?.tokenAddress, null);
   assert.equal(agreements.length, 1);
   assert.equal(
     agreements[0]?.agreementAddress,
@@ -557,6 +618,16 @@ test("resetRelease4Projections clears derived state and replay rebuilds it", asy
       },
       eventName: "TokenStatusUpdated",
       logIndex: 1
+    }),
+    createIndexedEvent({
+      contractAddress: "0xeca4953857048466bd2958273c9b470c28ecab2e",
+      contractName: "FeeVault",
+      data: {
+        amount: "125",
+        treasury: "0x573b6f6f84cdf764ee25cceea673a4cd259abfdb"
+      },
+      eventName: "NativeFeesWithdrawn",
+      logIndex: 2
     })
   ];
 
@@ -576,6 +647,7 @@ test("resetRelease4Projections clears derived state and replay rebuilds it", asy
     ).length,
     0
   );
+  assert.equal((await repositories.treasuryMovements.listByChainId(84532)).length, 0);
 
   await applyIndexedEvents(repositories, events);
 
@@ -588,4 +660,5 @@ test("resetRelease4Projections clears derived state and replay rebuilds it", asy
     ).length,
     1
   );
+  assert.equal((await repositories.treasuryMovements.listByChainId(84532)).length, 1);
 });

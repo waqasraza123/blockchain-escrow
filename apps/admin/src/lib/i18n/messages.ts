@@ -39,7 +39,8 @@ export const enMessages = {
     protocolProposals: "Protocol proposals",
     reconciliation: "Reconciliation",
     search: "Search",
-    sponsorship: "Sponsorship"
+    sponsorship: "Sponsorship",
+    treasury: "Treasury"
   },
   publicTopbar: {
     subtitle: "Bilingual operator controls and oversight",
@@ -105,6 +106,10 @@ export const enMessages = {
       ArbitratorRegistry: "Arbitrator registry",
       ProtocolConfig: "Protocol config",
       TokenAllowlist: "Token allowlist"
+    },
+    treasuryMovementKinds: {
+      NATIVE: "Native",
+      TOKEN: "Token"
     },
     subjectTypes: {
       DEAL_MILESTONE_DISPUTE: "Dispute",
@@ -402,6 +407,23 @@ export const enMessages = {
     treasuryStatus: "Treasury status",
     visibleDeployments: "Visible deployments"
   },
+  treasury: {
+    amount: "Amount",
+    asset: "Asset",
+    chain: "Chain",
+    empty: "No treasury movements have been indexed for the visible deployments yet.",
+    feeVault: "Fee vault",
+    latestMovements: "Latest treasury movements",
+    nativeMovements: "Native movements",
+    subtitle:
+      "Indexed FeeVault withdrawals into treasury addresses across the configured visible deployments.",
+    title: "Treasury movements",
+    tokenMovements: "Token movements",
+    totalMovements: "Total movements",
+    treasuryAddress: "Treasury",
+    tx: "Transaction",
+    visibleChains: "Visible chains"
+  },
   cases: {
     addNote: "Add note",
     alertId: "Linked alert id",
@@ -551,7 +573,8 @@ export const arMessages = {
     protocolProposals: "مقترحات البروتوكول",
     reconciliation: "التسوية",
     search: "البحث",
-    sponsorship: "الرعاية"
+    sponsorship: "الرعاية",
+    treasury: "الخزانة"
   },
   publicTopbar: {
     subtitle: "ضوابط ومراقبة تشغيلية ثنائية اللغة",
@@ -617,6 +640,10 @@ export const arMessages = {
       ArbitratorRegistry: "سجل المحكمين",
       ProtocolConfig: "إعدادات البروتوكول",
       TokenAllowlist: "قائمة السماح للرموز"
+    },
+    treasuryMovementKinds: {
+      NATIVE: "أصل أصلي",
+      TOKEN: "رمز"
     },
     subjectTypes: {
       DEAL_MILESTONE_DISPUTE: "نزاع",
@@ -911,6 +938,23 @@ export const arMessages = {
     totalAgreements: "إجمالي الاتفاقيات",
     treasuryStatus: "حالة الخزانة",
     visibleDeployments: "النشرات الظاهرة"
+  },
+  treasury: {
+    amount: "المبلغ",
+    asset: "الأصل",
+    chain: "السلسلة",
+    empty: "لم يتم فهرسة أي حركات خزانة للنشرات الظاهرة بعد.",
+    feeVault: "خزانة الرسوم",
+    latestMovements: "أحدث حركات الخزانة",
+    nativeMovements: "الحركات الأصلية",
+    subtitle:
+      "سحوبات FeeVault المفهرسة إلى عناوين الخزانة عبر النشرات الظاهرة المضبوطة.",
+    title: "حركات الخزانة",
+    tokenMovements: "حركات الرموز",
+    totalMovements: "إجمالي الحركات",
+    treasuryAddress: "الخزانة",
+    tx: "المعاملة",
+    visibleChains: "السلاسل الظاهرة"
   },
   cases: {
     addNote: "إضافة ملاحظة",
