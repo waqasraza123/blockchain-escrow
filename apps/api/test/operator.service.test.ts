@@ -441,6 +441,12 @@ test("operator health aggregates remote readiness and protocol proposal drafts e
     const manifest = getDeploymentManifestByChainId(84532);
 
     assert.equal(health.cursorFresh, true);
+    assert.equal(health.visibleChainCount, 1);
+    assert.equal(health.freshVisibleChainCount, 1);
+    assert.equal(health.staleVisibleChainCount, 0);
+    assert.equal(health.visibleChains[0]?.chainId, 84532);
+    assert.equal(health.visibleChains[0]?.cursorKey, configuration.release4CursorKey);
+    assert.equal(health.visibleChains[0]?.cursorFresh, true);
     assert.equal(health.worker.status, "HEALTHY");
     assert.ok(manifest, "missing base sepolia manifest");
     assert.equal(

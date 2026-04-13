@@ -1,7 +1,14 @@
 import { getHealth } from "../../../lib/operator-api";
 import { formatBoolean, formatCode } from "../../../lib/i18n/format";
 import { getI18n } from "../../../lib/i18n/server";
-import { Card, ConsoleHeader, Pill, toneForStatus } from "../ui";
+import {
+  Card,
+  ConsoleHeader,
+  DataTable,
+  MetricGrid,
+  Pill,
+  toneForStatus
+} from "../ui";
 
 export default async function HealthPage() {
   const { messages } = await getI18n();
@@ -18,6 +25,19 @@ export default async function HealthPage() {
         eyebrow={messages.navigation.health}
         subtitle={messages.health.serviceStatus}
         title={messages.health.title}
+      />
+      <MetricGrid
+        items={[
+          { label: messages.health.visibleChains, value: health.visibleChainCount },
+          {
+            label: messages.health.freshVisibleChains,
+            value: health.freshVisibleChainCount
+          },
+          {
+            label: messages.health.staleVisibleChains,
+            value: health.staleVisibleChainCount
+          }
+        ]}
       />
       <div className="split-grid">
         {[health.api, health.worker, health.indexer].map((service) => (
@@ -46,21 +66,42 @@ export default async function HealthPage() {
         <div className="detail-grid">
           <div className="detail-item">
             <span>{messages.health.cursorFresh}</span>
-            <Pill tone={health.cursorFresh ? "success" : "danger"} value={formatBoolean(health.cursorFresh, messages)} />
+            <Pill
+              tone={health.cursorFresh ? "success" : "danger"}
+              value={formatBoolean(health.cursorFresh, messages)}
+            />
           </div>
           <div className="detail-item">
             <span>{messages.health.cursorUpdated}</span>
             <strong className="mono">{health.cursorUpdatedAt ?? messages.common.na}</strong>
           </div>
-          <div className="detail-item">
-            <span>{messages.health.network}</span>
-            <strong>{health.manifest?.network ?? messages.common.na}</strong>
-          </div>
-          <div className="detail-item">
-            <span>{messages.health.contractVersion}</span>
-            <strong>{health.manifest?.contractVersion ?? messages.common.na}</strong>
-          </div>
         </div>
+        <DataTable
+          headers={[
+            messages.health.network,
+            messages.health.chainId,
+            messages.health.contractVersion,
+            messages.health.cursorFresh,
+            messages.health.cursorKey,
+            messages.health.cursorUpdated
+          ]}
+        >
+          {health.visibleChains.map((chain) => (
+            <tr key={chain.chainId}>
+              <td>{chain.network}</td>
+              <td className="mono">{chain.chainId}</td>
+              <td>{chain.contractVersion}</td>
+              <td>
+                <Pill
+                  tone={chain.cursorFresh ? "success" : "danger"}
+                  value={formatBoolean(chain.cursorFresh, messages)}
+                />
+              </td>
+              <td className="mono">{chain.cursorKey}</td>
+              <td className="mono">{chain.cursorUpdatedAt ?? messages.common.na}</td>
+            </tr>
+          ))}
+        </DataTable>
       </Card>
     </>
   );

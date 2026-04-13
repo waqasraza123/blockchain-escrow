@@ -520,15 +520,20 @@ export const enMessages = {
     whyExists: "Why this checkpoint exists"
   },
   health: {
+    chainId: "Chain id",
     chainVisibility: "Chain visibility",
     contractVersion: "Contract version",
     cursorFresh: "Cursor fresh",
+    cursorKey: "Cursor key",
     cursorUpdated: "Cursor updated",
+    freshVisibleChains: "Fresh visible chains",
+    visibleChains: "Visible chains",
     network: "Network",
     platformHealth: "Platform health",
     ready: "Ready",
     serviceStatus:
-      "API-aggregated service readiness, deployment metadata, and Release 4 cursor freshness.",
+      "API-aggregated service readiness plus visible-chain Release 4 cursor freshness and deployment metadata.",
+    staleVisibleChains: "Stale visible chains",
     status: "Status",
     title: "Platform health"
   },
@@ -1081,15 +1086,20 @@ export const arMessages = {
     whyExists: "سبب وجود نقطة التحقق"
   },
   health: {
+    chainId: "معرّف السلسلة",
     chainVisibility: "رؤية السلسلة",
     contractVersion: "نسخة العقد",
     cursorFresh: "المؤشر حديث",
+    cursorKey: "مفتاح المؤشر",
     cursorUpdated: "تم تحديث المؤشر",
+    freshVisibleChains: "السلاسل الظاهرة الحديثة",
+    visibleChains: "السلاسل الظاهرة",
     network: "الشبكة",
     platformHealth: "صحة المنصة",
     ready: "جاهز",
     serviceStatus:
-      "جاهزية الخدمات المجمّعة من API وبيانات النشر وحداثة مؤشر الإصدار 4.",
+      "جاهزية الخدمات المجمّعة من API بالإضافة إلى حداثة مؤشرات الإصدار 4 وبيانات النشر عبر السلاسل الظاهرة.",
+    staleVisibleChains: "السلاسل الظاهرة المتأخرة",
     status: "الحالة",
     title: "صحة المنصة"
   },

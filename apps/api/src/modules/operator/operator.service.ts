@@ -1755,21 +1755,42 @@ export class OperatorService {
     requestMetadata: RequestMetadata
   ): Promise<OperatorHealthResponse> {
     await this.requireOperatorContext(requestMetadata);
-    const [workerProbe, indexerProbe, cursor] = await Promise.all([
+    const manifests = this.getVisibleDeploymentManifests();
+    const [workerProbe, indexerProbe, chainSummaries] = await Promise.all([
       this.probeRemoteHealth(this.configuration.workerBaseUrl),
       this.probeRemoteHealth(this.configuration.indexerBaseUrl),
-      this.release4Repositories.chainCursors.findByChainIdAndCursorKey(
-        this.configuration.chainId,
-        this.configuration.release4CursorKey
+      Promise.all(
+        manifests.map(async (manifest) => {
+          const cursorKey = buildRelease4CursorKey(manifest, this.configuration);
+          const cursor =
+            await this.release4Repositories.chainCursors.findByChainIdAndCursorKey(
+              manifest.chainId,
+              cursorKey
+            );
+          const cursorFresh =
+            cursor != null &&
+            Date.now() - new Date(cursor.updatedAt).getTime() <=
+              this.configuration.indexerFreshnessTtlSeconds * 1000;
+
+          return {
+            chainId: manifest.chainId,
+            contractVersion: manifest.contractVersion,
+            cursorFresh,
+            cursorKey,
+            cursorUpdatedAt: cursor?.updatedAt ?? null,
+            deploymentStartBlock: manifest.deploymentStartBlock,
+            network: manifest.network
+          };
+        })
       )
     ]);
-
-    const nowMs = Date.now();
-    const cursorFresh =
-      cursor != null &&
-      nowMs - new Date(cursor.updatedAt).getTime() <=
-        this.configuration.indexerFreshnessTtlSeconds * 1000;
     const manifest = getDeploymentManifestByChainId(this.configuration.chainId);
+    const primaryChainSummary =
+      chainSummaries.find((entry) => entry.chainId === this.configuration.chainId) ?? null;
+    const freshVisibleChainCount = chainSummaries.filter(
+      (entry) => entry.cursorFresh
+    ).length;
+    const staleVisibleChainCount = chainSummaries.length - freshVisibleChainCount;
 
     return {
       api: {
@@ -1778,8 +1799,10 @@ export class OperatorService {
         service: "api",
         status: "HEALTHY"
       },
-      cursorFresh,
-      cursorUpdatedAt: cursor?.updatedAt ?? null,
+      cursorFresh:
+        chainSummaries.length > 0 && staleVisibleChainCount === 0,
+      cursorUpdatedAt: primaryChainSummary?.cursorUpdatedAt ?? null,
+      freshVisibleChainCount,
       indexer: this.toRemoteServiceHealth("indexer", indexerProbe),
       manifest: manifest
         ? {
@@ -1789,6 +1812,9 @@ export class OperatorService {
             network: manifest.network
           }
         : null,
+      staleVisibleChainCount,
+      visibleChains: chainSummaries,
+      visibleChainCount: chainSummaries.length,
       worker: this.toRemoteServiceHealth("worker", workerProbe)
     };
   }

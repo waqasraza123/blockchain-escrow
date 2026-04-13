@@ -340,9 +340,20 @@ export interface RemoteServiceHealth {
   status: "HEALTHY" | "UNHEALTHY" | "UNREACHABLE";
 }
 
+export interface OperatorHealthChainSummary {
+  chainId: ChainId;
+  contractVersion: number;
+  cursorFresh: boolean;
+  cursorKey: string;
+  cursorUpdatedAt: IsoTimestamp | null;
+  deploymentStartBlock: string | null;
+  network: string;
+}
+
 export interface OperatorHealthResponse {
   cursorFresh: boolean;
   cursorUpdatedAt: IsoTimestamp | null;
+  freshVisibleChainCount: number;
   indexer: RemoteServiceHealth;
   manifest: {
     chainId: ChainId;
@@ -350,6 +361,9 @@ export interface OperatorHealthResponse {
     deploymentStartBlock: string | null;
     network: string;
   } | null;
+  staleVisibleChainCount: number;
+  visibleChains: OperatorHealthChainSummary[];
+  visibleChainCount: number;
   worker: RemoteServiceHealth;
   api: RemoteServiceHealth;
 }
