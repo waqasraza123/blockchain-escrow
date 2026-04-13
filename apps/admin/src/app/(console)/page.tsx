@@ -129,6 +129,9 @@ export default async function DashboardPage() {
             <Link className="button button-secondary" href="/funding">
               {messages.navigation.funding}
             </Link>
+            <Link className="button button-secondary" href="/settlements">
+              {messages.navigation.settlements}
+            </Link>
             <Link className="button button-secondary" href="/reconciliation">
               {messages.dashboard.viewQueue}
             </Link>

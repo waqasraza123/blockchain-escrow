@@ -10,6 +10,7 @@ export interface OperatorConfiguration {
   indexerFreshnessTtlSeconds: number;
   release4CursorKey: string;
   requestTimeoutMs: number;
+  settlementExecutionPendingStaleAfterSeconds: number;
   unresolvedDisputeAfterSeconds: number;
   visibleChainIds: number[];
   workerBaseUrl: string;
@@ -104,6 +105,10 @@ export function loadOperatorConfiguration(): OperatorConfiguration {
     requestTimeoutMs: parsePositiveInteger(
       process.env.OPERATOR_REMOTE_REQUEST_TIMEOUT_MS,
       3000
+    ),
+    settlementExecutionPendingStaleAfterSeconds: parsePositiveInteger(
+      process.env.MILESTONE_SETTLEMENT_EXECUTION_PENDING_STALE_AFTER_SECONDS,
+      3600
     ),
     unresolvedDisputeAfterSeconds: parsePositiveInteger(
       process.env.OPERATOR_UNRESOLVED_DISPUTE_AFTER_SECONDS,

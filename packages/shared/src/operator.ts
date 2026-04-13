@@ -14,6 +14,7 @@ import type {
   FundingTransactionStalePendingEvaluation,
   FundingTransactionStatus
 } from "./funding";
+import type { MilestoneSettlementRequestKind } from "./drafts";
 import type { TreasuryMovementKind } from "./indexer";
 import {
   sponsoredTransactionKindSchema,
@@ -475,6 +476,49 @@ export interface OperatorFundingTransactionSummary {
 
 export interface ListOperatorFundingTransactionsResponse {
   fundingTransactions: OperatorFundingTransactionSummary[];
+}
+
+export interface OperatorSettlementExecutionSummary {
+  agreementAddress: WalletAddress | null;
+  chainId: ChainId;
+  confirmedAt: IsoTimestamp | null;
+  contractVersion: number;
+  dealMilestoneSettlementRequestId: EntityId;
+  dealVersionId: EntityId;
+  dealVersionMilestoneId: EntityId;
+  dealVersionTitle: string | null;
+  draftDealId: EntityId;
+  draftDealTitle: string | null;
+  explorerUrl: string;
+  id: EntityId;
+  indexedAt: IsoTimestamp | null;
+  indexedBlockNumber: string | null;
+  indexedExecutionStatus: FundingTransactionIndexedExecutionStatus | null;
+  matchesTrackedAgreement: boolean | null;
+  milestonePosition: number | null;
+  milestoneTitle: string | null;
+  network: string;
+  organizationId: EntityId;
+  organizationName: string | null;
+  reconciledAt: IsoTimestamp | null;
+  reconciledStatus: FundingTransactionReconciledStatus | null;
+  requestKind: MilestoneSettlementRequestKind | null;
+  stalePending: boolean | null;
+  stalePendingAt: IsoTimestamp | null;
+  stalePendingEscalatedAt: IsoTimestamp | null;
+  stalePendingEvaluation: FundingTransactionStalePendingEvaluation | null;
+  status: FundingTransactionStatus;
+  submittedAt: IsoTimestamp;
+  submittedByUserId: EntityId;
+  submittedWalletAddress: WalletAddress;
+  supersededAt: IsoTimestamp | null;
+  supersededByDealMilestoneSettlementExecutionTransactionId: EntityId | null;
+  supersededByTransactionHash: HexString | null;
+  transactionHash: HexString;
+}
+
+export interface ListOperatorSettlementExecutionsResponse {
+  executionTransactions: OperatorSettlementExecutionSummary[];
 }
 
 export interface ReconciliationQueueSummaryRow {

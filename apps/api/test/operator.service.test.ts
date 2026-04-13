@@ -27,6 +27,7 @@ const configuration: OperatorConfiguration = {
   indexerFreshnessTtlSeconds: 300,
   release4CursorKey: "release4:base-sepolia",
   requestTimeoutMs: 3000,
+  settlementExecutionPendingStaleAfterSeconds: 3600,
   unresolvedDisputeAfterSeconds: 86400,
   visibleChainIds: [84532],
   workerBaseUrl: "http://127.0.0.1:4100"
@@ -817,6 +818,265 @@ test("operator funding transactions list tracked funding intents across visible 
   assert.equal(confirmed?.network, "base-sepolia");
   assert.equal(confirmed?.contractVersion, manifest.contractVersion);
   assert.equal(failed?.status, "FAILED");
+  assert.equal(failed?.indexedExecutionStatus, "REVERTED");
+  assert.equal(pending?.status, "PENDING");
+  assert.equal(pending?.stalePending, true);
+  assert.equal(pending?.stalePendingEvaluation, "READY");
+});
+
+test("operator settlement executions list tracked settlement transactions across visible chains", async () => {
+  const services = createServices();
+  const actor = await seedOperatorActor(services, "SUPER_ADMIN");
+  const manifest = getDeploymentManifestByChainId(84532);
+  const now = new Date().toISOString();
+
+  assert.ok(manifest, "missing base sepolia manifest");
+
+  await services.release1Repositories.organizations.create({
+    createdAt: now,
+    createdByUserId: actor.userId,
+    id: "org-1",
+    name: "Acme Procurement",
+    slug: "acme-procurement",
+    updatedAt: now
+  });
+  await services.release1Repositories.draftDeals.create({
+    createdAt: now,
+    createdByUserId: actor.userId,
+    id: "draft-1",
+    organizationId: "org-1",
+    settlementCurrency: "USDC",
+    state: "ACTIVE",
+    summary: "Prototype integration",
+    templateId: null,
+    title: "Alpha Deal",
+    updatedAt: now
+  });
+  await services.release1Repositories.dealVersions.create({
+    bodyMarkdown: "# Alpha",
+    createdAt: now,
+    createdByUserId: actor.userId,
+    draftDealId: "draft-1",
+    id: "version-1",
+    organizationId: "org-1",
+    settlementCurrency: "USDC",
+    summary: "Version summary",
+    templateId: null,
+    title: "Alpha Deal v1",
+    versionNumber: 1
+  });
+  await services.release1Repositories.dealVersionMilestones.add({
+    amountMinor: "500000",
+    createdAt: now,
+    dealVersionId: "version-1",
+    description: "Phase one implementation",
+    dueAt: null,
+    id: "milestone-1",
+    position: 1,
+    title: "Phase one"
+  });
+  await services.release4Repositories.chainCursors.upsert({
+    chainId: 84532,
+    cursorKey: configuration.release4CursorKey,
+    lastProcessedBlockHash:
+      "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    lastProcessedBlockNumber: "200",
+    nextBlockNumber: "201",
+    updatedAt: now
+  });
+
+  const agreementAddress =
+    "0x7777777777777777777777777777777777777777" as const;
+  const settlementRequests = [
+    {
+      id: "settlement-request-1",
+      kind: "RELEASE" as const,
+      reviewId: "review-1",
+      submissionId: "submission-1"
+    },
+    {
+      id: "settlement-request-2",
+      kind: "REFUND" as const,
+      reviewId: "review-2",
+      submissionId: "submission-2"
+    },
+    {
+      id: "settlement-request-3",
+      kind: "RELEASE" as const,
+      reviewId: "review-3",
+      submissionId: "submission-3"
+    }
+  ];
+
+  for (const request of settlementRequests) {
+    await services.release1Repositories.dealMilestoneSettlementRequests.create({
+      dealMilestoneReviewId: request.reviewId,
+      dealMilestoneSubmissionId: request.submissionId,
+      dealVersionId: "version-1",
+      dealVersionMilestoneId: "milestone-1",
+      draftDealId: "draft-1",
+      id: request.id,
+      kind: request.kind,
+      organizationId: "org-1",
+      requestedAt: now,
+      requestedByUserId: actor.userId,
+      statementMarkdown: null
+    });
+    await services.release1Repositories.dealMilestoneSettlementPreparations.create({
+      agreementAddress,
+      chainId: 84532,
+      dealId:
+        "0x1111111111111111111111111111111111111111111111111111111111111111",
+      dealMilestoneReviewId: request.reviewId,
+      dealMilestoneSettlementRequestId: request.id,
+      dealMilestoneSubmissionId: request.submissionId,
+      dealVersionHash:
+        "0x2222222222222222222222222222222222222222222222222222222222222222",
+      dealVersionId: "version-1",
+      dealVersionMilestoneId: "milestone-1",
+      draftDealId: "draft-1",
+      id: `preparation-${request.id}`,
+      kind: request.kind,
+      milestoneAmountMinor: "500000",
+      milestonePosition: 1,
+      organizationId: "org-1",
+      preparedAt: now,
+      settlementTokenAddress: manifest.usdcToken!.toLowerCase() as `0x${string}`,
+      totalAmount: "1000000"
+    });
+  }
+
+  await services.release1Repositories.dealMilestoneSettlementExecutionTransactions.create({
+    chainId: 84532,
+    dealMilestoneReviewId: "review-1",
+    dealMilestoneSettlementRequestId: "settlement-request-1",
+    dealMilestoneSubmissionId: "submission-1",
+    dealVersionId: "version-1",
+    dealVersionMilestoneId: "milestone-1",
+    draftDealId: "draft-1",
+    id: "execution-1",
+    organizationId: "org-1",
+    reconciledAgreementAddress: null,
+    reconciledAt: null,
+    reconciledConfirmedAt: null,
+    reconciledMatchesTrackedAgreement: null,
+    reconciledStatus: null,
+    stalePendingEscalatedAt: null,
+    submittedAt: "2026-04-13T10:00:00.000Z",
+    submittedByUserId: actor.userId,
+    submittedWalletAddress:
+      "0x1111111111111111111111111111111111111111",
+    submittedWalletId: actor.walletId,
+    supersededAt: null,
+    supersededByDealMilestoneSettlementExecutionTransactionId: null,
+    transactionHash:
+      "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  });
+  await services.release1Repositories.dealMilestoneSettlementExecutionTransactions.create({
+    chainId: 84532,
+    dealMilestoneReviewId: "review-2",
+    dealMilestoneSettlementRequestId: "settlement-request-2",
+    dealMilestoneSubmissionId: "submission-2",
+    dealVersionId: "version-1",
+    dealVersionMilestoneId: "milestone-1",
+    draftDealId: "draft-1",
+    id: "execution-2",
+    organizationId: "org-1",
+    reconciledAgreementAddress: null,
+    reconciledAt: null,
+    reconciledConfirmedAt: null,
+    reconciledMatchesTrackedAgreement: null,
+    reconciledStatus: null,
+    stalePendingEscalatedAt: null,
+    submittedAt: "2026-04-13T11:00:00.000Z",
+    submittedByUserId: actor.userId,
+    submittedWalletAddress:
+      "0x1111111111111111111111111111111111111111",
+    submittedWalletId: actor.walletId,
+    supersededAt: null,
+    supersededByDealMilestoneSettlementExecutionTransactionId: null,
+    transactionHash:
+      "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+  });
+  await services.release1Repositories.dealMilestoneSettlementExecutionTransactions.create({
+    chainId: 84532,
+    dealMilestoneReviewId: "review-3",
+    dealMilestoneSettlementRequestId: "settlement-request-3",
+    dealMilestoneSubmissionId: "submission-3",
+    dealVersionId: "version-1",
+    dealVersionMilestoneId: "milestone-1",
+    draftDealId: "draft-1",
+    id: "execution-3",
+    organizationId: "org-1",
+    reconciledAgreementAddress: null,
+    reconciledAt: null,
+    reconciledConfirmedAt: null,
+    reconciledMatchesTrackedAgreement: null,
+    reconciledStatus: null,
+    stalePendingEscalatedAt: null,
+    submittedAt: "2020-01-01T00:00:00.000Z",
+    submittedByUserId: actor.userId,
+    submittedWalletAddress:
+      "0x1111111111111111111111111111111111111111",
+    submittedWalletId: actor.walletId,
+    supersededAt: null,
+    supersededByDealMilestoneSettlementExecutionTransactionId: null,
+    transactionHash:
+      "0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+  });
+  await services.release4Repositories.indexedTransactions.upsertMany([
+    {
+      blockHash:
+        "0xdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      blockNumber: "101",
+      chainId: 84532,
+      executionStatus: "SUCCESS",
+      fromAddress: "0x1111111111111111111111111111111111111111",
+      indexedAt: now,
+      toAddress: agreementAddress,
+      transactionHash:
+        "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      transactionIndex: 0
+    },
+    {
+      blockHash:
+        "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      blockNumber: "102",
+      chainId: 84532,
+      executionStatus: "REVERTED",
+      fromAddress: "0x1111111111111111111111111111111111111111",
+      indexedAt: now,
+      toAddress: agreementAddress,
+      transactionHash:
+        "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      transactionIndex: 1
+    }
+  ]);
+
+  const response = await services.operatorService.listSettlementExecutions(
+    requestMetadata(actor.cookieHeader)
+  );
+  const transactionsById = new Map(
+    response.executionTransactions.map((transaction) => [transaction.id, transaction] as const)
+  );
+  const confirmed = transactionsById.get("execution-1");
+  const failed = transactionsById.get("execution-2");
+  const pending = transactionsById.get("execution-3");
+
+  assert.equal(response.executionTransactions.length, 3);
+  assert.equal(response.executionTransactions[0]?.id, "execution-2");
+  assert.equal(confirmed?.status, "CONFIRMED");
+  assert.equal(confirmed?.agreementAddress, agreementAddress);
+  assert.equal(confirmed?.requestKind, "RELEASE");
+  assert.equal(confirmed?.milestonePosition, 1);
+  assert.equal(confirmed?.milestoneTitle, "Phase one");
+  assert.equal(confirmed?.organizationName, "Acme Procurement");
+  assert.equal(confirmed?.draftDealTitle, "Alpha Deal");
+  assert.equal(confirmed?.dealVersionTitle, "Alpha Deal v1");
+  assert.equal(confirmed?.network, "base-sepolia");
+  assert.equal(confirmed?.contractVersion, manifest.contractVersion);
+  assert.equal(failed?.status, "FAILED");
+  assert.equal(failed?.requestKind, "REFUND");
   assert.equal(failed?.indexedExecutionStatus, "REVERTED");
   assert.equal(pending?.status, "PENDING");
   assert.equal(pending?.stalePending, true);

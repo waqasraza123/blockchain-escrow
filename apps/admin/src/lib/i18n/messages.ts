@@ -40,6 +40,7 @@ export const enMessages = {
     protocolProposals: "Protocol proposals",
     reconciliation: "Reconciliation",
     search: "Search",
+    settlements: "Settlements",
     sponsorship: "Sponsorship",
     treasury: "Treasury"
   },
@@ -117,6 +118,10 @@ export const enMessages = {
       INDEXER_CURSOR_MISSING: "Cursor missing",
       INDEXER_CURSOR_STALE: "Cursor stale",
       READY: "Ready"
+    },
+    settlementRequestKinds: {
+      REFUND: "Refund",
+      RELEASE: "Release"
     },
     subjectTypes: {
       DEAL_MILESTONE_DISPUTE: "Dispute",
@@ -453,6 +458,29 @@ export const enMessages = {
     visibleChains: "Visible chains",
     wallet: "Wallet"
   },
+  settlements: {
+    agreement: "Agreement",
+    attentionRequired: "Attention required",
+    chain: "Chain",
+    confirmedTransactions: "Confirmed",
+    draft: "Draft",
+    empty: "No settlement execution transactions are currently tracked for the visible deployments.",
+    latestTransactions: "Latest settlement executions",
+    milestone: "Milestone",
+    organization: "Organization",
+    pendingTransactions: "Pending",
+    requestKind: "Request kind",
+    staleSignal: "Stale signal",
+    status: "Status",
+    submitted: "Submitted",
+    subtitle:
+      "Cross-chain visibility into tracked settlement execution transactions, derived execution status, and stale-pending pressure.",
+    title: "Settlement executions",
+    totalTransactions: "Total tracked",
+    tx: "Transaction",
+    visibleChains: "Visible chains",
+    wallet: "Wallet"
+  },
   cases: {
     addNote: "Add note",
     alertId: "Linked alert id",
@@ -608,6 +636,7 @@ export const arMessages = {
     protocolProposals: "مقترحات البروتوكول",
     reconciliation: "التسوية",
     search: "البحث",
+    settlements: "التسويات",
     sponsorship: "الرعاية",
     treasury: "الخزانة"
   },
@@ -685,6 +714,10 @@ export const arMessages = {
       INDEXER_CURSOR_MISSING: "المؤشر مفقود",
       INDEXER_CURSOR_STALE: "المؤشر متأخر",
       READY: "جاهز"
+    },
+    settlementRequestKinds: {
+      REFUND: "استرداد",
+      RELEASE: "إفراج"
     },
     subjectTypes: {
       DEAL_MILESTONE_DISPUTE: "نزاع",
@@ -1016,6 +1049,29 @@ export const arMessages = {
     totalTransactions: "إجمالي المتتبع",
     tx: "المعاملة",
     version: "النسخة",
+    visibleChains: "السلاسل الظاهرة",
+    wallet: "المحفظة"
+  },
+  settlements: {
+    agreement: "الاتفاقية",
+    attentionRequired: "يتطلب انتباهًا",
+    chain: "السلسلة",
+    confirmedTransactions: "المؤكدة",
+    draft: "المسودة",
+    empty: "لا توجد معاملات تنفيذ تسوية متتبعة حاليًا للنشرات الظاهرة.",
+    latestTransactions: "أحدث عمليات تنفيذ التسوية",
+    milestone: "المعلَم",
+    organization: "المؤسسة",
+    pendingTransactions: "قيد الانتظار",
+    requestKind: "نوع الطلب",
+    staleSignal: "إشارة التأخر",
+    status: "الحالة",
+    submitted: "تم الإرسال",
+    subtitle:
+      "رؤية عبر السلاسل لمعاملات تنفيذ التسوية المتتبعة وحالة التنفيذ المشتقة وضغط التأخر في الانتظار.",
+    title: "تنفيذات التسوية",
+    totalTransactions: "إجمالي المتتبع",
+    tx: "المعاملة",
     visibleChains: "السلاسل الظاهرة",
     wallet: "المحفظة"
   },
