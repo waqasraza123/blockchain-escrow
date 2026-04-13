@@ -2913,6 +2913,10 @@ export function getDeploymentManifestByChainId(chainId: number): DeploymentManif
   return deploymentManifestsByChainId.get(chainId) ?? null;
 }
 
+export function listDeploymentManifests(): DeploymentManifest[] {
+  return Object.values(deploymentManifests).sort((left, right) => left.chainId - right.chainId);
+}
+
 export function deploymentSupportsCreateAndFund(manifest: DeploymentManifest): boolean {
   return manifest.contractVersion >= 2;
 }

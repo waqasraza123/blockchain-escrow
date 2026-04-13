@@ -28,6 +28,7 @@ import type {
   ListInvoicesResponse,
   ListComplianceCasesResponse,
   ListComplianceCheckpointsResponse,
+  ListOperatorDeploymentsResponse,
   ListOperatorAlertsResponse,
   ListOperatorSponsoredTransactionRequestsResponse,
   ListPartnerAccountsResponse,
@@ -341,6 +342,10 @@ export function updateInvoiceStatus(
 
 export function getHealth(): Promise<OperatorHealthResponse> {
   return apiRequest("/operator/health");
+}
+
+export function getDeployments(): Promise<ListOperatorDeploymentsResponse> {
+  return apiRequest("/operator/deployments");
 }
 
 export function getReconciliation(): Promise<OperatorReconciliationResponse> {

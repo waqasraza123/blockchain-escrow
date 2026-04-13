@@ -4,12 +4,15 @@ import {
   contractArtifacts,
   getDeploymentManifestByChainId
 } from "@blockchain-escrow/contracts-sdk";
+import type { DeploymentManifest } from "@blockchain-escrow/contracts-sdk";
 import type {
   ComplianceCaseRecord,
   ComplianceCheckpointRecord,
+  FeeVaultStateRecord,
   GasPolicyRecord,
   OperatorAccountRecord,
   OperatorAlertRecord,
+  ProtocolConfigStateRecord,
   Release1Repositories,
   Release12Repositories,
   Release4Repositories,
@@ -49,7 +52,6 @@ import {
   operatorSearchParamsSchema,
   partnerAccountParamsSchema,
   partnerApiKeyParamsSchema,
-  partnerOrganizationLinkParamsSchema,
   partnerWebhookSubscriptionParamsSchema,
   registerPartnerBrandAssetSchema,
   protocolProposalDraftParamsSchema,
@@ -63,44 +65,26 @@ import {
   updatePartnerWebhookSubscriptionSchema
 } from "@blockchain-escrow/shared";
 import type {
-  AcknowledgeOperatorAlertInput,
-  AddComplianceCaseNoteInput,
-  AssignTenantBillingPlanInput,
   AssignTenantBillingPlanResponse,
-  AssignComplianceCaseInput,
-  CreateBillingFeeScheduleInput,
   CreateBillingFeeScheduleResponse,
-  CreateBillingPlanInput,
   CreateBillingPlanResponse,
   ComplianceCaseDetailResponse,
-  ComplianceCaseParams,
   ComplianceCaseSummary,
-  ComplianceCheckpointParams,
   ComplianceCheckpointSummary,
-  CreateComplianceCaseInput,
-  CreateComplianceCheckpointInput,
-  CreatePartnerAccountInput,
   CreatePartnerAccountResponse,
-  CreatePartnerApiKeyInput,
   CreatePartnerApiKeyResponse,
-  CreatePartnerOrganizationLinkInput,
   CreatePartnerOrganizationLinkResponse,
-  CreatePartnerWebhookSubscriptionInput,
   CreatePartnerWebhookSubscriptionResponse,
   CreateProtocolProposalDraftInput,
-  CreateTenantDomainInput,
   CreateTenantDomainResponse,
-  DecideComplianceCheckpointInput,
-  InvoiceActionInput,
   InvoiceDetailResponse,
   JsonObject,
   ListBillingPlansResponse,
   ListBillingFeeSchedulesResponse,
-  ListComplianceCasesParams,
   ListComplianceCasesResponse,
   ListComplianceCheckpointsResponse,
+  ListOperatorDeploymentsResponse,
   ListInvoicesResponse,
-  ListOperatorAlertsParams,
   ListOperatorAlertsResponse,
   ListOperatorSponsoredTransactionRequestsResponse,
   ListPartnerAccountsResponse,
@@ -109,41 +93,25 @@ import type {
   OperatorDashboardCard,
   OperatorDashboardResponse,
   OperatorHealthResponse,
-  OperatorAlertActionParams,
   OperatorPermissionSet,
   OperatorReconciliationResponse,
   OperatorSearchHit,
-  OperatorSearchParams,
   OperatorSearchResponse,
   OperatorSessionResponse,
   OperatorSubjectSummary,
   PartnerAccountDetailResponse,
-  PartnerAccountParams,
-  PartnerApiKeyParams,
-  PartnerOrganizationLinkParams,
-  PartnerWebhookSubscriptionParams,
   ProtocolProposalAction,
-  ProtocolProposalDraftParams,
   ProtocolProposalDraftDetailResponse,
   ProtocolProposalDraftSummary,
   ProtocolProposalTarget,
-  RegisterPartnerBrandAssetInput,
   RegisterPartnerBrandAssetResponse,
   RemoteServiceHealth,
-  ResolveOperatorAlertInput,
-  RevokePartnerApiKeyInput,
   RevokePartnerApiKeyResponse,
-  RotatePartnerApiKeyInput,
   RotatePartnerApiKeyResponse,
   RotatePartnerWebhookSubscriptionSecretResponse,
   TenantBillingOverviewResponse,
-  TenantDomainParams,
-  TenantSettingsInput,
-  UpdateComplianceCaseStatusInput,
-  UpdateBillingPlanInput,
   UpdateBillingPlanResponse,
   UpdateInvoiceStatusResponse,
-  UpdatePartnerWebhookSubscriptionInput,
   UpdatePartnerWebhookSubscriptionResponse
 } from "@blockchain-escrow/shared";
 import {
@@ -210,6 +178,46 @@ function startOfUtcDayIso(timestamp: string): string {
   const value = new Date(timestamp);
   value.setUTCHours(0, 0, 0, 0);
   return value.toISOString();
+}
+
+function buildRelease4CursorKey(
+  manifest: DeploymentManifest,
+  configuration: OperatorConfiguration
+): string {
+  if (manifest.chainId === configuration.chainId) {
+    return configuration.release4CursorKey;
+  }
+
+  return `release4:${manifest.network}`;
+}
+
+function normalizeWalletAddress(
+  address: string | null | undefined
+): `0x${string}` | null {
+  if (!address) {
+    return null;
+  }
+
+  return address.toLowerCase() as `0x${string}`;
+}
+
+function determineTreasuryStatus(
+  protocolConfigState: ProtocolConfigStateRecord | null,
+  feeVaultState: FeeVaultStateRecord | null
+): ListOperatorDeploymentsResponse["deployments"][number]["treasury"]["status"] {
+  if (!protocolConfigState && !feeVaultState) {
+    return "UNINDEXED";
+  }
+
+  if (!protocolConfigState || !feeVaultState) {
+    return "PARTIAL";
+  }
+
+  if (protocolConfigState.treasuryAddress === feeVaultState.treasuryAddress) {
+    return "CONSISTENT";
+  }
+
+  return "MISMATCHED";
 }
 
 function buildPermissions(role: OperatorAccountRecord["role"]): OperatorPermissionSet {
@@ -562,6 +570,107 @@ export class OperatorService {
     @Inject(OPERATOR_CONFIGURATION)
     private readonly configuration: OperatorConfiguration
   ) {}
+
+  private getVisibleChainIds(): number[] {
+    return this.configuration.visibleChainIds;
+  }
+
+  private getVisibleDeploymentManifests(): DeploymentManifest[] {
+    const manifests = this.getVisibleChainIds()
+      .map((chainId) => getDeploymentManifestByChainId(chainId))
+      .filter((manifest): manifest is DeploymentManifest => manifest !== null);
+
+    return manifests.sort((left, right) => left.chainId - right.chainId);
+  }
+
+  private async listByVisibleChainIds<T>(
+    loader: (chainId: number) => Promise<T[]>
+  ): Promise<T[]> {
+    const records = await Promise.all(
+      this.getVisibleChainIds().map((chainId) => loader(chainId))
+    );
+
+    return records.flat();
+  }
+
+  private async buildDeploymentSummary(
+    manifest: DeploymentManifest
+  ): Promise<ListOperatorDeploymentsResponse["deployments"][number]> {
+    const protocolConfigAddress = normalizeWalletAddress(
+      manifest.contracts.ProtocolConfig
+    );
+    const feeVaultAddress = normalizeWalletAddress(manifest.contracts.FeeVault);
+    const cursorKey = buildRelease4CursorKey(manifest, this.configuration);
+
+    const [cursor, agreements, protocolConfigState, feeVaultState] =
+      await Promise.all([
+        this.release4Repositories.chainCursors.findByChainIdAndCursorKey(
+          manifest.chainId,
+          cursorKey
+        ),
+        this.release4Repositories.escrowAgreements.listByChainId(manifest.chainId),
+        protocolConfigAddress
+          ? this.release4Repositories.protocolConfigStates.findByChainIdAndAddress(
+              manifest.chainId,
+              protocolConfigAddress
+            )
+          : Promise.resolve(null),
+        feeVaultAddress
+          ? this.release4Repositories.feeVaultStates.findByChainIdAndAddress(
+              manifest.chainId,
+              feeVaultAddress
+            )
+          : Promise.resolve(null)
+      ]);
+
+    const cursorFresh =
+      cursor != null &&
+      Date.now() - new Date(cursor.updatedAt).getTime() <=
+        this.configuration.indexerFreshnessTtlSeconds * 1000;
+
+    return {
+      agreementCount: agreements.length,
+      chainId: manifest.chainId,
+      contractVersion: manifest.contractVersion,
+      cursorFresh,
+      cursorKey,
+      cursorUpdatedAt: cursor?.updatedAt ?? null,
+      deploymentStartBlock: manifest.deploymentStartBlock,
+      explorerUrl: manifest.explorerUrl,
+      feeVault: {
+        address: feeVaultAddress,
+        indexed: feeVaultState !== null,
+        owner: feeVaultState?.owner ?? null,
+        pendingOwner: feeVaultState?.pendingOwner ?? null,
+        treasuryAddress: feeVaultState?.treasuryAddress ?? null,
+        updatedAt: feeVaultState?.updatedAt ?? null
+      },
+      manifestOwner: normalizeWalletAddress(manifest.owner),
+      manifestPendingOwner: normalizeWalletAddress(manifest.pendingOwner),
+      manifestProtocolFeeBps: manifest.protocolFeeBps,
+      manifestTreasuryAddress: normalizeWalletAddress(manifest.treasury),
+      network: manifest.network,
+      protocolConfig: {
+        address: protocolConfigAddress,
+        createEscrowPaused: protocolConfigState?.createEscrowPaused ?? null,
+        feeVaultAddress: protocolConfigState?.feeVaultAddress ?? null,
+        fundingPaused: protocolConfigState?.fundingPaused ?? null,
+        indexed: protocolConfigState !== null,
+        owner: protocolConfigState?.owner ?? null,
+        pendingOwner: protocolConfigState?.pendingOwner ?? null,
+        protocolFeeBps: protocolConfigState?.protocolFeeBps ?? null,
+        treasuryAddress: protocolConfigState?.treasuryAddress ?? null,
+        updatedAt: protocolConfigState?.updatedAt ?? null
+      },
+      settlementTokenAddress: normalizeWalletAddress(manifest.usdcToken),
+      treasury: {
+        feeVaultAddress: feeVaultState?.treasuryAddress ?? null,
+        manifestAddress: normalizeWalletAddress(manifest.treasury),
+        protocolConfigAddress: protocolConfigState?.treasuryAddress ?? null,
+        status: determineTreasuryStatus(protocolConfigState, feeVaultState)
+      }
+    };
+  }
 
   async getSession(
     requestMetadata: RequestMetadata
@@ -1383,6 +1492,20 @@ export class OperatorService {
     };
   }
 
+  async listDeployments(
+    requestMetadata: RequestMetadata
+  ): Promise<ListOperatorDeploymentsResponse> {
+    await this.requireOperatorContext(requestMetadata);
+
+    return {
+      deployments: await Promise.all(
+        this.getVisibleDeploymentManifests().map((manifest) =>
+          this.buildDeploymentSummary(manifest)
+        )
+      )
+    };
+  }
+
   async getHealth(
     requestMetadata: RequestMetadata
   ): Promise<OperatorHealthResponse> {
@@ -1429,6 +1552,7 @@ export class OperatorService {
     requestMetadata: RequestMetadata
   ): Promise<OperatorReconciliationResponse> {
     await this.requireOperatorContext(requestMetadata);
+    const visibleChainIds = new Set(this.getVisibleChainIds());
     const [
       fundingTransactions,
       settlementTransactions,
@@ -1439,9 +1563,13 @@ export class OperatorService {
       sponsorshipRequests
     ] =
       await Promise.all([
-        this.release1Repositories.fundingTransactions.listByChainId(this.configuration.chainId),
-        this.release1Repositories.dealMilestoneSettlementExecutionTransactions.listByChainId(
-          this.configuration.chainId
+        this.listByVisibleChainIds((chainId) =>
+          this.release1Repositories.fundingTransactions.listByChainId(chainId)
+        ),
+        this.listByVisibleChainIds((chainId) =>
+          this.release1Repositories.dealMilestoneSettlementExecutionTransactions.listByChainId(
+            chainId
+          )
         ),
         this.release1Repositories.dealMilestoneDisputes.listAll(),
         this.release8Repositories.operatorAlerts.listAll(),
@@ -1449,6 +1577,12 @@ export class OperatorService {
         this.release8Repositories.complianceCases.listAll(),
         this.release12Repositories.sponsoredTransactionRequests.listAll()
       ]);
+    const visibleSponsorshipRequests = sponsorshipRequests.filter((entry) =>
+      visibleChainIds.has(entry.chainId)
+    );
+    const visibleSponsorshipRequestsById = new Map(
+      visibleSponsorshipRequests.map((entry) => [entry.id, entry] as const)
+    );
 
     const staleFunding = fundingTransactions.filter(
       (entry) =>
@@ -1482,16 +1616,23 @@ export class OperatorService {
       }
     }
 
+    const staleSponsoredReviewAlerts = alerts.filter(
+      (entry) =>
+        entry.kind === "SPONSORED_TRANSACTION_REQUEST_STALE_PENDING_REVIEW" &&
+        entry.status !== "RESOLVED"
+    );
+
     const queue = [
-      ...alerts
-        .filter(
-          (entry) =>
-            entry.kind === "SPONSORED_TRANSACTION_REQUEST_STALE_PENDING_REVIEW" &&
-            entry.status !== "RESOLVED"
-        )
-        .map((entry) => ({
+      ...staleSponsoredReviewAlerts.map((entry) => {
+        const requestId = readStringMetadataValue(entry.metadata, "requestId");
+        const sponsorshipRequest = requestId
+          ? visibleSponsorshipRequestsById.get(requestId) ?? null
+          : null;
+
+        return {
           agreementAddress: entry.agreementAddress,
-          entityId: readStringMetadataValue(entry.metadata, "requestId") ?? entry.subjectId,
+          chainId: sponsorshipRequest?.chainId ?? null,
+          entityId: requestId ?? entry.subjectId,
           kind: entry.kind,
           organizationId: entry.organizationId,
           status: entry.status === "ACKNOWLEDGED" ? "ACKNOWLEDGED" : "STALE_PENDING_REVIEW",
@@ -1505,9 +1646,11 @@ export class OperatorService {
             subjectType: entry.subjectType
           }),
           updatedAt: entry.lastDetectedAt
-        })),
+        };
+      }),
       ...staleFunding.map((entry) => ({
         agreementAddress: entry.reconciledAgreementAddress,
+        chainId: entry.chainId,
         entityId: entry.id,
         kind: "FUNDING_TRANSACTION_STALE_PENDING",
         organizationId: entry.organizationId,
@@ -1522,6 +1665,7 @@ export class OperatorService {
       })),
       ...failedFunding.map((entry) => ({
         agreementAddress: entry.reconciledAgreementAddress,
+        chainId: entry.chainId,
         entityId: entry.id,
         kind: "FUNDING_TRANSACTION_FAILED",
         organizationId: entry.organizationId,
@@ -1536,6 +1680,7 @@ export class OperatorService {
       })),
       ...mismatchedFunding.map((entry) => ({
         agreementAddress: entry.reconciledAgreementAddress,
+        chainId: entry.chainId,
         entityId: entry.id,
         kind: "FUNDING_TRANSACTION_MISMATCHED",
         organizationId: entry.organizationId,
@@ -1550,6 +1695,7 @@ export class OperatorService {
       })),
       ...staleSettlement.map((entry) => ({
         agreementAddress: entry.reconciledAgreementAddress,
+        chainId: entry.chainId,
         entityId: entry.id,
         kind: "SETTLEMENT_EXECUTION_STALE_PENDING",
         organizationId: entry.organizationId,
@@ -1566,6 +1712,7 @@ export class OperatorService {
       })),
       ...failedSettlement.map((entry) => ({
         agreementAddress: entry.reconciledAgreementAddress,
+        chainId: entry.chainId,
         entityId: entry.id,
         kind: "SETTLEMENT_EXECUTION_FAILED",
         organizationId: entry.organizationId,
@@ -1582,6 +1729,7 @@ export class OperatorService {
       })),
       ...mismatchedSettlement.map((entry) => ({
         agreementAddress: entry.reconciledAgreementAddress,
+        chainId: entry.chainId,
         entityId: entry.id,
         kind: "SETTLEMENT_EXECUTION_MISMATCHED",
         organizationId: entry.organizationId,
@@ -1618,7 +1766,7 @@ export class OperatorService {
         ).length +
         checkpoints.filter((entry) => entry.status === "PENDING").length +
         cases.filter((entry) => entry.status !== "RESOLVED").length +
-        sponsorshipRequests.filter((entry) => entry.status === "PENDING").length
+        visibleSponsorshipRequests.filter((entry) => entry.status === "PENDING").length
     };
   }
 

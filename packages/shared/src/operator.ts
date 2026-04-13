@@ -347,8 +347,60 @@ export interface OperatorHealthResponse {
   api: RemoteServiceHealth;
 }
 
+export interface OperatorDeploymentProtocolConfigSummary {
+  address: WalletAddress | null;
+  createEscrowPaused: boolean | null;
+  feeVaultAddress: WalletAddress | null;
+  fundingPaused: boolean | null;
+  indexed: boolean;
+  owner: WalletAddress | null;
+  pendingOwner: WalletAddress | null;
+  protocolFeeBps: number | null;
+  treasuryAddress: WalletAddress | null;
+  updatedAt: IsoTimestamp | null;
+}
+
+export interface OperatorDeploymentFeeVaultSummary {
+  address: WalletAddress | null;
+  indexed: boolean;
+  owner: WalletAddress | null;
+  pendingOwner: WalletAddress | null;
+  treasuryAddress: WalletAddress | null;
+  updatedAt: IsoTimestamp | null;
+}
+
+export interface OperatorDeploymentSummary {
+  agreementCount: number;
+  chainId: ChainId;
+  contractVersion: number;
+  cursorFresh: boolean;
+  cursorKey: string;
+  cursorUpdatedAt: IsoTimestamp | null;
+  deploymentStartBlock: string | null;
+  explorerUrl: string;
+  feeVault: OperatorDeploymentFeeVaultSummary;
+  manifestOwner: WalletAddress | null;
+  manifestPendingOwner: WalletAddress | null;
+  manifestProtocolFeeBps: number;
+  manifestTreasuryAddress: WalletAddress | null;
+  network: string;
+  protocolConfig: OperatorDeploymentProtocolConfigSummary;
+  settlementTokenAddress: WalletAddress | null;
+  treasury: {
+    feeVaultAddress: WalletAddress | null;
+    manifestAddress: WalletAddress | null;
+    protocolConfigAddress: WalletAddress | null;
+    status: "CONSISTENT" | "MISMATCHED" | "PARTIAL" | "UNINDEXED";
+  };
+}
+
+export interface ListOperatorDeploymentsResponse {
+  deployments: OperatorDeploymentSummary[];
+}
+
 export interface ReconciliationQueueSummaryRow {
   agreementAddress: WalletAddress | null;
+  chainId: ChainId | null;
   entityId: EntityId;
   kind: string;
   organizationId: EntityId | null;

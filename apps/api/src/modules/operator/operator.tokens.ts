@@ -1,4 +1,7 @@
-import { getDeploymentManifestByChainId } from "@blockchain-escrow/contracts-sdk";
+import {
+  getDeploymentManifestByChainId,
+  listDeploymentManifests
+} from "@blockchain-escrow/contracts-sdk";
 
 export interface OperatorConfiguration {
   chainId: number;
@@ -7,6 +10,7 @@ export interface OperatorConfiguration {
   release4CursorKey: string;
   requestTimeoutMs: number;
   unresolvedDisputeAfterSeconds: number;
+  visibleChainIds: number[];
   workerBaseUrl: string;
 }
 
@@ -36,9 +40,43 @@ function normalizeBaseUrl(value: string | undefined, fallback: string): string {
   return normalized.replace(/\/+$/u, "");
 }
 
+function parseChainIds(
+  value: string | undefined,
+  fallback: readonly number[]
+): number[] {
+  if (!value || value.trim().length === 0) {
+    return [...fallback];
+  }
+
+  const uniqueChainIds = new Set<number>();
+
+  for (const segment of value.split(",")) {
+    const normalized = segment.trim();
+    if (normalized.length === 0) {
+      continue;
+    }
+
+    const parsed = Number.parseInt(normalized, 10);
+    if (!Number.isInteger(parsed) || parsed <= 0) {
+      throw new Error(`Expected a comma-separated list of positive integers but received "${value}".`);
+    }
+
+    if (!getDeploymentManifestByChainId(parsed)) {
+      throw new Error(`No deployment manifest found for visible operator chain ${parsed}`);
+    }
+
+    uniqueChainIds.add(parsed);
+  }
+
+  return [...uniqueChainIds].sort((left, right) => left - right);
+}
+
 export function loadOperatorConfiguration(): OperatorConfiguration {
   const chainId = parsePositiveInteger(process.env.OPERATOR_CHAIN_ID, 84532);
   const manifest = getDeploymentManifestByChainId(chainId);
+  const defaultVisibleChainIds = listDeploymentManifests().map(
+    (deploymentManifest) => deploymentManifest.chainId
+  );
 
   if (!manifest) {
     throw new Error(`No deployment manifest found for chain ${chainId}`);
@@ -65,6 +103,10 @@ export function loadOperatorConfiguration(): OperatorConfiguration {
     unresolvedDisputeAfterSeconds: parsePositiveInteger(
       process.env.OPERATOR_UNRESOLVED_DISPUTE_AFTER_SECONDS,
       86400
+    ),
+    visibleChainIds: parseChainIds(
+      process.env.OPERATOR_VISIBLE_CHAIN_IDS,
+      defaultVisibleChainIds
     ),
     workerBaseUrl: normalizeBaseUrl(
       process.env.OPERATOR_WORKER_BASE_URL,

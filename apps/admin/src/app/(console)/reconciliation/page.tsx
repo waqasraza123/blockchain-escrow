@@ -56,7 +56,7 @@ export default async function ReconciliationPage() {
         {reconciliation.queue.length === 0 ? (
           <EmptyState body={messages.reconciliation.empty} />
         ) : (
-          <DataTable headers={[messages.reconciliation.kind, messages.reconciliation.status, messages.reconciliation.subject, messages.reconciliation.agreement, messages.reconciliation.updated]}>
+          <DataTable headers={[messages.reconciliation.kind, messages.reconciliation.status, messages.reconciliation.subject, messages.reconciliation.chain, messages.reconciliation.agreement, messages.reconciliation.updated]}>
             {reconciliation.queue.map((item) => (
               <tr key={`${item.kind}:${item.entityId}`}>
                 <td>{item.kind}</td>
@@ -67,6 +67,7 @@ export default async function ReconciliationPage() {
                   />
                 </td>
                 <td>{item.subject.label ?? item.subject.subjectId}</td>
+                <td className="mono">{item.chainId ?? messages.common.na}</td>
                 <td className="mono">{item.agreementAddress ?? messages.common.na}</td>
                 <td className="mono">{item.updatedAt}</td>
               </tr>

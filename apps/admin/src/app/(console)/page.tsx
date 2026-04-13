@@ -117,6 +117,9 @@ export default async function DashboardPage() {
             <Link className="button button-secondary" href="/health">
               {messages.dashboard.viewHealth}
             </Link>
+            <Link className="button button-secondary" href="/deployments">
+              {messages.dashboard.viewDeployments}
+            </Link>
           </div>
         </Card>
       </div>
@@ -136,6 +139,7 @@ export default async function DashboardPage() {
               messages.dashboard.kind,
               messages.dashboard.status,
               messages.dashboard.subject,
+              messages.dashboard.chain,
               messages.dashboard.updated
             ]}
           >
@@ -149,6 +153,7 @@ export default async function DashboardPage() {
                   />
                 </td>
                 <td>{item.subject.label ?? item.subject.subjectId}</td>
+                <td className="mono">{item.chainId ?? messages.common.na}</td>
                 <td className="mono">{item.updatedAt}</td>
               </tr>
             ))}

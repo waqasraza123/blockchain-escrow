@@ -64,6 +64,8 @@ export function toneForStatus(value: string | null | undefined) {
   if (
     normalized.includes("PENDING") ||
     normalized.includes("STALE") ||
+    normalized.includes("PARTIAL") ||
+    normalized.includes("UNINDEXED") ||
     normalized.includes("ACKNOWLEDGED") ||
     normalized.includes("IN_REVIEW") ||
     normalized.includes("ESCALATED") ||
@@ -73,6 +75,7 @@ export function toneForStatus(value: string | null | undefined) {
   }
 
   if (
+    normalized.includes("CONSISTENT") ||
     normalized.includes("CONFIRMED") ||
     normalized.includes("RESOLVED") ||
     normalized.includes("CLEARED") ||

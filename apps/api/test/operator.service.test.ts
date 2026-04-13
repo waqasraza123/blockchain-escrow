@@ -27,6 +27,7 @@ const configuration: OperatorConfiguration = {
   release4CursorKey: "release4:base-sepolia",
   requestTimeoutMs: 3000,
   unresolvedDisputeAfterSeconds: 86400,
+  visibleChainIds: [84532],
   workerBaseUrl: "http://127.0.0.1:4100"
 };
 
@@ -451,6 +452,119 @@ test("operator health aggregates remote readiness and protocol proposal drafts e
   }
 });
 
+test("operator deployments expose indexed treasury visibility for configured chains", async () => {
+  const services = createServices();
+  const actor = await seedOperatorActor(services, "SUPER_ADMIN");
+  const manifest = getDeploymentManifestByChainId(84532);
+  const now = new Date().toISOString();
+
+  assert.ok(manifest, "missing base sepolia manifest");
+
+  await services.release4Repositories.chainCursors.upsert({
+    chainId: 84532,
+    cursorKey: configuration.release4CursorKey,
+    lastProcessedBlockHash:
+      "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    lastProcessedBlockNumber: "22",
+    nextBlockNumber: "23",
+    updatedAt: now
+  });
+  await services.release4Repositories.protocolConfigStates.upsert({
+    arbitratorRegistryAddress:
+      manifest.contracts.ArbitratorRegistry!.toLowerCase() as `0x${string}`,
+    chainId: 84532,
+    createEscrowPaused: false,
+    feeVaultAddress: manifest.contracts.FeeVault!.toLowerCase() as `0x${string}`,
+    fundingPaused: false,
+    owner: manifest.owner!.toLowerCase() as `0x${string}`,
+    pendingOwner: manifest.pendingOwner!.toLowerCase() as `0x${string}`,
+    protocolConfigAddress:
+      manifest.contracts.ProtocolConfig!.toLowerCase() as `0x${string}`,
+    protocolFeeBps: manifest.protocolFeeBps,
+    tokenAllowlistAddress:
+      manifest.contracts.TokenAllowlist!.toLowerCase() as `0x${string}`,
+    treasuryAddress: manifest.treasury!.toLowerCase() as `0x${string}`,
+    updatedAt: now,
+    updatedBlockHash:
+      "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    updatedBlockNumber: "22",
+    updatedLogIndex: 0,
+    updatedTransactionHash:
+      "0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+  });
+  await services.release4Repositories.feeVaultStates.upsert({
+    chainId: 84532,
+    feeVaultAddress: manifest.contracts.FeeVault!.toLowerCase() as `0x${string}`,
+    owner: manifest.owner!.toLowerCase() as `0x${string}`,
+    pendingOwner: manifest.pendingOwner!.toLowerCase() as `0x${string}`,
+    treasuryAddress: manifest.treasury!.toLowerCase() as `0x${string}`,
+    updatedAt: now,
+    updatedBlockHash:
+      "0xdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+    updatedBlockNumber: "22",
+    updatedLogIndex: 0,
+    updatedTransactionHash:
+      "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+  });
+  await services.release4Repositories.escrowAgreements.upsert({
+    agreementAddress: "0x7777777777777777777777777777777777777777",
+    arbitratorAddress: null,
+    buyerAddress: "0x1111111111111111111111111111111111111111",
+    chainId: 84532,
+    createdBlockHash:
+      "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    createdBlockNumber: "21",
+    createdLogIndex: 0,
+    createdTransactionHash:
+      "0x9999999999999999999999999999999999999999999999999999999999999999",
+    dealId: buildCanonicalDealId("org-1", "draft-1"),
+    dealVersionHash:
+      "0x1212121212121212121212121212121212121212121212121212121212121212",
+    factoryAddress: manifest.contracts.EscrowFactory!.toLowerCase() as `0x${string}`,
+    feeVaultAddress: manifest.contracts.FeeVault!.toLowerCase() as `0x${string}`,
+    funded: true,
+    fundedAt: now,
+    fundedBlockHash:
+      "0x3434343434343434343434343434343434343434343434343434343434343434",
+    fundedBlockNumber: "22",
+    fundedLogIndex: 1,
+    fundedPayerAddress: "0x1111111111111111111111111111111111111111",
+    fundedTransactionHash:
+      "0x5656565656565656565656565656565656565656565656565656565656565656",
+    initializedBlockHash:
+      "0x7878787878787878787878787878787878787878787878787878787878787878",
+    initializedBlockNumber: "21",
+    initializedLogIndex: 1,
+    initializedTimestamp: now,
+    initializedTransactionHash:
+      "0x9090909090909090909090909090909090909090909090909090909090909090",
+    milestoneCount: 1,
+    protocolConfigAddress:
+      manifest.contracts.ProtocolConfig!.toLowerCase() as `0x${string}`,
+    protocolFeeBps: manifest.protocolFeeBps,
+    sellerAddress: "0x3333333333333333333333333333333333333333",
+    settlementTokenAddress: manifest.usdcToken!.toLowerCase() as `0x${string}`,
+    totalAmount: "1000000",
+    updatedAt: now
+  });
+
+  const response = await services.operatorService.listDeployments(
+    requestMetadata(actor.cookieHeader)
+  );
+
+  assert.equal(response.deployments.length, 1);
+  assert.equal(response.deployments[0]?.chainId, 84532);
+  assert.equal(response.deployments[0]?.agreementCount, 1);
+  assert.equal(response.deployments[0]?.cursorFresh, true);
+  assert.equal(response.deployments[0]?.protocolConfig.indexed, true);
+  assert.equal(response.deployments[0]?.feeVault.indexed, true);
+  assert.equal(response.deployments[0]?.treasury.status, "CONSISTENT");
+  assert.equal(
+    response.deployments[0]?.treasury.protocolConfigAddress,
+    manifest.treasury!.toLowerCase()
+  );
+});
+
 test("compliance operators can review pending sponsored transaction requests", async () => {
   const services = createServices();
   const actor = await seedOperatorActor(services, "COMPLIANCE");
@@ -689,6 +803,7 @@ test("operator reconciliation queues stale sponsorship review alerts without dou
     reconciliation.queue[0]?.kind,
     "SPONSORED_TRANSACTION_REQUEST_STALE_PENDING_REVIEW"
   );
+  assert.equal(reconciliation.queue[0]?.chainId, 84532);
   assert.equal(reconciliation.queue[0]?.entityId, "sponsored-request-1");
   assert.equal(reconciliation.queue[0]?.status, "STALE_PENDING_REVIEW");
   assert.equal(reconciliation.queue[0]?.subject.label, "Escalated Sponsorship Deal");

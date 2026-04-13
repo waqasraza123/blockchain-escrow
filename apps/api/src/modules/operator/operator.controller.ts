@@ -40,6 +40,7 @@ import type {
   ListComplianceCasesParams,
   ListComplianceCasesResponse,
   ListComplianceCheckpointsResponse,
+  ListOperatorDeploymentsResponse,
   ListInvoicesResponse,
   ListOperatorAlertsParams,
   ListOperatorAlertsResponse,
@@ -415,6 +416,13 @@ export class OperatorController {
   @Get("health")
   async getHealth(@Req() request: HttpRequestLike): Promise<OperatorHealthResponse> {
     return this.operatorService.getHealth(readRequestMetadata(request));
+  }
+
+  @Get("deployments")
+  async listDeployments(
+    @Req() request: HttpRequestLike
+  ): Promise<ListOperatorDeploymentsResponse> {
+    return this.operatorService.listDeployments(readRequestMetadata(request));
   }
 
   @Get("reconciliation")
