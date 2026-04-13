@@ -2,6 +2,7 @@ import { createHash, randomBytes, randomUUID } from "node:crypto";
 
 import {
   contractArtifacts,
+  deploymentSupportsCreateAndFund,
   getDeploymentManifestByChainId
 } from "@blockchain-escrow/contracts-sdk";
 import type { DeploymentManifest } from "@blockchain-escrow/contracts-sdk";
@@ -27,6 +28,7 @@ import {
   addComplianceCaseNoteSchema,
   assignTenantBillingPlanSchema,
   assignComplianceCaseSchema,
+  buildFundingTransactionObservation,
   billingPlanParamsSchema,
   createBillingFeeScheduleSchema,
   createBillingPlanSchema,
@@ -56,6 +58,8 @@ import {
   registerPartnerBrandAssetSchema,
   protocolProposalDraftParamsSchema,
   resolveOperatorAlertSchema,
+  resolveFundingTransactionStalePendingState,
+  resolveFundingTransactionState,
   revokePartnerApiKeySchema,
   rotatePartnerApiKeySchema,
   tenantDomainParamsSchema,
@@ -84,6 +88,7 @@ import type {
   ListComplianceCasesResponse,
   ListComplianceCheckpointsResponse,
   ListOperatorDeploymentsResponse,
+  ListOperatorFundingTransactionsResponse,
   ListOperatorTreasuryMovementsResponse,
   ListInvoicesResponse,
   ListOperatorAlertsResponse,
@@ -197,6 +202,13 @@ function compareBlockAndLogDescending(
   }
 
   return right.occurredLogIndex - left.occurredLogIndex;
+}
+
+function compareSubmittedAtDescending(
+  left: { submittedAt: string },
+  right: { submittedAt: string }
+): number {
+  return new Date(right.submittedAt).getTime() - new Date(left.submittedAt).getTime();
 }
 
 function buildRelease4CursorKey(
@@ -1564,6 +1576,176 @@ export class OperatorService {
             tokenAddress: movement.tokenAddress,
             transactionHash: movement.occurredTransactionHash,
             treasuryAddress: movement.treasuryAddress
+          };
+        })
+    };
+  }
+
+  async listFundingTransactions(
+    requestMetadata: RequestMetadata
+  ): Promise<ListOperatorFundingTransactionsResponse> {
+    await this.requireOperatorContext(requestMetadata);
+    const manifests = this.getVisibleDeploymentManifests();
+    const manifestByChainId = new Map(
+      manifests.map((manifest) => [manifest.chainId, manifest] as const)
+    );
+    const [
+      fundingTransactions,
+      indexedTransactions,
+      agreements,
+      organizations,
+      drafts,
+      versions,
+      chainCursorEntries
+    ] = await Promise.all([
+      this.listByVisibleChainIds((chainId) =>
+        this.release1Repositories.fundingTransactions.listByChainId(chainId)
+      ),
+      this.listByVisibleChainIds((chainId) =>
+        this.release4Repositories.indexedTransactions.listByChainId(chainId)
+      ),
+      this.listByVisibleChainIds((chainId) =>
+        this.release4Repositories.escrowAgreements.listByChainId(chainId)
+      ),
+      this.release1Repositories.organizations.listAll(),
+      this.release1Repositories.draftDeals.listAll(),
+      this.release1Repositories.dealVersions.listAll(),
+      Promise.all(
+        manifests.map(async (manifest) => [
+          manifest.chainId,
+          await this.release4Repositories.chainCursors.findByChainIdAndCursorKey(
+            manifest.chainId,
+            buildRelease4CursorKey(manifest, this.configuration)
+          )
+        ] as const)
+      )
+    ]);
+    const organizationById = new Map(
+      organizations.map((organization) => [organization.id, organization] as const)
+    );
+    const draftById = new Map(drafts.map((draft) => [draft.id, draft] as const));
+    const versionById = new Map(
+      versions.map((version) => [version.id, version] as const)
+    );
+    const chainCursorByChainId = new Map(chainCursorEntries);
+    const indexedTransactionByChainAndHash = new Map(
+      indexedTransactions.map((transaction) => [
+        `${transaction.chainId}:${transaction.transactionHash}`,
+        transaction
+      ] as const)
+    );
+    const agreementsByObservedTransactionHash = new Map<
+      string,
+      (typeof agreements)[number]
+    >();
+
+    for (const agreement of agreements) {
+      agreementsByObservedTransactionHash.set(
+        `${agreement.chainId}:${agreement.createdTransactionHash}`,
+        agreement
+      );
+
+      if (agreement.fundedTransactionHash) {
+        agreementsByObservedTransactionHash.set(
+          `${agreement.chainId}:${agreement.fundedTransactionHash}`,
+          agreement
+        );
+      }
+    }
+
+    const fundingTransactionById = new Map(
+      fundingTransactions.map((transaction) => [transaction.id, transaction] as const)
+    );
+    const staleEvaluatedAt = new Date().toISOString();
+
+    return {
+      fundingTransactions: fundingTransactions
+        .sort(compareSubmittedAtDescending)
+        .slice(0, 200)
+        .map((transaction) => {
+          const manifest = manifestByChainId.get(transaction.chainId);
+
+          if (!manifest) {
+            throw new NotFoundException(
+              `deployment manifest not found for chain ${transaction.chainId}`
+            );
+          }
+
+          const indexedTransaction =
+            indexedTransactionByChainAndHash.get(
+              `${transaction.chainId}:${transaction.transactionHash}`
+            ) ?? null;
+          const observedAgreement =
+            agreementsByObservedTransactionHash.get(
+              `${transaction.chainId}:${transaction.transactionHash}`
+            ) ?? null;
+          const resolvedState = resolveFundingTransactionState({
+            dealId: buildCanonicalDealId(
+              transaction.organizationId,
+              transaction.draftDealId
+            ),
+            fundingTransaction: transaction,
+            indexedTransaction,
+            observedAgreement,
+            requiresFundedAgreement: deploymentSupportsCreateAndFund(manifest)
+          });
+          const observation = buildFundingTransactionObservation(indexedTransaction);
+          const stalePendingState = resolveFundingTransactionStalePendingState({
+            currentStatus: resolvedState.status,
+            evaluatedAt: staleEvaluatedAt,
+            fundingTransaction: transaction,
+            indexerFreshnessTtlSeconds: this.configuration.indexerFreshnessTtlSeconds,
+            pendingStaleAfterSeconds:
+              this.configuration.fundingPendingStaleAfterSeconds,
+            release4ChainCursor:
+              chainCursorByChainId.get(transaction.chainId) ?? null
+          });
+          const supersededByTransaction =
+            transaction.supersededByFundingTransactionId
+              ? fundingTransactionById.get(
+                  transaction.supersededByFundingTransactionId
+                ) ?? null
+              : null;
+
+          return {
+            agreementAddress: resolvedState.agreementAddress,
+            chainId: transaction.chainId,
+            confirmedAt:
+              resolvedState.confirmedAt ?? transaction.reconciledConfirmedAt,
+            contractVersion: manifest.contractVersion,
+            dealVersionId: transaction.dealVersionId,
+            dealVersionTitle:
+              versionById.get(transaction.dealVersionId)?.title ?? null,
+            draftDealId: transaction.draftDealId,
+            draftDealTitle: draftById.get(transaction.draftDealId)?.title ?? null,
+            explorerUrl: manifest.explorerUrl,
+            id: transaction.id,
+            indexedAt: observation.indexedAt,
+            indexedBlockNumber: observation.indexedBlockNumber,
+            indexedExecutionStatus: observation.indexedExecutionStatus,
+            matchesTrackedVersion:
+              resolvedState.matchesTrackedVersion ??
+              transaction.reconciledMatchesTrackedVersion,
+            network: manifest.network,
+            organizationId: transaction.organizationId,
+            organizationName:
+              organizationById.get(transaction.organizationId)?.name ?? null,
+            reconciledAt: transaction.reconciledAt,
+            reconciledStatus: transaction.reconciledStatus,
+            stalePending: stalePendingState.stalePending,
+            stalePendingAt: stalePendingState.stalePendingAt,
+            stalePendingEscalatedAt: transaction.stalePendingEscalatedAt,
+            stalePendingEvaluation: stalePendingState.stalePendingEvaluation,
+            status: resolvedState.status,
+            submittedAt: transaction.submittedAt,
+            submittedByUserId: transaction.submittedByUserId,
+            submittedWalletAddress: transaction.submittedWalletAddress,
+            supersededAt: transaction.supersededAt,
+            supersededByFundingTransactionId:
+              transaction.supersededByFundingTransactionId,
+            supersededByTransactionHash:
+              supersededByTransaction?.transactionHash ?? null,
+            transactionHash: transaction.transactionHash
           };
         })
     };

@@ -34,6 +34,7 @@ export const enMessages = {
     checkpoints: "Checkpoints",
     dashboard: "Dashboard",
     deployments: "Deployments",
+    funding: "Funding",
     health: "Health",
     partners: "Partners",
     protocolProposals: "Protocol proposals",
@@ -85,6 +86,7 @@ export const enMessages = {
     RESOLVED: "Resolved",
     SENT: "Sent",
     STALE: "Stale",
+    SUPERSEDED: "Superseded",
     SUCCESS: "Success",
     UNHEALTHY: "Unhealthy",
     UNREACHABLE: "Unreachable",
@@ -110,6 +112,11 @@ export const enMessages = {
     treasuryMovementKinds: {
       NATIVE: "Native",
       TOKEN: "Token"
+    },
+    fundingStalePendingEvaluations: {
+      INDEXER_CURSOR_MISSING: "Cursor missing",
+      INDEXER_CURSOR_STALE: "Cursor stale",
+      READY: "Ready"
     },
     subjectTypes: {
       DEAL_MILESTONE_DISPUTE: "Dispute",
@@ -424,6 +431,28 @@ export const enMessages = {
     tx: "Transaction",
     visibleChains: "Visible chains"
   },
+  funding: {
+    agreement: "Agreement",
+    attentionRequired: "Attention required",
+    chain: "Chain",
+    confirmedTransactions: "Confirmed",
+    draft: "Draft",
+    empty: "No funding transactions are currently tracked for the visible deployments.",
+    latestTransactions: "Latest funding intents",
+    organization: "Organization",
+    pendingTransactions: "Pending",
+    staleSignal: "Stale signal",
+    status: "Status",
+    submitted: "Submitted",
+    subtitle:
+      "Cross-chain visibility into tracked funding transactions, derived reconciliation status, and stale-pending pressure.",
+    title: "Funding intents",
+    totalTransactions: "Total tracked",
+    tx: "Transaction",
+    version: "Version",
+    visibleChains: "Visible chains",
+    wallet: "Wallet"
+  },
   cases: {
     addNote: "Add note",
     alertId: "Linked alert id",
@@ -568,6 +597,7 @@ export const arMessages = {
     checkpoints: "نقاط التحقق",
     dashboard: "لوحة المعلومات",
     deployments: "النشرات",
+    funding: "التمويل",
     health: "الصحة",
     partners: "الشركاء",
     protocolProposals: "مقترحات البروتوكول",
@@ -619,6 +649,7 @@ export const arMessages = {
     RESOLVED: "تم الحل",
     SENT: "مرسل",
     STALE: "متأخر",
+    SUPERSEDED: "تم الاستبدال",
     SUCCESS: "ناجح",
     UNHEALTHY: "غير سليم",
     UNREACHABLE: "غير قابل للوصول",
@@ -644,6 +675,11 @@ export const arMessages = {
     treasuryMovementKinds: {
       NATIVE: "أصل أصلي",
       TOKEN: "رمز"
+    },
+    fundingStalePendingEvaluations: {
+      INDEXER_CURSOR_MISSING: "المؤشر مفقود",
+      INDEXER_CURSOR_STALE: "المؤشر متأخر",
+      READY: "جاهز"
     },
     subjectTypes: {
       DEAL_MILESTONE_DISPUTE: "نزاع",
@@ -955,6 +991,28 @@ export const arMessages = {
     treasuryAddress: "الخزانة",
     tx: "المعاملة",
     visibleChains: "السلاسل الظاهرة"
+  },
+  funding: {
+    agreement: "الاتفاقية",
+    attentionRequired: "يتطلب انتباهًا",
+    chain: "السلسلة",
+    confirmedTransactions: "المؤكدة",
+    draft: "المسودة",
+    empty: "لا توجد معاملات تمويل متتبعة حاليًا للنشرات الظاهرة.",
+    latestTransactions: "أحدث نوايا التمويل",
+    organization: "المؤسسة",
+    pendingTransactions: "قيد الانتظار",
+    staleSignal: "إشارة التأخر",
+    status: "الحالة",
+    submitted: "تم الإرسال",
+    subtitle:
+      "رؤية عبر السلاسل لمعاملات التمويل المتتبعة وحالة التسوية المشتقة وضغط التأخر في الانتظار.",
+    title: "نوايا التمويل",
+    totalTransactions: "إجمالي المتتبع",
+    tx: "المعاملة",
+    version: "النسخة",
+    visibleChains: "السلاسل الظاهرة",
+    wallet: "المحفظة"
   },
   cases: {
     addNote: "إضافة ملاحظة",

@@ -5,6 +5,7 @@ import {
 
 export interface OperatorConfiguration {
   chainId: number;
+  fundingPendingStaleAfterSeconds: number;
   indexerBaseUrl: string;
   indexerFreshnessTtlSeconds: number;
   release4CursorKey: string;
@@ -84,6 +85,10 @@ export function loadOperatorConfiguration(): OperatorConfiguration {
 
   return {
     chainId,
+    fundingPendingStaleAfterSeconds: parsePositiveInteger(
+      process.env.FUNDING_PENDING_STALE_AFTER_SECONDS,
+      3600
+    ),
     indexerBaseUrl: normalizeBaseUrl(
       process.env.OPERATOR_INDEXER_BASE_URL,
       "http://127.0.0.1:4200"

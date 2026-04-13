@@ -8,6 +8,12 @@ import type {
   JsonObject,
   WalletAddress
 } from "./primitives";
+import type {
+  FundingTransactionIndexedExecutionStatus,
+  FundingTransactionReconciledStatus,
+  FundingTransactionStalePendingEvaluation,
+  FundingTransactionStatus
+} from "./funding";
 import type { TreasuryMovementKind } from "./indexer";
 import {
   sponsoredTransactionKindSchema,
@@ -417,6 +423,44 @@ export interface OperatorTreasuryMovementSummary {
 
 export interface ListOperatorTreasuryMovementsResponse {
   movements: OperatorTreasuryMovementSummary[];
+}
+
+export interface OperatorFundingTransactionSummary {
+  agreementAddress: WalletAddress | null;
+  chainId: ChainId;
+  confirmedAt: IsoTimestamp | null;
+  contractVersion: number;
+  dealVersionId: EntityId;
+  dealVersionTitle: string | null;
+  draftDealId: EntityId;
+  draftDealTitle: string | null;
+  explorerUrl: string;
+  id: EntityId;
+  indexedAt: IsoTimestamp | null;
+  indexedBlockNumber: string | null;
+  indexedExecutionStatus: FundingTransactionIndexedExecutionStatus | null;
+  matchesTrackedVersion: boolean | null;
+  network: string;
+  organizationId: EntityId;
+  organizationName: string | null;
+  reconciledAt: IsoTimestamp | null;
+  reconciledStatus: FundingTransactionReconciledStatus | null;
+  stalePending: boolean | null;
+  stalePendingAt: IsoTimestamp | null;
+  stalePendingEscalatedAt: IsoTimestamp | null;
+  stalePendingEvaluation: FundingTransactionStalePendingEvaluation | null;
+  status: FundingTransactionStatus;
+  submittedAt: IsoTimestamp;
+  submittedByUserId: EntityId;
+  submittedWalletAddress: WalletAddress;
+  supersededAt: IsoTimestamp | null;
+  supersededByFundingTransactionId: EntityId | null;
+  supersededByTransactionHash: HexString | null;
+  transactionHash: HexString;
+}
+
+export interface ListOperatorFundingTransactionsResponse {
+  fundingTransactions: OperatorFundingTransactionSummary[];
 }
 
 export interface ReconciliationQueueSummaryRow {

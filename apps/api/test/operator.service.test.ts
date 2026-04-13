@@ -22,6 +22,7 @@ import { createRelease12RepositoriesStub } from "./helpers/release12-test-stub";
 
 const configuration: OperatorConfiguration = {
   chainId: 84532,
+  fundingPendingStaleAfterSeconds: 3600,
   indexerBaseUrl: "http://127.0.0.1:4200",
   indexerFreshnessTtlSeconds: 300,
   release4CursorKey: "release4:base-sepolia",
@@ -615,6 +616,205 @@ test("operator treasury movements list indexed fee vault withdrawals across visi
   assert.equal(response.movements[0]?.tokenAddress, manifest.usdcToken!.toLowerCase());
   assert.equal(response.movements[1]?.kind, "NATIVE");
   assert.equal(response.movements[1]?.tokenAddress, null);
+});
+
+test("operator funding transactions list tracked funding intents across visible chains", async () => {
+  const services = createServices();
+  const actor = await seedOperatorActor(services, "SUPER_ADMIN");
+  const manifest = getDeploymentManifestByChainId(84532);
+  const now = new Date().toISOString();
+
+  assert.ok(manifest, "missing base sepolia manifest");
+
+  await services.release1Repositories.organizations.create({
+    createdAt: now,
+    createdByUserId: actor.userId,
+    id: "org-1",
+    name: "Acme Procurement",
+    slug: "acme-procurement",
+    updatedAt: now
+  });
+  await services.release1Repositories.draftDeals.create({
+    createdAt: now,
+    createdByUserId: actor.userId,
+    id: "draft-1",
+    organizationId: "org-1",
+    settlementCurrency: "USDC",
+    state: "AWAITING_FUNDING",
+    summary: "Prototype integration",
+    templateId: null,
+    title: "Alpha Deal",
+    updatedAt: now
+  });
+  await services.release1Repositories.dealVersions.create({
+    bodyMarkdown: "# Alpha",
+    createdAt: now,
+    createdByUserId: actor.userId,
+    draftDealId: "draft-1",
+    id: "version-1",
+    organizationId: "org-1",
+    settlementCurrency: "USDC",
+    summary: "Version summary",
+    templateId: null,
+    title: "Alpha Deal v1",
+    versionNumber: 1
+  });
+  await services.release4Repositories.chainCursors.upsert({
+    chainId: 84532,
+    cursorKey: configuration.release4CursorKey,
+    lastProcessedBlockHash:
+      "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    lastProcessedBlockNumber: "200",
+    nextBlockNumber: "201",
+    updatedAt: now
+  });
+  await services.release1Repositories.fundingTransactions.create({
+    chainId: 84532,
+    dealVersionId: "version-1",
+    draftDealId: "draft-1",
+    id: "funding-1",
+    organizationId: "org-1",
+    reconciledAgreementAddress: null,
+    reconciledAt: null,
+    reconciledConfirmedAt: null,
+    reconciledMatchesTrackedVersion: null,
+    reconciledStatus: null,
+    stalePendingEscalatedAt: null,
+    submittedAt: "2026-04-13T10:00:00.000Z",
+    submittedByUserId: actor.userId,
+    submittedWalletAddress:
+      "0x1111111111111111111111111111111111111111",
+    submittedWalletId: actor.walletId,
+    supersededAt: null,
+    supersededByFundingTransactionId: null,
+    transactionHash:
+      "0x1111111111111111111111111111111111111111111111111111111111111111"
+  });
+  await services.release1Repositories.fundingTransactions.create({
+    chainId: 84532,
+    dealVersionId: "version-1",
+    draftDealId: "draft-1",
+    id: "funding-2",
+    organizationId: "org-1",
+    reconciledAgreementAddress: null,
+    reconciledAt: null,
+    reconciledConfirmedAt: null,
+    reconciledMatchesTrackedVersion: null,
+    reconciledStatus: null,
+    stalePendingEscalatedAt: null,
+    submittedAt: "2026-04-13T11:00:00.000Z",
+    submittedByUserId: actor.userId,
+    submittedWalletAddress:
+      "0x1111111111111111111111111111111111111111",
+    submittedWalletId: actor.walletId,
+    supersededAt: null,
+    supersededByFundingTransactionId: null,
+    transactionHash:
+      "0x2222222222222222222222222222222222222222222222222222222222222222"
+  });
+  await services.release1Repositories.fundingTransactions.create({
+    chainId: 84532,
+    dealVersionId: "version-1",
+    draftDealId: "draft-1",
+    id: "funding-3",
+    organizationId: "org-1",
+    reconciledAgreementAddress: null,
+    reconciledAt: null,
+    reconciledConfirmedAt: null,
+    reconciledMatchesTrackedVersion: null,
+    reconciledStatus: null,
+    stalePendingEscalatedAt: null,
+    submittedAt: "2020-01-01T00:00:00.000Z",
+    submittedByUserId: actor.userId,
+    submittedWalletAddress:
+      "0x1111111111111111111111111111111111111111",
+    submittedWalletId: actor.walletId,
+    supersededAt: null,
+    supersededByFundingTransactionId: null,
+    transactionHash:
+      "0x3333333333333333333333333333333333333333333333333333333333333333"
+  });
+  await services.release4Repositories.escrowAgreements.upsert({
+    agreementAddress: "0x7777777777777777777777777777777777777777",
+    arbitratorAddress: null,
+    buyerAddress: "0x1111111111111111111111111111111111111111",
+    chainId: 84532,
+    createdBlockHash:
+      "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    createdBlockNumber: "100",
+    createdLogIndex: 0,
+    createdTransactionHash:
+      "0xabababababababababababababababababababababababababababababababab",
+    dealId: buildCanonicalDealId("org-1", "draft-1"),
+    dealVersionHash:
+      "0xcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+    factoryAddress: manifest.contracts.EscrowFactory!.toLowerCase() as `0x${string}`,
+    feeVaultAddress: manifest.contracts.FeeVault!.toLowerCase() as `0x${string}`,
+    funded: true,
+    fundedAt: now,
+    fundedBlockHash:
+      "0xdededededededededededededededededededededededededededededededede",
+    fundedBlockNumber: "101",
+    fundedLogIndex: 1,
+    fundedPayerAddress: "0x1111111111111111111111111111111111111111",
+    fundedTransactionHash:
+      "0x1111111111111111111111111111111111111111111111111111111111111111",
+    initializedBlockHash:
+      "0xefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefef",
+    initializedBlockNumber: "100",
+    initializedLogIndex: 1,
+    initializedTimestamp: now,
+    initializedTransactionHash:
+      "0xfafafafafafafafafafafafafafafafafafafafafafafafafafafafafafafafa",
+    milestoneCount: 1,
+    protocolConfigAddress:
+      manifest.contracts.ProtocolConfig!.toLowerCase() as `0x${string}`,
+    protocolFeeBps: manifest.protocolFeeBps,
+    sellerAddress: "0x3333333333333333333333333333333333333333",
+    settlementTokenAddress: manifest.usdcToken!.toLowerCase() as `0x${string}`,
+    totalAmount: "1000000",
+    updatedAt: now
+  });
+  await services.release4Repositories.indexedTransactions.upsertMany([
+    {
+      blockHash:
+        "0x4444444444444444444444444444444444444444444444444444444444444444",
+      blockNumber: "102",
+      chainId: 84532,
+      executionStatus: "REVERTED",
+      fromAddress: "0x1111111111111111111111111111111111111111",
+      indexedAt: now,
+      toAddress: manifest.contracts.EscrowFactory!.toLowerCase() as `0x${string}`,
+      transactionHash:
+        "0x2222222222222222222222222222222222222222222222222222222222222222",
+      transactionIndex: 0
+    }
+  ]);
+
+  const response = await services.operatorService.listFundingTransactions(
+    requestMetadata(actor.cookieHeader)
+  );
+  const transactionsById = new Map(
+    response.fundingTransactions.map((transaction) => [transaction.id, transaction] as const)
+  );
+  const confirmed = transactionsById.get("funding-1");
+  const failed = transactionsById.get("funding-2");
+  const pending = transactionsById.get("funding-3");
+
+  assert.equal(response.fundingTransactions.length, 3);
+  assert.equal(response.fundingTransactions[0]?.id, "funding-2");
+  assert.equal(confirmed?.status, "CONFIRMED");
+  assert.equal(confirmed?.agreementAddress, "0x7777777777777777777777777777777777777777");
+  assert.equal(confirmed?.organizationName, "Acme Procurement");
+  assert.equal(confirmed?.draftDealTitle, "Alpha Deal");
+  assert.equal(confirmed?.dealVersionTitle, "Alpha Deal v1");
+  assert.equal(confirmed?.network, "base-sepolia");
+  assert.equal(confirmed?.contractVersion, manifest.contractVersion);
+  assert.equal(failed?.status, "FAILED");
+  assert.equal(failed?.indexedExecutionStatus, "REVERTED");
+  assert.equal(pending?.status, "PENDING");
+  assert.equal(pending?.stalePending, true);
+  assert.equal(pending?.stalePendingEvaluation, "READY");
 });
 
 test("compliance operators can review pending sponsored transaction requests", async () => {
