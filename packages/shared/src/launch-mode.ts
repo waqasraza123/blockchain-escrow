@@ -8,6 +8,15 @@ function normalizeLaunchMode(value: string | undefined): string | null {
   return normalized && normalized.length > 0 ? normalized : null;
 }
 
+function isLocalHostname(hostname: string): boolean {
+  const normalized = hostname.toLowerCase();
+  return (
+    normalized === "localhost" ||
+    normalized === "127.0.0.1" ||
+    normalized === "::1"
+  );
+}
+
 export function parseAppLaunchMode(value: string | undefined): AppLaunchMode {
   const normalized = normalizeLaunchMode(value);
 
@@ -46,4 +55,31 @@ export function assertProductionLaunchManifest(
   throw new Error(
     `${envName}=${chainId} resolves to ${manifest.network}, which is not allowed when APP_LAUNCH_MODE=production.`
   );
+}
+
+export function assertProductionLaunchUrl(
+  value: string | undefined,
+  envName: string
+): string {
+  const normalized = value?.trim();
+
+  if (!normalized) {
+    throw new Error(`${envName} must be configured when APP_LAUNCH_MODE=production.`);
+  }
+
+  let parsed: URL;
+
+  try {
+    parsed = new URL(normalized);
+  } catch {
+    throw new Error(`${envName} must be a valid absolute URL.`);
+  }
+
+  if (isLocalHostname(parsed.hostname)) {
+    throw new Error(
+      `${envName} must not point to localhost when APP_LAUNCH_MODE=production.`
+    );
+  }
+
+  return normalized.replace(/\/+$/u, "");
 }

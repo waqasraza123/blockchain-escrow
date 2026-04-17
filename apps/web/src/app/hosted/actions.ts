@@ -11,9 +11,10 @@ import {
   linkHostedDisputeEvidence,
   prepareHostedMilestoneSubmission
 } from "../../lib/api";
-
-const hostedCookieName =
-  process.env.API_PARTNER_HOSTED_COOKIE_NAME?.trim() || "bes_hosted_session";
+import {
+  getHostedSessionCookieName,
+  getHostedSessionCookieOptions
+} from "../../../startup";
 
 function requiredString(formData: FormData, key: string): string {
   const value = formData.get(key);
@@ -29,11 +30,11 @@ export async function exchangeHostedSessionAction(formData: FormData) {
   const launchToken = requiredString(formData, "launchToken");
   const exchanged = await exchangeHostedLaunchSession(launchToken);
   const cookieStore = await cookies();
-  cookieStore.set(hostedCookieName, exchanged.sessionToken, {
-    expires: new Date(exchanged.expiresAt),
-    httpOnly: true,
-    path: "/"
-  });
+  cookieStore.set(
+    getHostedSessionCookieName(),
+    exchanged.sessionToken,
+    getHostedSessionCookieOptions(exchanged.expiresAt)
+  );
   redirect(`/hosted/${launchToken}/workspace`);
 }
 
@@ -75,6 +76,6 @@ export async function uploadHostedEvidenceAction(formData: FormData) {
 export async function clearHostedSessionAction(formData: FormData) {
   const launchToken = requiredString(formData, "launchToken");
   const cookieStore = await cookies();
-  cookieStore.delete(hostedCookieName);
+  cookieStore.delete(getHostedSessionCookieName());
   redirect(`/hosted/${launchToken}`);
 }

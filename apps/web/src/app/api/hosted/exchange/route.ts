@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
+import {
+  getHostedSessionCookieName,
+  getHostedSessionCookieOptions
+} from "../../../../../startup";
 
 const defaultApiBaseUrl = "http://127.0.0.1:4000";
-const hostedCookieName =
-  process.env.API_PARTNER_HOSTED_COOKIE_NAME?.trim() || "bes_hosted_session";
 
 function getApiBaseUrl(): string {
   return process.env.WEB_API_BASE_URL?.replace(/\/+$/u, "") ?? defaultApiBaseUrl;
@@ -57,13 +59,11 @@ export async function POST(request: Request) {
     new URL(`/hosted/${launchToken}/workspace`, resolveRequestOrigin(request))
   );
 
-  response.cookies.set(hostedCookieName, exchanged.sessionToken, {
-    expires: new Date(exchanged.expiresAt),
-    httpOnly: true,
-    path: "/",
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production"
-  });
+  response.cookies.set(
+    getHostedSessionCookieName(),
+    exchanged.sessionToken,
+    getHostedSessionCookieOptions(exchanged.expiresAt)
+  );
 
   return response;
 }
