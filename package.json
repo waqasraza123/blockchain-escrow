@@ -25,6 +25,7 @@
     "contracts:test": "pnpm --filter @blockchain-escrow/contracts run test:contracts",
     "contracts:deploy:base-sepolia": "node scripts/with-local-env.mjs pnpm --filter @blockchain-escrow/contracts run deploy:base-sepolia",
     "contracts:export-sdk": "node scripts/with-local-env.mjs pnpm --filter @blockchain-escrow/contracts run export:contracts-sdk",
+    "contracts:verify:deployment": "node scripts/with-local-env.mjs pnpm --filter @blockchain-escrow/contracts run verify:deployment",
     "contracts:verify:base-sepolia": "node scripts/with-local-env.mjs pnpm --filter @blockchain-escrow/contracts run verify:base-sepolia",
     "contracts:release:base-sepolia": "node scripts/with-local-env.mjs pnpm --filter @blockchain-escrow/contracts run release:base-sepolia",
     "contracts:release:base-sepolia:fixture": "node scripts/with-local-env.mjs pnpm --filter @blockchain-escrow/contracts run release:base-sepolia:fixture",

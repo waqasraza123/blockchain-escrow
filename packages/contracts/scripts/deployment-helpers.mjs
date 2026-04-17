@@ -345,17 +345,18 @@ export function validateDeploymentManifest(manifest) {
     throw new Error("Invalid deployment manifest");
   }
 
-  if (manifest.chainId !== baseSepoliaChainId) {
-    throw new Error(`Unexpected deployment chain ID: ${manifest.chainId}`);
-  }
-
-  if (manifest.network !== baseSepoliaNetwork) {
-    throw new Error(`Unexpected deployment network: ${manifest.network}`);
-  }
-
   return {
-    chainId: manifest.chainId,
-    network: manifest.network,
+    chainId: Number.isInteger(manifest.chainId) && manifest.chainId > 0
+      ? manifest.chainId
+      : (() => {
+          throw new Error(`Invalid deployment chain ID: ${manifest.chainId}`);
+        })(),
+    network:
+      typeof manifest.network === "string" && manifest.network.trim().length > 0
+        ? manifest.network.trim()
+        : (() => {
+            throw new Error(`Invalid deployment network: ${manifest.network}`);
+          })(),
     contractVersion: parseContractVersion(manifest.contractVersion ?? 1),
     explorerUrl: normalizeExplorerUrl(manifest.explorerUrl),
     deployedAt: manifest.deployedAt ?? null,
@@ -374,6 +375,27 @@ export function validateDeploymentManifest(manifest) {
     protocolFeeBps: parseProtocolFeeBps(manifest.protocolFeeBps),
     contracts: normalizeContractAddresses(manifest.contracts, true)
   };
+}
+
+export function validateDeploymentManifestAgainstTarget(manifest, target) {
+  const validated = validateDeploymentManifest(manifest);
+
+  if (target.chainId != null && validated.chainId !== target.chainId) {
+    throw new Error(`Unexpected deployment chain ID: ${validated.chainId}`);
+  }
+
+  if (target.network != null && validated.network !== target.network) {
+    throw new Error(`Unexpected deployment network: ${validated.network}`);
+  }
+
+  return validated;
+}
+
+export function validateBaseSepoliaDeploymentManifest(manifest) {
+  return validateDeploymentManifestAgainstTarget(manifest, {
+    chainId: baseSepoliaChainId,
+    network: baseSepoliaNetwork
+  });
 }
 
 export function requireNext(argv, index, flagName) {

@@ -73,9 +73,11 @@ async function main() {
     await runCommand(
       "node",
       [
-        "scripts/verify-base-sepolia-deployment.mjs",
+        "scripts/verify-deployment.mjs",
         "--manifest-file",
-        flags.manifestFile
+        flags.manifestFile,
+        "--rpc-url-env",
+        "BASE_RPC_URL"
       ],
       { cwd: contractsPackageRoot }
     );
