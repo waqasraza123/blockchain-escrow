@@ -151,28 +151,30 @@ function createAgreement(
 }
 
 test("draft activation reconciler activates linked drafts and emits an audit log", async () => {
-  const draft = createDraft();
-  const agreement = createAgreement(draft);
-  const release1 = createRelease1Repositories([draft]);
-  const release4 = createRelease4Repositories([agreement]);
-  const reconciler = new DraftActivationReconciler(
-    release1.repositories,
-    release4.repositories,
-    84532,
-    () => "2026-04-06T12:10:00.000Z"
-  );
+  await withContractVersion(84532, 1, async () => {
+    const draft = createDraft();
+    const agreement = createAgreement(draft);
+    const release1 = createRelease1Repositories([draft]);
+    const release4 = createRelease4Repositories([agreement]);
+    const reconciler = new DraftActivationReconciler(
+      release1.repositories,
+      release4.repositories,
+      84532,
+      () => "2026-04-06T12:10:00.000Z"
+    );
 
-  const result = await reconciler.reconcileOnce();
+    const result = await reconciler.reconcileOnce();
 
-  assert.equal(result.scannedDraftCount, 1);
-  assert.equal(result.activatedDraftCount, 1);
-  assert.equal(draft.state, "ACTIVE");
-  assert.equal(release1.auditLogs.length, 1);
-  assert.equal(release1.auditLogs[0]?.action, "DRAFT_DEAL_ACTIVATED");
-  assert.equal(
-    release1.auditLogs[0]?.metadata?.agreementAddress,
-    agreement.agreementAddress
-  );
+    assert.equal(result.scannedDraftCount, 1);
+    assert.equal(result.activatedDraftCount, 1);
+    assert.equal(draft.state, "ACTIVE");
+    assert.equal(release1.auditLogs.length, 1);
+    assert.equal(release1.auditLogs[0]?.action, "DRAFT_DEAL_ACTIVATED");
+    assert.equal(
+      release1.auditLogs[0]?.metadata?.agreementAddress,
+      agreement.agreementAddress
+    );
+  });
 });
 
 test("draft activation reconciler waits for funded agreements on v2 deployments", async () => {

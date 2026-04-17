@@ -112,3 +112,19 @@ test("loadIndexerConfig parses an optional end block override", () => {
     }
   );
 });
+
+test("loadIndexerConfig rejects testnet manifests in production launch mode", () => {
+  withEnv(
+    {
+      APP_LAUNCH_MODE: "production",
+      BASE_RPC_URL: "https://sepolia.base.org",
+      INDEXER_CHAIN_ID: "84532"
+    },
+    () => {
+      assert.throws(
+        () => loadIndexerConfig(),
+        /INDEXER_CHAIN_ID=84532 resolves to base-sepolia/
+      );
+    }
+  );
+});

@@ -63,3 +63,18 @@ test("loadWorkerConfig parses runOnce when enabled", () => {
     }
   );
 });
+
+test("loadWorkerConfig rejects testnet manifests in production launch mode", () => {
+  withEnv(
+    {
+      APP_LAUNCH_MODE: "production",
+      WORKER_CHAIN_ID: "84532"
+    },
+    () => {
+      assert.throws(
+        () => loadWorkerConfig(),
+        /WORKER_CHAIN_ID=84532 resolves to base-sepolia/
+      );
+    }
+  );
+});

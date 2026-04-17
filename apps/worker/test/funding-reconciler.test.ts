@@ -22,6 +22,28 @@ const fundingReconciliationConfiguration: WorkerFundingReconciliationConfigurati
   release4CursorKey: "release4:base-sepolia"
 };
 
+async function withContractVersion<T>(
+  chainId: number,
+  contractVersion: number,
+  run: () => Promise<T>
+): Promise<T> {
+  const manifest = getDeploymentManifestByChainId(chainId);
+
+  if (!manifest) {
+    throw new Error(`missing manifest for chain ${chainId}`);
+  }
+
+  const mutableManifest = manifest as typeof manifest & { contractVersion: number };
+  const previousVersion = mutableManifest.contractVersion;
+  mutableManifest.contractVersion = contractVersion;
+
+  try {
+    return await run();
+  } finally {
+    mutableManifest.contractVersion = previousVersion;
+  }
+}
+
 function createFundingTransaction(
   overrides: Partial<FundingTransactionRecord> = {}
 ): FundingTransactionRecord {
@@ -223,35 +245,37 @@ function createIndexedTransaction(
 }
 
 test("funding reconciler persists confirmed terminal reconciliation and emits an audit log", async () => {
-  const fundingTransaction = createFundingTransaction();
-  const release1 = createRelease1Repositories([fundingTransaction]);
-  const release4 = createRelease4Repositories({
-    agreements: [createObservedAgreement(fundingTransaction)],
-    chainCursor: createChainCursor("2026-04-06T12:04:00.000Z")
+  await withContractVersion(84532, 1, async () => {
+    const fundingTransaction = createFundingTransaction();
+    const release1 = createRelease1Repositories([fundingTransaction]);
+    const release4 = createRelease4Repositories({
+      agreements: [createObservedAgreement(fundingTransaction)],
+      chainCursor: createChainCursor("2026-04-06T12:04:00.000Z")
+    });
+    const reconciler = new FundingReconciler(
+      release1.repositories,
+      release4.repositories,
+      84532,
+      fundingReconciliationConfiguration,
+      () => "2026-04-06T12:05:00.000Z"
+    );
+
+    const result = await reconciler.reconcileOnce();
+
+    assert.equal(result.reconciledFundingTransactionCount, 1);
+    assert.equal(result.clearedFundingReconciliationCount, 0);
+    assert.equal(fundingTransaction.reconciledStatus, "CONFIRMED");
+    assert.equal(
+      fundingTransaction.reconciledAgreementAddress,
+      "0x7777777777777777777777777777777777777777"
+    );
+    assert.equal(fundingTransaction.reconciledAt, "2026-04-06T12:05:00.000Z");
+    assert.equal(release1.auditLogs.length, 1);
+    assert.equal(
+      release1.auditLogs[0]?.action,
+      "FUNDING_TRANSACTION_RECONCILIATION_UPDATED"
+    );
   });
-  const reconciler = new FundingReconciler(
-    release1.repositories,
-    release4.repositories,
-    84532,
-    fundingReconciliationConfiguration,
-    () => "2026-04-06T12:05:00.000Z"
-  );
-
-  const result = await reconciler.reconcileOnce();
-
-  assert.equal(result.reconciledFundingTransactionCount, 1);
-  assert.equal(result.clearedFundingReconciliationCount, 0);
-  assert.equal(fundingTransaction.reconciledStatus, "CONFIRMED");
-  assert.equal(
-    fundingTransaction.reconciledAgreementAddress,
-    "0x7777777777777777777777777777777777777777"
-  );
-  assert.equal(fundingTransaction.reconciledAt, "2026-04-06T12:05:00.000Z");
-  assert.equal(release1.auditLogs.length, 1);
-  assert.equal(
-    release1.auditLogs[0]?.action,
-    "FUNDING_TRANSACTION_RECONCILIATION_UPDATED"
-  );
 });
 
 test("funding reconciler persists failed terminal reconciliation from reverted indexed transactions", async () => {

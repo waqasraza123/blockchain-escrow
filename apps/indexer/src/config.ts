@@ -1,4 +1,5 @@
 import { getDeploymentManifestByChainId } from "@blockchain-escrow/contracts-sdk";
+import { assertProductionLaunchManifest, isProductionLaunchMode } from "@blockchain-escrow/shared";
 
 function parsePositiveInteger(name: string, defaultValue: number): number {
   const raw = process.env[name];
@@ -107,6 +108,10 @@ export function loadIndexerConfig(): IndexerConfig {
 
   if (!manifest) {
     throw new Error(`No deployment manifest found for chain ${chainId}`);
+  }
+
+  if (isProductionLaunchMode(process.env.APP_LAUNCH_MODE)) {
+    assertProductionLaunchManifest(manifest, chainId, "INDEXER_CHAIN_ID");
   }
 
   const network = process.env.INDEXER_NETWORK ?? manifest.network;

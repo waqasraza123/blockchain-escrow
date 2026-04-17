@@ -386,58 +386,60 @@ async function createCounterpartyAcceptance(input: Awaited<ReturnType<typeof see
 }
 
 test("funding service returns a ready preparation when projections and both acceptances exist", async () => {
-  const { actor, draft, manifest, services, version } = await seedFundingScenario();
+  await withContractVersion(84532, 1, async () => {
+    const { actor, draft, manifest, services, version } = await seedFundingScenario();
 
-  await createCounterpartyAcceptance({ actor, draft, manifest, services, version });
+    await createCounterpartyAcceptance({ actor, draft, manifest, services, version });
 
-  const result = await services.fundingService.getFundingPreparation(
-    {
-      dealVersionId: version.version.id,
-      draftDealId: draft.draft.id,
-      organizationId: "org-1"
-    },
-    {
-      cookieHeader: actor.cookieHeader,
-      ipAddress: "127.0.0.1",
-      userAgent: "test-agent"
-    }
-  );
+    const result = await services.fundingService.getFundingPreparation(
+      {
+        dealVersionId: version.version.id,
+        draftDealId: draft.draft.id,
+        organizationId: "org-1"
+      },
+      {
+        cookieHeader: actor.cookieHeader,
+        ipAddress: "127.0.0.1",
+        userAgent: "test-agent"
+      }
+    );
 
-  assert.equal(result.preparation.ready, true);
-  assert.deepEqual(result.preparation.blockers, []);
-  assert.equal(
-    result.preparation.escrowFactoryAddress,
-    manifest.contracts.EscrowFactory!.toLowerCase()
-  );
-  assert.equal(
-    result.preparation.protocolConfigAddress,
-    manifest.contracts.ProtocolConfig!.toLowerCase()
-  );
-  assert.equal(
-    result.preparation.settlementTokenAddress,
-    manifest.usdcToken!.toLowerCase()
-  );
-  assert.equal(result.preparation.buyerAddress, actor.walletAddress);
-  assert.equal(
-    result.preparation.sellerAddress,
-    counterpartyAccount.address.toLowerCase()
-  );
-  assert.equal(result.preparation.totalAmountMinor, "3500000");
-  assert.equal(result.preparation.milestoneCount, 2);
-  assert.equal(result.preparation.createAgreementFunctionName, "createAgreement");
-  assert.equal(result.preparation.allowanceTargetAddress, null);
-  assert.equal(result.preparation.buyerAllowanceMinor, null);
-  assert.equal(result.preparation.requiredBuyerAllowanceMinor, null);
-  assert.equal(
-    result.preparation.createAgreementTransaction?.to,
-    manifest.contracts.EscrowFactory!.toLowerCase()
-  );
-  assert.match(result.preparation.dealId, /^0x[a-f0-9]{64}$/);
-  assert.match(result.preparation.dealVersionHash, /^0x[a-f0-9]{64}$/);
-  assert.match(
-    result.preparation.predictedAgreementAddress ?? "",
-    /^0x[a-f0-9]{40}$/
-  );
+    assert.equal(result.preparation.ready, true);
+    assert.deepEqual(result.preparation.blockers, []);
+    assert.equal(
+      result.preparation.escrowFactoryAddress,
+      manifest.contracts.EscrowFactory!.toLowerCase()
+    );
+    assert.equal(
+      result.preparation.protocolConfigAddress,
+      manifest.contracts.ProtocolConfig!.toLowerCase()
+    );
+    assert.equal(
+      result.preparation.settlementTokenAddress,
+      manifest.usdcToken!.toLowerCase()
+    );
+    assert.equal(result.preparation.buyerAddress, actor.walletAddress);
+    assert.equal(
+      result.preparation.sellerAddress,
+      counterpartyAccount.address.toLowerCase()
+    );
+    assert.equal(result.preparation.totalAmountMinor, "3500000");
+    assert.equal(result.preparation.milestoneCount, 2);
+    assert.equal(result.preparation.createAgreementFunctionName, "createAgreement");
+    assert.equal(result.preparation.allowanceTargetAddress, null);
+    assert.equal(result.preparation.buyerAllowanceMinor, null);
+    assert.equal(result.preparation.requiredBuyerAllowanceMinor, null);
+    assert.equal(
+      result.preparation.createAgreementTransaction?.to,
+      manifest.contracts.EscrowFactory!.toLowerCase()
+    );
+    assert.match(result.preparation.dealId, /^0x[a-f0-9]{64}$/);
+    assert.match(result.preparation.dealVersionHash, /^0x[a-f0-9]{64}$/);
+    assert.match(
+      result.preparation.predictedAgreementAddress ?? "",
+      /^0x[a-f0-9]{40}$/
+    );
+  });
 });
 
 test("funding service blocks preparation when funding approval is required but missing", async () => {
@@ -592,59 +594,61 @@ test("funding service reports a counterparty acceptance blocker when the wallet 
 });
 
 test("funding service records and lists pending funding transactions", async () => {
-  const seeded = await seedFundingScenario();
+  await withContractVersion(84532, 1, async () => {
+    const seeded = await seedFundingScenario();
 
-  await createCounterpartyAcceptance(seeded);
+    await createCounterpartyAcceptance(seeded);
 
-  const created = await seeded.services.fundingService.createFundingTransaction(
-    {
-      dealVersionId: seeded.version.version.id,
-      draftDealId: seeded.draft.draft.id,
-      organizationId: "org-1"
-    },
-    {
-      transactionHash:
-        "0x9999999999999999999999999999999999999999999999999999999999999999"
-    },
-    {
-      cookieHeader: seeded.actor.cookieHeader,
-      ipAddress: "127.0.0.1",
-      userAgent: "test-agent"
-    }
-  );
+    const created = await seeded.services.fundingService.createFundingTransaction(
+      {
+        dealVersionId: seeded.version.version.id,
+        draftDealId: seeded.draft.draft.id,
+        organizationId: "org-1"
+      },
+      {
+        transactionHash:
+          "0x9999999999999999999999999999999999999999999999999999999999999999"
+      },
+      {
+        cookieHeader: seeded.actor.cookieHeader,
+        ipAddress: "127.0.0.1",
+        userAgent: "test-agent"
+      }
+    );
 
-  assert.equal(created.fundingTransaction.status, "PENDING");
-  assert.equal(created.fundingTransaction.submittedByUserId, seeded.actor.userId);
-  assert.equal(
-    created.fundingTransaction.submittedWalletAddress,
-    seeded.actor.walletAddress
-  );
+    assert.equal(created.fundingTransaction.status, "PENDING");
+    assert.equal(created.fundingTransaction.submittedByUserId, seeded.actor.userId);
+    assert.equal(
+      created.fundingTransaction.submittedWalletAddress,
+      seeded.actor.walletAddress
+    );
 
-  const listed = await seeded.services.fundingService.listFundingTransactions(
-    {
-      dealVersionId: seeded.version.version.id,
-      draftDealId: seeded.draft.draft.id,
-      organizationId: "org-1"
-    },
-    {
-      cookieHeader: seeded.actor.cookieHeader,
-      ipAddress: "127.0.0.1",
-      userAgent: "test-agent"
-    }
-  );
+    const listed = await seeded.services.fundingService.listFundingTransactions(
+      {
+        dealVersionId: seeded.version.version.id,
+        draftDealId: seeded.draft.draft.id,
+        organizationId: "org-1"
+      },
+      {
+        cookieHeader: seeded.actor.cookieHeader,
+        ipAddress: "127.0.0.1",
+        userAgent: "test-agent"
+      }
+    );
 
-  assert.equal(listed.fundingTransactions.length, 1);
-  assert.equal(listed.fundingTransactions[0]?.status, "PENDING");
-  assert.equal(listed.fundingTransactions[0]?.indexedAt, null);
-  assert.equal(listed.fundingTransactions[0]?.indexedBlockNumber, null);
-  assert.equal(listed.fundingTransactions[0]?.indexedExecutionStatus, null);
-  assert.equal(listed.fundingTransactions[0]?.stalePending, null);
-  assert.equal(listed.fundingTransactions[0]?.stalePendingAt, null);
-  assert.equal(listed.fundingTransactions[0]?.stalePendingEscalatedAt, null);
-  assert.equal(
-    listed.fundingTransactions[0]?.stalePendingEvaluation,
-    "INDEXER_CURSOR_MISSING"
-  );
+    assert.equal(listed.fundingTransactions.length, 1);
+    assert.equal(listed.fundingTransactions[0]?.status, "PENDING");
+    assert.equal(listed.fundingTransactions[0]?.indexedAt, null);
+    assert.equal(listed.fundingTransactions[0]?.indexedBlockNumber, null);
+    assert.equal(listed.fundingTransactions[0]?.indexedExecutionStatus, null);
+    assert.equal(listed.fundingTransactions[0]?.stalePending, null);
+    assert.equal(listed.fundingTransactions[0]?.stalePendingAt, null);
+    assert.equal(listed.fundingTransactions[0]?.stalePendingEscalatedAt, null);
+    assert.equal(
+      listed.fundingTransactions[0]?.stalePendingEvaluation,
+      "INDEXER_CURSOR_MISSING"
+    );
+  });
 });
 
 test("funding service marks pending tracked transactions as not stale when the indexer cursor is fresh", async () => {
@@ -884,106 +888,12 @@ test("funding service exposes persisted worker reconciliation metadata while kee
 });
 
 test("funding service supersedes older unresolved tracked transactions when a replacement is submitted", async () => {
-  const seeded = await seedFundingScenario();
+  await withContractVersion(84532, 1, async () => {
+    const seeded = await seedFundingScenario();
 
-  await createCounterpartyAcceptance(seeded);
+    await createCounterpartyAcceptance(seeded);
 
-  const first = await seeded.services.fundingService.createFundingTransaction(
-    {
-      dealVersionId: seeded.version.version.id,
-      draftDealId: seeded.draft.draft.id,
-      organizationId: "org-1"
-    },
-    {
-      transactionHash:
-        "0x6666666666666666666666666666666666666666666666666666666666666666"
-    },
-    {
-      cookieHeader: seeded.actor.cookieHeader,
-      ipAddress: "127.0.0.1",
-      userAgent: "test-agent"
-    }
-  );
-
-  const replacement = await seeded.services.fundingService.createFundingTransaction(
-    {
-      dealVersionId: seeded.version.version.id,
-      draftDealId: seeded.draft.draft.id,
-      organizationId: "org-1"
-    },
-    {
-      transactionHash:
-        "0x7777777777777777777777777777777777777777777777777777777777777777"
-    },
-    {
-      cookieHeader: seeded.actor.cookieHeader,
-      ipAddress: "127.0.0.1",
-      userAgent: "test-agent"
-    }
-  );
-
-  assert.equal(replacement.fundingTransaction.status, "PENDING");
-  assert.equal(replacement.fundingTransaction.supersededAt, null);
-  assert.equal(replacement.fundingTransaction.supersededByFundingTransactionId, null);
-
-  const listed = await seeded.services.fundingService.listFundingTransactions(
-    {
-      dealVersionId: seeded.version.version.id,
-      draftDealId: seeded.draft.draft.id,
-      organizationId: "org-1"
-    },
-    {
-      cookieHeader: seeded.actor.cookieHeader,
-      ipAddress: "127.0.0.1",
-      userAgent: "test-agent"
-    }
-  );
-
-  assert.equal(listed.fundingTransactions.length, 2);
-  const listedReplacement = listed.fundingTransactions.find(
-    (transaction) => transaction.transactionHash === replacement.fundingTransaction.transactionHash
-  );
-  const listedFirst = listed.fundingTransactions.find(
-    (transaction) => transaction.transactionHash === first.fundingTransaction.transactionHash
-  );
-
-  assert.equal(listedReplacement?.status, "PENDING");
-  assert.equal(listedReplacement?.supersededAt, null);
-  assert.equal(listedFirst?.status, "SUPERSEDED");
-  assert.ok(listedFirst?.supersededAt);
-  assert.equal(listedFirst?.stalePending, false);
-  assert.equal(listedFirst?.stalePendingAt, null);
-  assert.equal(listedFirst?.stalePendingEvaluation, null);
-  assert.equal(
-    listedFirst?.supersededByFundingTransactionId,
-    replacement.fundingTransaction.id
-  );
-  assert.equal(
-    listedFirst?.supersededByTransactionHash,
-    replacement.fundingTransaction.transactionHash
-  );
-});
-
-test("funding service confirms tracked funding transactions after agreement indexing without mutating draft state on read", async () => {
-  const seeded = await seedFundingScenario();
-
-  await createCounterpartyAcceptance(seeded);
-
-  const preparation = await seeded.services.fundingService.getFundingPreparation(
-    {
-      dealVersionId: seeded.version.version.id,
-      draftDealId: seeded.draft.draft.id,
-      organizationId: "org-1"
-    },
-    {
-      cookieHeader: seeded.actor.cookieHeader,
-      ipAddress: "127.0.0.1",
-      userAgent: "test-agent"
-    }
-  );
-
-  const trackedTransaction =
-    await seeded.services.fundingService.createFundingTransaction(
+    const first = await seeded.services.fundingService.createFundingTransaction(
       {
         dealVersionId: seeded.version.version.id,
         draftDealId: seeded.draft.draft.id,
@@ -991,7 +901,7 @@ test("funding service confirms tracked funding transactions after agreement inde
       },
       {
         transactionHash:
-          "0x8888888888888888888888888888888888888888888888888888888888888888"
+          "0x6666666666666666666666666666666666666666666666666666666666666666"
       },
       {
         cookieHeader: seeded.actor.cookieHeader,
@@ -1000,86 +910,184 @@ test("funding service confirms tracked funding transactions after agreement inde
       }
     );
 
-  await seeded.services.release4Repositories.escrowAgreements.upsert({
-    agreementAddress: "0x7777777777777777777777777777777777777777",
-    arbitratorAddress: null,
-    buyerAddress: seeded.actor.walletAddress,
-    chainId: 84532,
-    createdBlockHash:
-      "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-    createdBlockNumber: "10",
-    createdLogIndex: 0,
-    createdTransactionHash: trackedTransaction.fundingTransaction.transactionHash,
-    dealId: buildCanonicalDealId("org-1", seeded.draft.draft.id),
-    dealVersionHash: preparation.preparation.dealVersionHash,
-    factoryAddress: seeded.manifest.contracts.EscrowFactory!.toLowerCase() as `0x${string}`,
-    feeVaultAddress: seeded.manifest.contracts.FeeVault!.toLowerCase() as `0x${string}`,
-    funded: false,
-    fundedAt: null,
-    fundedBlockHash: null,
-    fundedBlockNumber: null,
-    fundedLogIndex: null,
-    fundedPayerAddress: null,
-    fundedTransactionHash: null,
-    initializedBlockHash:
-      "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-    initializedBlockNumber: "10",
-    initializedLogIndex: 1,
-    initializedTimestamp: new Date().toISOString(),
-    initializedTransactionHash: trackedTransaction.fundingTransaction.transactionHash,
-    milestoneCount: 2,
-    protocolConfigAddress:
-      seeded.manifest.contracts.ProtocolConfig!.toLowerCase() as `0x${string}`,
-    protocolFeeBps: seeded.manifest.protocolFeeBps,
-    sellerAddress: counterpartyAccount.address.toLowerCase() as `0x${string}`,
-    settlementTokenAddress: seeded.manifest.usdcToken!.toLowerCase() as `0x${string}`,
-    totalAmount: "3500000",
-    updatedAt: new Date().toISOString()
+    const replacement = await seeded.services.fundingService.createFundingTransaction(
+      {
+        dealVersionId: seeded.version.version.id,
+        draftDealId: seeded.draft.draft.id,
+        organizationId: "org-1"
+      },
+      {
+        transactionHash:
+          "0x7777777777777777777777777777777777777777777777777777777777777777"
+      },
+      {
+        cookieHeader: seeded.actor.cookieHeader,
+        ipAddress: "127.0.0.1",
+        userAgent: "test-agent"
+      }
+    );
+
+    assert.equal(replacement.fundingTransaction.status, "PENDING");
+    assert.equal(replacement.fundingTransaction.supersededAt, null);
+    assert.equal(replacement.fundingTransaction.supersededByFundingTransactionId, null);
+
+    const listed = await seeded.services.fundingService.listFundingTransactions(
+      {
+        dealVersionId: seeded.version.version.id,
+        draftDealId: seeded.draft.draft.id,
+        organizationId: "org-1"
+      },
+      {
+        cookieHeader: seeded.actor.cookieHeader,
+        ipAddress: "127.0.0.1",
+        userAgent: "test-agent"
+      }
+    );
+
+    assert.equal(listed.fundingTransactions.length, 2);
+    const listedReplacement = listed.fundingTransactions.find(
+      (transaction) => transaction.transactionHash === replacement.fundingTransaction.transactionHash
+    );
+    const listedFirst = listed.fundingTransactions.find(
+      (transaction) => transaction.transactionHash === first.fundingTransaction.transactionHash
+    );
+
+    assert.equal(listedReplacement?.status, "PENDING");
+    assert.equal(listedReplacement?.supersededAt, null);
+    assert.equal(listedFirst?.status, "SUPERSEDED");
+    assert.ok(listedFirst?.supersededAt);
+    assert.equal(listedFirst?.stalePending, false);
+    assert.equal(listedFirst?.stalePendingAt, null);
+    assert.equal(listedFirst?.stalePendingEvaluation, null);
+    assert.equal(
+      listedFirst?.supersededByFundingTransactionId,
+      replacement.fundingTransaction.id
+    );
+    assert.equal(
+      listedFirst?.supersededByTransactionHash,
+      replacement.fundingTransaction.transactionHash
+    );
   });
+});
 
-  const listed = await seeded.services.fundingService.listFundingTransactions(
-    {
-      dealVersionId: seeded.version.version.id,
-      draftDealId: seeded.draft.draft.id,
-      organizationId: "org-1"
-    },
-    {
-      cookieHeader: seeded.actor.cookieHeader,
-      ipAddress: "127.0.0.1",
-      userAgent: "test-agent"
-    }
-  );
+test("funding service confirms tracked funding transactions after agreement indexing without mutating draft state on read", async () => {
+  await withContractVersion(84532, 1, async () => {
+    const seeded = await seedFundingScenario();
 
-  assert.equal(listed.fundingTransactions[0]?.status, "CONFIRMED");
-  assert.equal(
-    listed.fundingTransactions[0]?.agreementAddress,
-    "0x7777777777777777777777777777777777777777"
-  );
-  assert.equal(listed.fundingTransactions[0]?.matchesTrackedVersion, true);
-  assert.equal(listed.fundingTransactions[0]?.indexedAt, null);
-  assert.equal(listed.fundingTransactions[0]?.indexedBlockNumber, null);
-  assert.equal(listed.fundingTransactions[0]?.indexedExecutionStatus, null);
-  assert.equal(listed.fundingTransactions[0]?.stalePending, false);
-  assert.equal(listed.fundingTransactions[0]?.stalePendingAt, null);
-  assert.equal(listed.fundingTransactions[0]?.stalePendingEvaluation, null);
+    await createCounterpartyAcceptance(seeded);
 
-  const draft = await seeded.services.draftsService.getDraft(
-    {
-      draftDealId: seeded.draft.draft.id,
-      organizationId: "org-1"
-    },
-    {
-      cookieHeader: seeded.actor.cookieHeader,
-      ipAddress: "127.0.0.1",
-      userAgent: "test-agent"
-    }
-  );
+    const preparation = await seeded.services.fundingService.getFundingPreparation(
+      {
+        dealVersionId: seeded.version.version.id,
+        draftDealId: seeded.draft.draft.id,
+        organizationId: "org-1"
+      },
+      {
+        cookieHeader: seeded.actor.cookieHeader,
+        ipAddress: "127.0.0.1",
+        userAgent: "test-agent"
+      }
+    );
 
-  assert.equal(draft.draft.state, "AWAITING_FUNDING");
-  assert.equal(
-    draft.draft.escrow?.agreementAddress,
-    "0x7777777777777777777777777777777777777777"
-  );
+    const trackedTransaction =
+      await seeded.services.fundingService.createFundingTransaction(
+        {
+          dealVersionId: seeded.version.version.id,
+          draftDealId: seeded.draft.draft.id,
+          organizationId: "org-1"
+        },
+        {
+          transactionHash:
+            "0x8888888888888888888888888888888888888888888888888888888888888888"
+        },
+        {
+          cookieHeader: seeded.actor.cookieHeader,
+          ipAddress: "127.0.0.1",
+          userAgent: "test-agent"
+        }
+      );
+
+    await seeded.services.release4Repositories.escrowAgreements.upsert({
+      agreementAddress: "0x7777777777777777777777777777777777777777",
+      arbitratorAddress: null,
+      buyerAddress: seeded.actor.walletAddress,
+      chainId: 84532,
+      createdBlockHash:
+        "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      createdBlockNumber: "10",
+      createdLogIndex: 0,
+      createdTransactionHash: trackedTransaction.fundingTransaction.transactionHash,
+      dealId: buildCanonicalDealId("org-1", seeded.draft.draft.id),
+      dealVersionHash: preparation.preparation.dealVersionHash,
+      factoryAddress: seeded.manifest.contracts.EscrowFactory!.toLowerCase() as `0x${string}`,
+      feeVaultAddress: seeded.manifest.contracts.FeeVault!.toLowerCase() as `0x${string}`,
+      funded: false,
+      fundedAt: null,
+      fundedBlockHash: null,
+      fundedBlockNumber: null,
+      fundedLogIndex: null,
+      fundedPayerAddress: null,
+      fundedTransactionHash: null,
+      initializedBlockHash:
+        "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      initializedBlockNumber: "10",
+      initializedLogIndex: 1,
+      initializedTimestamp: new Date().toISOString(),
+      initializedTransactionHash: trackedTransaction.fundingTransaction.transactionHash,
+      milestoneCount: 2,
+      protocolConfigAddress:
+        seeded.manifest.contracts.ProtocolConfig!.toLowerCase() as `0x${string}`,
+      protocolFeeBps: seeded.manifest.protocolFeeBps,
+      sellerAddress: counterpartyAccount.address.toLowerCase() as `0x${string}`,
+      settlementTokenAddress: seeded.manifest.usdcToken!.toLowerCase() as `0x${string}`,
+      totalAmount: "3500000",
+      updatedAt: new Date().toISOString()
+    });
+
+    const listed = await seeded.services.fundingService.listFundingTransactions(
+      {
+        dealVersionId: seeded.version.version.id,
+        draftDealId: seeded.draft.draft.id,
+        organizationId: "org-1"
+      },
+      {
+        cookieHeader: seeded.actor.cookieHeader,
+        ipAddress: "127.0.0.1",
+        userAgent: "test-agent"
+      }
+    );
+
+    assert.equal(listed.fundingTransactions[0]?.status, "CONFIRMED");
+    assert.equal(
+      listed.fundingTransactions[0]?.agreementAddress,
+      "0x7777777777777777777777777777777777777777"
+    );
+    assert.equal(listed.fundingTransactions[0]?.matchesTrackedVersion, true);
+    assert.equal(listed.fundingTransactions[0]?.indexedAt, null);
+    assert.equal(listed.fundingTransactions[0]?.indexedBlockNumber, null);
+    assert.equal(listed.fundingTransactions[0]?.indexedExecutionStatus, null);
+    assert.equal(listed.fundingTransactions[0]?.stalePending, false);
+    assert.equal(listed.fundingTransactions[0]?.stalePendingAt, null);
+    assert.equal(listed.fundingTransactions[0]?.stalePendingEvaluation, null);
+
+    const draft = await seeded.services.draftsService.getDraft(
+      {
+        draftDealId: seeded.draft.draft.id,
+        organizationId: "org-1"
+      },
+      {
+        cookieHeader: seeded.actor.cookieHeader,
+        ipAddress: "127.0.0.1",
+        userAgent: "test-agent"
+      }
+    );
+
+    assert.equal(draft.draft.state, "AWAITING_FUNDING");
+    assert.equal(
+      draft.draft.escrow?.agreementAddress,
+      "0x7777777777777777777777777777777777777777"
+    );
+  });
 });
 
 test("funding service requires the funded projection before confirming v2 funding transactions", async () => {
@@ -1231,125 +1239,129 @@ test("funding service requires the funded projection before confirming v2 fundin
 });
 
 test("funding service marks reverted tracked funding transactions as failed", async () => {
-  const seeded = await seedFundingScenario();
+  await withContractVersion(84532, 1, async () => {
+    const seeded = await seedFundingScenario();
 
-  await createCounterpartyAcceptance(seeded);
+    await createCounterpartyAcceptance(seeded);
 
-  const created = await seeded.services.fundingService.createFundingTransaction(
-    {
-      dealVersionId: seeded.version.version.id,
-      draftDealId: seeded.draft.draft.id,
-      organizationId: "org-1"
-    },
-    {
-      transactionHash:
-        "0x4444444444444444444444444444444444444444444444444444444444444444"
-    },
-    {
-      cookieHeader: seeded.actor.cookieHeader,
-      ipAddress: "127.0.0.1",
-      userAgent: "test-agent"
-    }
-  );
+    const created = await seeded.services.fundingService.createFundingTransaction(
+      {
+        dealVersionId: seeded.version.version.id,
+        draftDealId: seeded.draft.draft.id,
+        organizationId: "org-1"
+      },
+      {
+        transactionHash:
+          "0x4444444444444444444444444444444444444444444444444444444444444444"
+      },
+      {
+        cookieHeader: seeded.actor.cookieHeader,
+        ipAddress: "127.0.0.1",
+        userAgent: "test-agent"
+      }
+    );
 
-  await seeded.services.release4Repositories.indexedTransactions.upsertMany([
-    {
-      blockHash:
-        "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-      blockNumber: "11",
-      chainId: 84532,
-      executionStatus: "REVERTED",
-      fromAddress: seeded.actor.walletAddress,
-      indexedAt: "2026-04-06T12:05:00.000Z",
-      toAddress: seeded.manifest.contracts.EscrowFactory!.toLowerCase() as `0x${string}`,
-      transactionHash: created.fundingTransaction.transactionHash,
-      transactionIndex: 0
-    }
-  ]);
+    await seeded.services.release4Repositories.indexedTransactions.upsertMany([
+      {
+        blockHash:
+          "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        blockNumber: "11",
+        chainId: 84532,
+        executionStatus: "REVERTED",
+        fromAddress: seeded.actor.walletAddress,
+        indexedAt: "2026-04-06T12:05:00.000Z",
+        toAddress: seeded.manifest.contracts.EscrowFactory!.toLowerCase() as `0x${string}`,
+        transactionHash: created.fundingTransaction.transactionHash,
+        transactionIndex: 0
+      }
+    ]);
 
-  const listed = await seeded.services.fundingService.listFundingTransactions(
-    {
-      dealVersionId: seeded.version.version.id,
-      draftDealId: seeded.draft.draft.id,
-      organizationId: "org-1"
-    },
-    {
-      cookieHeader: seeded.actor.cookieHeader,
-      ipAddress: "127.0.0.1",
-      userAgent: "test-agent"
-    }
-  );
+    const listed = await seeded.services.fundingService.listFundingTransactions(
+      {
+        dealVersionId: seeded.version.version.id,
+        draftDealId: seeded.draft.draft.id,
+        organizationId: "org-1"
+      },
+      {
+        cookieHeader: seeded.actor.cookieHeader,
+        ipAddress: "127.0.0.1",
+        userAgent: "test-agent"
+      }
+    );
 
-  assert.equal(listed.fundingTransactions[0]?.status, "FAILED");
-  assert.equal(listed.fundingTransactions[0]?.agreementAddress, null);
-  assert.equal(listed.fundingTransactions[0]?.matchesTrackedVersion, null);
-  assert.equal(listed.fundingTransactions[0]?.indexedAt, "2026-04-06T12:05:00.000Z");
-  assert.equal(listed.fundingTransactions[0]?.indexedBlockNumber, "11");
-  assert.equal(listed.fundingTransactions[0]?.indexedExecutionStatus, "REVERTED");
-  assert.equal(listed.fundingTransactions[0]?.stalePending, false);
-  assert.equal(listed.fundingTransactions[0]?.stalePendingAt, null);
-  assert.equal(listed.fundingTransactions[0]?.stalePendingEvaluation, null);
+    assert.equal(listed.fundingTransactions[0]?.status, "FAILED");
+    assert.equal(listed.fundingTransactions[0]?.agreementAddress, null);
+    assert.equal(listed.fundingTransactions[0]?.matchesTrackedVersion, null);
+    assert.equal(listed.fundingTransactions[0]?.indexedAt, "2026-04-06T12:05:00.000Z");
+    assert.equal(listed.fundingTransactions[0]?.indexedBlockNumber, "11");
+    assert.equal(listed.fundingTransactions[0]?.indexedExecutionStatus, "REVERTED");
+    assert.equal(listed.fundingTransactions[0]?.stalePending, false);
+    assert.equal(listed.fundingTransactions[0]?.stalePendingAt, null);
+    assert.equal(listed.fundingTransactions[0]?.stalePendingEvaluation, null);
+  });
 });
 
 test("funding service marks indexed successful tracked transactions without matching agreements as mismatched", async () => {
-  const seeded = await seedFundingScenario();
+  await withContractVersion(84532, 1, async () => {
+    const seeded = await seedFundingScenario();
 
-  await createCounterpartyAcceptance(seeded);
+    await createCounterpartyAcceptance(seeded);
 
-  const created = await seeded.services.fundingService.createFundingTransaction(
-    {
-      dealVersionId: seeded.version.version.id,
-      draftDealId: seeded.draft.draft.id,
-      organizationId: "org-1"
-    },
-    {
-      transactionHash:
-        "0x5555555555555555555555555555555555555555555555555555555555555555"
-    },
-    {
-      cookieHeader: seeded.actor.cookieHeader,
-      ipAddress: "127.0.0.1",
-      userAgent: "test-agent"
-    }
-  );
+    const created = await seeded.services.fundingService.createFundingTransaction(
+      {
+        dealVersionId: seeded.version.version.id,
+        draftDealId: seeded.draft.draft.id,
+        organizationId: "org-1"
+      },
+      {
+        transactionHash:
+          "0x5555555555555555555555555555555555555555555555555555555555555555"
+      },
+      {
+        cookieHeader: seeded.actor.cookieHeader,
+        ipAddress: "127.0.0.1",
+        userAgent: "test-agent"
+      }
+    );
 
-  await seeded.services.release4Repositories.indexedTransactions.upsertMany([
-    {
-      blockHash:
-        "0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
-      blockNumber: "12",
-      chainId: 84532,
-      executionStatus: "SUCCESS",
-      fromAddress: seeded.actor.walletAddress,
-      indexedAt: "2026-04-06T12:06:00.000Z",
-      toAddress: seeded.manifest.contracts.EscrowFactory!.toLowerCase() as `0x${string}`,
-      transactionHash: created.fundingTransaction.transactionHash,
-      transactionIndex: 0
-    }
-  ]);
+    await seeded.services.release4Repositories.indexedTransactions.upsertMany([
+      {
+        blockHash:
+          "0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        blockNumber: "12",
+        chainId: 84532,
+        executionStatus: "SUCCESS",
+        fromAddress: seeded.actor.walletAddress,
+        indexedAt: "2026-04-06T12:06:00.000Z",
+        toAddress: seeded.manifest.contracts.EscrowFactory!.toLowerCase() as `0x${string}`,
+        transactionHash: created.fundingTransaction.transactionHash,
+        transactionIndex: 0
+      }
+    ]);
 
-  const listed = await seeded.services.fundingService.listFundingTransactions(
-    {
-      dealVersionId: seeded.version.version.id,
-      draftDealId: seeded.draft.draft.id,
-      organizationId: "org-1"
-    },
-    {
-      cookieHeader: seeded.actor.cookieHeader,
-      ipAddress: "127.0.0.1",
-      userAgent: "test-agent"
-    }
-  );
+    const listed = await seeded.services.fundingService.listFundingTransactions(
+      {
+        dealVersionId: seeded.version.version.id,
+        draftDealId: seeded.draft.draft.id,
+        organizationId: "org-1"
+      },
+      {
+        cookieHeader: seeded.actor.cookieHeader,
+        ipAddress: "127.0.0.1",
+        userAgent: "test-agent"
+      }
+    );
 
-  assert.equal(listed.fundingTransactions[0]?.status, "MISMATCHED");
-  assert.equal(listed.fundingTransactions[0]?.agreementAddress, null);
-  assert.equal(listed.fundingTransactions[0]?.matchesTrackedVersion, false);
-  assert.equal(listed.fundingTransactions[0]?.indexedAt, "2026-04-06T12:06:00.000Z");
-  assert.equal(listed.fundingTransactions[0]?.indexedBlockNumber, "12");
-  assert.equal(listed.fundingTransactions[0]?.indexedExecutionStatus, "SUCCESS");
-  assert.equal(listed.fundingTransactions[0]?.stalePending, false);
-  assert.equal(listed.fundingTransactions[0]?.stalePendingAt, null);
-  assert.equal(listed.fundingTransactions[0]?.stalePendingEvaluation, null);
+    assert.equal(listed.fundingTransactions[0]?.status, "MISMATCHED");
+    assert.equal(listed.fundingTransactions[0]?.agreementAddress, null);
+    assert.equal(listed.fundingTransactions[0]?.matchesTrackedVersion, false);
+    assert.equal(listed.fundingTransactions[0]?.indexedAt, "2026-04-06T12:06:00.000Z");
+    assert.equal(listed.fundingTransactions[0]?.indexedBlockNumber, "12");
+    assert.equal(listed.fundingTransactions[0]?.indexedExecutionStatus, "SUCCESS");
+    assert.equal(listed.fundingTransactions[0]?.stalePending, false);
+    assert.equal(listed.fundingTransactions[0]?.stalePendingAt, null);
+    assert.equal(listed.fundingTransactions[0]?.stalePendingEvaluation, null);
+  });
 });
 
 test("funding service marks approved sponsored funding requests as submitted", async () => {

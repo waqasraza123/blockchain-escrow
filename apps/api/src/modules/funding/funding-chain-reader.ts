@@ -1,4 +1,7 @@
-import type { WalletAddress } from "@blockchain-escrow/shared";
+import {
+  isProductionLaunchMode,
+  type WalletAddress
+} from "@blockchain-escrow/shared";
 import {
   createPublicClient,
   http,
@@ -97,8 +100,14 @@ export function createUnavailableFundingChainReader(): FundingChainReader {
 }
 
 export function loadFundingChainReader(): FundingChainReader {
-  return new ViemFundingChainReader(
-    normalizeApiChainId(),
-    parseOptionalString(process.env.BASE_RPC_URL)
-  );
+  const chainId = normalizeApiChainId();
+  const rpcUrl = parseOptionalString(process.env.BASE_RPC_URL);
+
+  if (isProductionLaunchMode(process.env.APP_LAUNCH_MODE) && !rpcUrl) {
+    throw new Error(
+      "BASE_RPC_URL must be configured when APP_LAUNCH_MODE=production."
+    );
+  }
+
+  return new ViemFundingChainReader(chainId, rpcUrl);
 }

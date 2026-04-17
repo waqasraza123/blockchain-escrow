@@ -5,7 +5,12 @@ import type {
   DraftDealRecord,
   FileRecord
 } from "@blockchain-escrow/db";
-import type { JsonObject } from "@blockchain-escrow/shared";
+import {
+  assertProductionLaunchManifest,
+  type JsonObject,
+  isProductionLaunchMode
+} from "@blockchain-escrow/shared";
+import { getDeploymentManifestByChainId } from "@blockchain-escrow/contracts-sdk";
 import { keccak256, stringToHex } from "viem";
 
 export { buildCanonicalDealId } from "@blockchain-escrow/shared";
@@ -76,13 +81,39 @@ function sortObjectKeys(value: unknown): unknown {
 
 export function normalizeApiChainId(): number {
   const raw = process.env.BASE_CHAIN_ID;
+  const launchMode = isProductionLaunchMode(process.env.APP_LAUNCH_MODE);
 
   if (!raw) {
+    if (launchMode) {
+      throw new Error("BASE_CHAIN_ID must be configured when APP_LAUNCH_MODE=production.");
+    }
+
     return DEFAULT_CHAIN_ID;
   }
 
   const parsed = Number.parseInt(raw, 10);
-  return Number.isInteger(parsed) && parsed > 0 ? parsed : DEFAULT_CHAIN_ID;
+
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    if (launchMode) {
+      throw new Error(
+        `Invalid BASE_CHAIN_ID: expected a positive integer, received "${raw}".`
+      );
+    }
+
+    return DEFAULT_CHAIN_ID;
+  }
+
+  if (launchMode) {
+    const manifest = getDeploymentManifestByChainId(parsed);
+
+    if (!manifest) {
+      throw new Error(`No deployment manifest found for BASE_CHAIN_ID=${parsed}.`);
+    }
+
+    assertProductionLaunchManifest(manifest, parsed, "BASE_CHAIN_ID");
+  }
+
+  return parsed;
 }
 
 export function buildCanonicalDealVersionHash(

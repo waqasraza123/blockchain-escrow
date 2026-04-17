@@ -2,6 +2,10 @@ import {
   getDeploymentManifestByChainId,
   listDeploymentManifests
 } from "@blockchain-escrow/contracts-sdk";
+import {
+  assertProductionLaunchManifest,
+  isProductionLaunchMode
+} from "@blockchain-escrow/shared";
 
 export interface OperatorConfiguration {
   chainId: number;
@@ -46,6 +50,8 @@ function parseChainIds(
   value: string | undefined,
   fallback: readonly number[]
 ): number[] {
+  const launchMode = isProductionLaunchMode(process.env.APP_LAUNCH_MODE);
+
   if (!value || value.trim().length === 0) {
     return [...fallback];
   }
@@ -63,8 +69,14 @@ function parseChainIds(
       throw new Error(`Expected a comma-separated list of positive integers but received "${value}".`);
     }
 
-    if (!getDeploymentManifestByChainId(parsed)) {
+    const manifest = getDeploymentManifestByChainId(parsed);
+
+    if (!manifest) {
       throw new Error(`No deployment manifest found for visible operator chain ${parsed}`);
+    }
+
+    if (launchMode) {
+      assertProductionLaunchManifest(manifest, parsed, "OPERATOR_VISIBLE_CHAIN_IDS");
     }
 
     uniqueChainIds.add(parsed);
@@ -82,6 +94,10 @@ export function loadOperatorConfiguration(): OperatorConfiguration {
 
   if (!manifest) {
     throw new Error(`No deployment manifest found for chain ${chainId}`);
+  }
+
+  if (isProductionLaunchMode(process.env.APP_LAUNCH_MODE)) {
+    assertProductionLaunchManifest(manifest, chainId, "OPERATOR_CHAIN_ID");
   }
 
   return {
