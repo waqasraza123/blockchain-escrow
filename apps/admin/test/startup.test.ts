@@ -60,3 +60,18 @@ test("validateAdminStartupConfiguration rejects localhost api urls in production
     }
   );
 });
+
+test("validateAdminStartupConfiguration rejects non-https api urls in production", () => {
+  withEnv(
+    {
+      APP_LAUNCH_MODE: "production",
+      ADMIN_API_BASE_URL: "http://api.example.com"
+    },
+    () => {
+      assert.throws(
+        () => validateAdminStartupConfiguration(),
+        /ADMIN_API_BASE_URL must use https/
+      );
+    }
+  );
+});

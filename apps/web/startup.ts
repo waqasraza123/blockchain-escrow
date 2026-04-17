@@ -38,6 +38,10 @@ function assertProductionLaunchUrl(
     );
   }
 
+  if (parsed.protocol !== "https:") {
+    throw new Error(`${envName} must use https when APP_LAUNCH_MODE=production.`);
+  }
+
   return normalized.replace(/\/+$/u, "");
 }
 

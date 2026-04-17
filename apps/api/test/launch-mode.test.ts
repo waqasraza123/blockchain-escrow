@@ -59,6 +59,23 @@ async function withManifestNetwork<T>(
   }
 }
 
+function productionManifestEnv(chainId: number): Record<string, string> {
+  const manifest = getDeploymentManifestByChainId(chainId);
+
+  if (!manifest?.treasury || !manifest.usdcToken) {
+    throw new Error(`missing manifest profile fields for chain ${chainId}`);
+  }
+
+  return {
+    APP_EXPECTED_CHAIN_ID: String(chainId),
+    APP_EXPECTED_CONTRACT_VERSION: String(manifest.contractVersion),
+    APP_EXPECTED_EXPLORER_URL: manifest.explorerUrl,
+    APP_EXPECTED_NETWORK: manifest.network,
+    APP_EXPECTED_TREASURY_ADDRESS: manifest.treasury,
+    APP_EXPECTED_USDC_TOKEN_ADDRESS: manifest.usdcToken
+  };
+}
+
 test("normalizeApiChainId rejects testnet manifests in production launch mode", () => {
   withEnv(
     {
@@ -79,6 +96,7 @@ test("loadFundingChainReader requires BASE_RPC_URL in production launch mode", a
     withEnv(
       {
         APP_LAUNCH_MODE: "production",
+        ...productionManifestEnv(84532),
         BASE_CHAIN_ID: "84532",
         BASE_RPC_URL: undefined
       },
@@ -86,6 +104,44 @@ test("loadFundingChainReader requires BASE_RPC_URL in production launch mode", a
         assert.throws(
           () => loadFundingChainReader(),
           /BASE_RPC_URL must be configured when APP_LAUNCH_MODE=production/
+        );
+      }
+    );
+  });
+});
+
+test("normalizeApiChainId rejects deployment profiles that do not match the expected treasury", async () => {
+  await withManifestNetwork(84532, "base", async () => {
+    withEnv(
+      {
+        APP_LAUNCH_MODE: "production",
+        ...productionManifestEnv(84532),
+        APP_EXPECTED_TREASURY_ADDRESS: "0x1111111111111111111111111111111111111111",
+        BASE_CHAIN_ID: "84532"
+      },
+      () => {
+        assert.throws(
+          () => normalizeApiChainId(),
+          /APP_EXPECTED_TREASURY_ADDRESS/
+        );
+      }
+    );
+  });
+});
+
+test("loadFundingChainReader rejects localhost rpc urls in production launch mode", async () => {
+  await withManifestNetwork(84532, "base", async () => {
+    withEnv(
+      {
+        APP_LAUNCH_MODE: "production",
+        ...productionManifestEnv(84532),
+        BASE_CHAIN_ID: "84532",
+        BASE_RPC_URL: "http://127.0.0.1:8545"
+      },
+      () => {
+        assert.throws(
+          () => loadFundingChainReader(),
+          /BASE_RPC_URL must not point to localhost/
         );
       }
     );

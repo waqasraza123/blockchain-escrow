@@ -1,5 +1,10 @@
 import { getDeploymentManifestByChainId } from "@blockchain-escrow/contracts-sdk";
-import { assertProductionLaunchManifest, isProductionLaunchMode } from "@blockchain-escrow/shared";
+import {
+  assertProductionDeploymentProfile,
+  assertProductionLaunchManifest,
+  assertProductionLaunchUrl,
+  isProductionLaunchMode
+} from "@blockchain-escrow/shared";
 
 function parsePositiveInteger(name: string, defaultValue: number): number {
   const raw = process.env[name];
@@ -103,6 +108,12 @@ export interface IndexerConfig {
 }
 
 export function loadIndexerConfig(): IndexerConfig {
+  const launchMode = isProductionLaunchMode(process.env.APP_LAUNCH_MODE);
+
+  if (launchMode && !process.env.INDEXER_CHAIN_ID?.trim()) {
+    throw new Error("INDEXER_CHAIN_ID must be configured when APP_LAUNCH_MODE=production.");
+  }
+
   const chainId = parsePositiveInteger("INDEXER_CHAIN_ID", 84532);
   const manifest = getDeploymentManifestByChainId(chainId);
 
@@ -110,8 +121,10 @@ export function loadIndexerConfig(): IndexerConfig {
     throw new Error(`No deployment manifest found for chain ${chainId}`);
   }
 
-  if (isProductionLaunchMode(process.env.APP_LAUNCH_MODE)) {
+  if (launchMode) {
     assertProductionLaunchManifest(manifest, chainId, "INDEXER_CHAIN_ID");
+    assertProductionDeploymentProfile(manifest, chainId, "INDEXER_CHAIN_ID");
+    assertProductionLaunchUrl(process.env.BASE_RPC_URL, "BASE_RPC_URL");
   }
 
   const network = process.env.INDEXER_NETWORK ?? manifest.network;

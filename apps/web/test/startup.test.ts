@@ -64,6 +64,21 @@ test("validateWebStartupConfiguration rejects localhost api urls in production",
   );
 });
 
+test("validateWebStartupConfiguration rejects non-https api urls in production", () => {
+  withEnv(
+    {
+      APP_LAUNCH_MODE: "production",
+      WEB_API_BASE_URL: "http://api.example.com"
+    },
+    () => {
+      assert.throws(
+        () => validateWebStartupConfiguration(),
+        /WEB_API_BASE_URL must use https/
+      );
+    }
+  );
+});
+
 test("getHostedSessionCookieOptions enables secure cookies in node production", () => {
   withEnv(
     {

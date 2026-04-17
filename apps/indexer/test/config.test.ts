@@ -36,6 +36,45 @@ function withEnv(
   }
 }
 
+async function withManifestNetwork<T>(
+  chainId: number,
+  network: string,
+  run: () => Promise<T> | T
+): Promise<T> {
+  const manifest = getDeploymentManifestByChainId(chainId);
+
+  if (!manifest) {
+    throw new Error(`missing manifest for chain ${chainId}`);
+  }
+
+  const mutableManifest = manifest as typeof manifest & { network: string };
+  const previousNetwork = mutableManifest.network;
+  mutableManifest.network = network;
+
+  try {
+    return await run();
+  } finally {
+    mutableManifest.network = previousNetwork;
+  }
+}
+
+function productionManifestEnv(chainId: number): Record<string, string> {
+  const manifest = getDeploymentManifestByChainId(chainId);
+
+  if (!manifest?.treasury || !manifest.usdcToken) {
+    throw new Error(`missing manifest profile fields for chain ${chainId}`);
+  }
+
+  return {
+    APP_EXPECTED_CHAIN_ID: String(chainId),
+    APP_EXPECTED_CONTRACT_VERSION: String(manifest.contractVersion),
+    APP_EXPECTED_EXPLORER_URL: manifest.explorerUrl,
+    APP_EXPECTED_NETWORK: manifest.network,
+    APP_EXPECTED_TREASURY_ADDRESS: manifest.treasury,
+    APP_EXPECTED_USDC_TOKEN_ADDRESS: manifest.usdcToken
+  };
+}
+
 test("loadIndexerConfig defaults runOnce to false", () => {
   withEnv(
     {
@@ -127,4 +166,62 @@ test("loadIndexerConfig rejects testnet manifests in production launch mode", ()
       );
     }
   );
+});
+
+test("loadIndexerConfig requires an explicit indexer chain id in production launch mode", async () => {
+  await withManifestNetwork(84532, "base", async () => {
+    withEnv(
+      {
+        APP_LAUNCH_MODE: "production",
+        ...productionManifestEnv(84532),
+        BASE_RPC_URL: "https://mainnet.base.org",
+        INDEXER_CHAIN_ID: undefined
+      },
+      () => {
+        assert.throws(
+          () => loadIndexerConfig(),
+          /INDEXER_CHAIN_ID must be configured/
+        );
+      }
+    );
+  });
+});
+
+test("loadIndexerConfig rejects deployment profiles that do not match the expected usdc token", async () => {
+  await withManifestNetwork(84532, "base", async () => {
+    withEnv(
+      {
+        APP_LAUNCH_MODE: "production",
+        ...productionManifestEnv(84532),
+        APP_EXPECTED_USDC_TOKEN_ADDRESS: "0x1111111111111111111111111111111111111111",
+        BASE_RPC_URL: "https://mainnet.base.org",
+        INDEXER_CHAIN_ID: "84532"
+      },
+      () => {
+        assert.throws(
+          () => loadIndexerConfig(),
+          /APP_EXPECTED_USDC_TOKEN_ADDRESS/
+        );
+      }
+    );
+  });
+});
+
+test("loadIndexerConfig rejects localhost rpc urls in production launch mode", async () => {
+  await withManifestNetwork(84532, "base", async () => {
+    withEnv(
+      {
+        APP_LAUNCH_MODE: "production",
+        ...productionManifestEnv(84532),
+        BASE_RPC_URL: "http://localhost:8545",
+        INDEXER_CHAIN_ID: "84532"
+      },
+      () => {
+        assert.throws(
+          () => loadIndexerConfig(),
+          /BASE_RPC_URL must not point to localhost/
+        );
+      }
+    );
+  });
 });

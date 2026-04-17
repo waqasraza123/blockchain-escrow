@@ -6,6 +6,7 @@ import type {
   FileRecord
 } from "@blockchain-escrow/db";
 import {
+  assertProductionDeploymentProfile,
   assertProductionLaunchManifest,
   type JsonObject,
   isProductionLaunchMode
@@ -111,6 +112,7 @@ export function normalizeApiChainId(): number {
     }
 
     assertProductionLaunchManifest(manifest, parsed, "BASE_CHAIN_ID");
+    assertProductionDeploymentProfile(manifest, parsed, "BASE_CHAIN_ID");
   }
 
   return parsed;

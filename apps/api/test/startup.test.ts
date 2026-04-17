@@ -58,11 +58,29 @@ async function withManifestNetwork<T>(
   }
 }
 
+function productionManifestEnv(chainId: number): Record<string, string> {
+  const manifest = getDeploymentManifestByChainId(chainId);
+
+  if (!manifest?.treasury || !manifest.usdcToken) {
+    throw new Error(`missing manifest profile fields for chain ${chainId}`);
+  }
+
+  return {
+    APP_EXPECTED_CHAIN_ID: String(chainId),
+    APP_EXPECTED_CONTRACT_VERSION: String(manifest.contractVersion),
+    APP_EXPECTED_EXPLORER_URL: manifest.explorerUrl,
+    APP_EXPECTED_NETWORK: manifest.network,
+    APP_EXPECTED_TREASURY_ADDRESS: manifest.treasury,
+    APP_EXPECTED_USDC_TOKEN_ADDRESS: manifest.usdcToken
+  };
+}
+
 test("validateApiStartupConfiguration accepts production launch mode with explicit production settings", async () => {
   await withManifestNetwork(84532, "base", async () => {
     withEnv(
       {
         APP_LAUNCH_MODE: "production",
+        ...productionManifestEnv(84532),
         BASE_CHAIN_ID: "84532",
         BASE_RPC_URL: "https://mainnet.base.org",
         API_SESSION_SECRET: "prod-session-secret",
@@ -84,6 +102,7 @@ test("validateApiStartupConfiguration rejects development session secrets in pro
     withEnv(
       {
         APP_LAUNCH_MODE: "production",
+        ...productionManifestEnv(84532),
         BASE_CHAIN_ID: "84532",
         BASE_RPC_URL: "https://mainnet.base.org",
         API_SESSION_SECRET: "development-session-secret-change-me",
@@ -108,6 +127,7 @@ test("validateApiStartupConfiguration rejects insecure cookies in production", a
     withEnv(
       {
         APP_LAUNCH_MODE: "production",
+        ...productionManifestEnv(84532),
         BASE_CHAIN_ID: "84532",
         BASE_RPC_URL: "https://mainnet.base.org",
         API_SESSION_SECRET: "prod-session-secret",
@@ -132,6 +152,7 @@ test("validateApiStartupConfiguration rejects localhost partner hosted urls in p
     withEnv(
       {
         APP_LAUNCH_MODE: "production",
+        ...productionManifestEnv(84532),
         BASE_CHAIN_ID: "84532",
         BASE_RPC_URL: "https://mainnet.base.org",
         API_SESSION_SECRET: "prod-session-secret",
@@ -156,6 +177,7 @@ test("validateApiStartupConfiguration rejects localhost SIWE origins in producti
     withEnv(
       {
         APP_LAUNCH_MODE: "production",
+        ...productionManifestEnv(84532),
         BASE_CHAIN_ID: "84532",
         BASE_RPC_URL: "https://mainnet.base.org",
         API_SESSION_SECRET: "prod-session-secret",
@@ -169,6 +191,56 @@ test("validateApiStartupConfiguration rejects localhost SIWE origins in producti
         assert.throws(
           () => validateApiStartupConfiguration(),
           /AUTH_SIWE_ALLOWED_DOMAINS must not include localhost/
+        );
+      }
+    );
+  });
+});
+
+test("validateApiStartupConfiguration rejects non-https hosted base urls in production", async () => {
+  await withManifestNetwork(84532, "base", async () => {
+    withEnv(
+      {
+        APP_LAUNCH_MODE: "production",
+        ...productionManifestEnv(84532),
+        BASE_CHAIN_ID: "84532",
+        BASE_RPC_URL: "https://mainnet.base.org",
+        API_SESSION_SECRET: "prod-session-secret",
+        API_SESSION_COOKIE_SECURE: "true",
+        AUTH_SIWE_ALLOWED_DOMAINS: "app.example.com",
+        AUTH_SIWE_ALLOWED_URI_ORIGINS: "https://app.example.com",
+        API_PARTNER_HOSTED_SESSION_SECRET: "prod-partner-secret",
+        API_PARTNER_HOSTED_BASE_URL: "http://app.example.com"
+      },
+      () => {
+        assert.throws(
+          () => validateApiStartupConfiguration(),
+          /API_PARTNER_HOSTED_BASE_URL must use https/
+        );
+      }
+    );
+  });
+});
+
+test("validateApiStartupConfiguration rejects rpc urls that point to localhost in production", async () => {
+  await withManifestNetwork(84532, "base", async () => {
+    withEnv(
+      {
+        APP_LAUNCH_MODE: "production",
+        ...productionManifestEnv(84532),
+        BASE_CHAIN_ID: "84532",
+        BASE_RPC_URL: "http://localhost:8545",
+        API_SESSION_SECRET: "prod-session-secret",
+        API_SESSION_COOKIE_SECURE: "true",
+        AUTH_SIWE_ALLOWED_DOMAINS: "app.example.com",
+        AUTH_SIWE_ALLOWED_URI_ORIGINS: "https://app.example.com",
+        API_PARTNER_HOSTED_SESSION_SECRET: "prod-partner-secret",
+        API_PARTNER_HOSTED_BASE_URL: "https://app.example.com"
+      },
+      () => {
+        assert.throws(
+          () => validateApiStartupConfiguration(),
+          /BASE_RPC_URL must not point to localhost/
         );
       }
     );

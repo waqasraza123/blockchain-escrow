@@ -1,5 +1,10 @@
 import { getDeploymentManifestByChainId } from "@blockchain-escrow/contracts-sdk";
-import { assertProductionLaunchManifest, isProductionLaunchMode } from "@blockchain-escrow/shared";
+import {
+  assertProductionDeploymentProfile,
+  assertProductionLaunchManifest,
+  assertProductionLaunchUrl,
+  isProductionLaunchMode
+} from "@blockchain-escrow/shared";
 
 function parsePositiveInteger(name: string, defaultValue: number): number {
   const raw = process.env[name];
@@ -82,6 +87,12 @@ export interface WorkerConfig {
 }
 
 export function loadWorkerConfig(): WorkerConfig {
+  const launchMode = isProductionLaunchMode(process.env.APP_LAUNCH_MODE);
+
+  if (launchMode && !process.env.WORKER_CHAIN_ID?.trim()) {
+    throw new Error("WORKER_CHAIN_ID must be configured when APP_LAUNCH_MODE=production.");
+  }
+
   const chainId = parsePositiveInteger("WORKER_CHAIN_ID", 84532);
   const manifest = getDeploymentManifestByChainId(chainId);
 
@@ -89,8 +100,14 @@ export function loadWorkerConfig(): WorkerConfig {
     throw new Error(`No deployment manifest found for chain ${chainId}`);
   }
 
-  if (isProductionLaunchMode(process.env.APP_LAUNCH_MODE)) {
+  if (launchMode) {
     assertProductionLaunchManifest(manifest, chainId, "WORKER_CHAIN_ID");
+    assertProductionDeploymentProfile(manifest, chainId, "WORKER_CHAIN_ID");
+    assertProductionLaunchUrl(
+      process.env.WORKER_OPERATOR_ALERT_INDEXER_BASE_URL ??
+        process.env.OPERATOR_INDEXER_BASE_URL,
+      "WORKER_OPERATOR_ALERT_INDEXER_BASE_URL"
+    );
   }
 
   return {

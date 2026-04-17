@@ -1,4 +1,4 @@
-import { isProductionLaunchMode } from "@blockchain-escrow/shared";
+import { assertProductionLaunchUrl, isProductionLaunchMode } from "@blockchain-escrow/shared";
 
 import { loadAuthConfiguration, loadSiwePolicyConfiguration } from "./modules/auth/auth.tokens";
 import { normalizeApiChainId } from "./modules/drafts/deal-identity";
@@ -29,30 +29,6 @@ function assertConfiguredSecret(
   if (disallowedDefaults.includes(normalized)) {
     throw new Error(
       `${envName} must not use a development default when APP_LAUNCH_MODE=production.`
-    );
-  }
-}
-
-function assertPublicBaseUrl(
-  envName: string,
-  value: string
-): void {
-  let parsed: URL;
-
-  try {
-    parsed = new URL(value);
-  } catch {
-    throw new Error(`${envName} must be a valid absolute URL.`);
-  }
-
-  const hostname = parsed.hostname.toLowerCase();
-  if (
-    hostname === "localhost" ||
-    hostname === "127.0.0.1" ||
-    hostname === "::1"
-  ) {
-    throw new Error(
-      `${envName} must not point to localhost when APP_LAUNCH_MODE=production.`
     );
   }
 }
@@ -102,7 +78,12 @@ export function validateApiStartupConfiguration(): void {
     process.env.API_PARTNER_HOSTED_SESSION_SECRET,
     [DEFAULT_PARTNER_HOSTED_SECRET]
   );
-  assertPublicBaseUrl("API_PARTNER_HOSTED_BASE_URL", partnerConfiguration.hostedBaseUrl);
+  assertProductionLaunchUrl(process.env.BASE_RPC_URL, "BASE_RPC_URL");
+  assertProductionLaunchUrl(
+    partnerConfiguration.hostedBaseUrl,
+    "API_PARTNER_HOSTED_BASE_URL",
+    { requireHttps: true }
+  );
   assertNoLocalDevelopmentOrigins(
     siwePolicy.allowedDomains,
     "AUTH_SIWE_ALLOWED_DOMAINS"

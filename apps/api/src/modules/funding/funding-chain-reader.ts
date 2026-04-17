@@ -1,4 +1,5 @@
 import {
+  assertProductionLaunchUrl,
   isProductionLaunchMode,
   type WalletAddress
 } from "@blockchain-escrow/shared";
@@ -107,6 +108,10 @@ export function loadFundingChainReader(): FundingChainReader {
     throw new Error(
       "BASE_RPC_URL must be configured when APP_LAUNCH_MODE=production."
     );
+  }
+
+  if (isProductionLaunchMode(process.env.APP_LAUNCH_MODE)) {
+    assertProductionLaunchUrl(process.env.BASE_RPC_URL, "BASE_RPC_URL");
   }
 
   return new ViemFundingChainReader(chainId, rpcUrl);
